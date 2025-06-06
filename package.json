@@ -9,19 +9,34 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.13.0",
+    "@azure/msal-node": "^3.6.0",
+    "@headlessui/react": "^2.2.4",
+    "@heroicons/react": "^2.2.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@react-pdf/renderer": "^4.3.0",
+    "@sendgrid/mail": "^8.1.5",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/auth-helpers-react": "^0.5.0",
+    "@supabase/supabase-js": "^2.49.8",
+    "@types/react-datepicker": "^6.2.0",
+    "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
+    "next": "15.3.3",
+    "pdfkit": "^0.17.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.3.3"
+    "react-datepicker": "^8.4.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
