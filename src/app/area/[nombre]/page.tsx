@@ -10,7 +10,7 @@ const capitalizeText = (text: string): string => {
     .join(' ')
 }
 
-interface PageProps {
+type PageProps = {
   params: {
     nombre: string
   }
@@ -74,3 +74,4 @@ export default function AreaPage({ params }: PageProps) {
     </div>
   )
 }
+ 

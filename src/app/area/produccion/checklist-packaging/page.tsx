@@ -71,7 +71,9 @@ export default function ChecklistPackagingPage() {
     selectedMaterial,
     setSelectedMaterial,
     selectedSku,
-    setSelectedSku
+    setSelectedSku,
+    ordenFabricacion,
+    setOrdenFabricacion
   } = useChecklist()
   const [globalError, setGlobalError] = useState('')
   const [invalidItems, setInvalidItems] = useState<number[]>([])
@@ -134,30 +136,10 @@ export default function ChecklistPackagingPage() {
     )
   }
 
-  const validateForm = (): boolean => {
-    const incompleteItems = formData
-      .filter(item => !item.status)
-      .map(item => item.id)
-
-    setInvalidItems(incompleteItems)
-    
-    if (incompleteItems.length > 0) {
-      setGlobalError(`Por favor completa el estado de ${incompleteItems.length} ${incompleteItems.length === 1 ? 'ítem' : 'ítems'} antes de continuar.`)
-      // Hacer scroll al primer ítem con error
-      const firstErrorItem = document.getElementById(`item-${incompleteItems[0]}`)
-      firstErrorItem?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return false
-    }
-
-    setGlobalError('')
-    setInvalidItems([])
-    return true
-  }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (validateForm()) {
+    if (isFormValid()) {
       router.push('/area/produccion/checklist-packaging/fotos')
     }
   }
@@ -180,55 +162,81 @@ export default function ChecklistPackagingPage() {
 
   // Validar si los campos obligatorios están completos
   const isFormValid = () => {
+    let errors: string[] = []
+    
+    // Validar campos básicos
     if (!lineManager.trim()) {
-      setError('Por favor ingrese el nombre del Jefe de Línea')
-      return false
+      errors.push('El campo Jefe de Línea es requerido')
     }
     
     if (!machineOperator.trim()) {
-      setError('Por favor ingrese el nombre del Operador de Máquina')
-      return false
+      errors.push('El campo Operador de Máquina es requerido')
     }
 
     if (!checklistDate) {
-      setError('Por favor seleccione la fecha del checklist')
-      return false
+      errors.push('La fecha del checklist es requerida')
+    }
+
+    if (!ordenFabricacion.trim()) {
+      errors.push('El campo Orden de Fabricación es requerido')
     }
 
     if (!selectedBrand) {
-      setError('Por favor seleccione una marca')
-      return false
+      errors.push('Debe seleccionar una marca')
     }
 
     if (!selectedMaterial) {
-      setError('Por favor seleccione un material')
-      return false
+      errors.push('Debe seleccionar un material')
     }
 
     if (!selectedSku) {
-      setError('Error: No se encontró un SKU válido para la combinación seleccionada')
-      return false
+      errors.push('No se encontró un SKU válido para la combinación seleccionada')
     }
 
     // Verificar que la combinación existe en el JSON
-    const isValidCombination = products.some(
-      p => p.brand === selectedBrand && 
-          p.material === selectedMaterial && 
-          p.sku === selectedSku
-    )
+    if (selectedBrand && selectedMaterial && selectedSku) {
+      const isValidCombination = products.some(
+        p => p.brand === selectedBrand && 
+            p.material === selectedMaterial && 
+            p.sku === selectedSku
+      )
 
-    if (!isValidCombination) {
-      setError('Error: La combinación de marca y material seleccionada no es válida')
-      return false
+      if (!isValidCombination) {
+        errors.push('La combinación de marca y material seleccionada no es válida')
+      }
     }
     
-    const hasInvalidItems = formData.some(item => !item.status || item.status === 'no_aplica')
-    if (hasInvalidItems) {
-      setError('Por favor complete el estado de todos los ítems')
+    // Verificar que todos los ítems tengan un estado definido
+    const itemsWithoutStatus = formData.filter(item => !item.status || item.status === 'no_aplica')
+    if (itemsWithoutStatus.length > 0) {
+      errors.push(`Debes responder todos los ítems del checklist (faltan ${itemsWithoutStatus.length} ítems)`)
+      setInvalidItems(itemsWithoutStatus.map(item => item.id))
+    }
+
+    // Verificar que los ítems marcados como "no_cumple" tengan acción correctiva
+    const itemsWithoutCorrectiveAction = formData.filter(
+      item => item.status === 'no_cumple' && (!item.correctiveAction || !item.correctiveAction.trim())
+    )
+    if (itemsWithoutCorrectiveAction.length > 0) {
+      errors.push(`Debes completar la acción correctiva para ${itemsWithoutCorrectiveAction.length} ${
+        itemsWithoutCorrectiveAction.length === 1 ? 'ítem que no cumple' : 'ítems que no cumplen'
+      }`)
+      // Agregar estos ítems a la lista de inválidos también
+      setInvalidItems(prev => [...new Set([...prev, ...itemsWithoutCorrectiveAction.map(item => item.id)])])
+    }
+
+    if (errors.length > 0) {
+      setError(errors.join('\n'))
+      // Si hay ítems inválidos, hacer scroll al primero
+      const firstInvalidItem = document.getElementById(`item-${invalidItems[0]}`)
+      if (firstInvalidItem) {
+        firstInvalidItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
       return false
     }
 
     setError('')
+    setInvalidItems([])
     return true
   }
 
@@ -239,6 +247,19 @@ export default function ChecklistPackagingPage() {
 
   const handleDateChange = (date: Date | null) => {
     setChecklistDate(date)
+  }
+
+  // Función para verificar si un ítem requiere acción correctiva
+  const requiresCorrectiveAction = (item: ChecklistItem) => {
+    return item.status === 'no_cumple'
+  }
+
+  // Función para verificar si un ítem tiene error de validación
+  const hasValidationError = (item: ChecklistItem) => {
+    return (
+      invalidItems.includes(item.id) ||
+      (requiresCorrectiveAction(item) && (!item.correctiveAction || !item.correctiveAction.trim()))
+    )
   }
 
   return (
@@ -306,27 +327,48 @@ export default function ChecklistPackagingPage() {
             </div>
           </div>
 
-          {/* Segunda fila: Fecha */}
-          <div className="mb-4">
-            <label 
-              htmlFor="checklistDate"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Fecha del Checklist *
-            </label>
-            <ReactDatePicker
-              id="checklistDate"
-              selected={checklistDate}
-              onChange={handleDateChange}
-              dateFormat="dd / MMM / yyyy"
-              locale="es"
-              maxDate={new Date()}
-              placeholderText="Seleccione una fecha"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                shadow-sm focus:ring-blue-500 focus:border-blue-500
-                placeholder-gray-400"
-              required
-            />
+          {/* Segunda fila: Fecha y Orden de Fabricación */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label 
+                htmlFor="checklistDate"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Fecha del Checklist *
+              </label>
+              <ReactDatePicker
+                id="checklistDate"
+                selected={checklistDate}
+                onChange={handleDateChange}
+                dateFormat="dd / MMM / yyyy"
+                locale="es"
+                maxDate={new Date()}
+                placeholderText="Seleccione una fecha"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md 
+                  shadow-sm focus:ring-blue-500 focus:border-blue-500
+                  placeholder-gray-400"
+                required
+              />
+            </div>
+            <div>
+              <label 
+                htmlFor="ordenFabricacion"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Orden de Fabricación *
+              </label>
+              <input
+                type="text"
+                id="ordenFabricacion"
+                value={ordenFabricacion}
+                onChange={(e) => setOrdenFabricacion(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md 
+                  shadow-sm focus:ring-blue-500 focus:border-blue-500
+                  placeholder-gray-400"
+                placeholder="Ingrese la orden de fabricación"
+                required
+              />
+            </div>
           </div>
 
           {/* Tercera fila: Marca y Material */}
@@ -509,16 +551,32 @@ export default function ChecklistPackagingPage() {
                         <div className="space-y-2">
                           <label className="block text-sm font-medium text-gray-600">
                             Acción correctiva inmediata
+                            {requiresCorrectiveAction(item) && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
                           </label>
                           <input
                             type="text"
-                            value={item.correctiveAction}
+                            value={item.correctiveAction || ''}
                             onChange={(e) => handleCorrectiveActionChange(item.id, e.target.value)}
-                            className="block w-full rounded-md border-gray-300 shadow-sm 
+                            className={`block w-full rounded-md shadow-sm 
                               focus:border-blue-400 focus:ring-blue-400 text-sm
-                              bg-white"
-                            placeholder="Agregar acción correctiva (opcional)"
+                              bg-white ${
+                                hasValidationError(item) && requiresCorrectiveAction(item)
+                                ? 'border-red-300 focus:border-red-400 focus:ring-red-400'
+                                : 'border-gray-300'
+                              }`}
+                            placeholder={
+                              requiresCorrectiveAction(item)
+                                ? "Ingrese la acción correctiva (requerido)"
+                                : "Agregar acción correctiva (opcional)"
+                            }
                           />
+                          {hasValidationError(item) && requiresCorrectiveAction(item) && (
+                            <p className="mt-1 text-sm text-red-500">
+                              Este campo es requerido cuando el estado es "No cumple"
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -527,6 +585,15 @@ export default function ChecklistPackagingPage() {
               ))}
             </div>
           ))}
+
+          {/* Mensaje de error global */}
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+              {error.split('\n').map((line, index) => (
+                <p key={index} className="text-red-600 text-sm font-medium">{line}</p>
+              ))}
+            </div>
+          )}
 
           {/* Botón Siguiente */}
           <div className="flex justify-center sm:justify-end mt-8">

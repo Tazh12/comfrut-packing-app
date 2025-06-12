@@ -39,6 +39,8 @@ interface ChecklistContextType {
   setSelectedMaterial: (material: string) => void
   selectedSku: string
   setSelectedSku: (sku: string) => void
+  ordenFabricacion: string
+  setOrdenFabricacion: (orden: string) => void
   clearContext: () => void
 }
 
@@ -96,6 +98,7 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
   const [selectedBrand, setSelectedBrand] = useState('')
   const [selectedMaterial, setSelectedMaterial] = useState('')
   const [selectedSku, setSelectedSku] = useState('')
+  const [ordenFabricacion, setOrdenFabricacion] = useState('')
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Cargar datos guardados solo en el cliente
@@ -148,6 +151,7 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
     setSelectedBrand('')
     setSelectedMaterial('')
     setSelectedSku('')
+    setOrdenFabricacion('')
     if (typeof window !== 'undefined') {
       localStorage.removeItem('checklistFormData')
       localStorage.removeItem('checklistPhotos')
@@ -173,6 +177,8 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
         setSelectedMaterial,
         selectedSku,
         setSelectedSku,
+        ordenFabricacion,
+        setOrdenFabricacion,
         clearContext
       }}
     >

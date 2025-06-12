@@ -26,6 +26,8 @@ Font.register({
   ]
 })
 
+const logoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAABaCAYAAAD3fJq9AAABHmlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV/TKhZRK1KioCgUFPYICiqFChVQsgoPgpC4qXPohNH0ELFy1cHEQfHh1dXAVB8AfFx1c3NS0EQ/Il3S0UQFQ9PTEni8VFiKCbYc5833/f2HUIFqRprjYArpmhGlsKC4jyRFEkDHPwQr0jU98R1fYWBkfe34++7l4l1fMf+gFqZ5jgOcIbpk2dCz4nHGsMKz3i+e8UTzzCLOZFvE58YVIZrHd4nHLM4yxzrHMkJYpvEldRFXOseK4lWpKRih0U2qrFPFXuRJd0Rz9xgVNxlO+ZWRgkscAIlBFBik3cgKQjhS0iIYlBWKmclEXr/IDv9X9sxk0IlLFMDGkEEGCpKVPn/g9u7O7zZ6t0hMYzz+XW9gD7czqK9gYz7eI2CwOgA1fYfC+tgZj0AdB2Cbj5xnFYE9R8ATr7BJABKZghqQkWTcCAHcdAxrfYXce7/17TrGf4HwvnL3hHy0SgAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+cGChAKIG1U5vQ="
+
 // Estilos
 const styles = StyleSheet.create({
   page: {
@@ -216,8 +218,7 @@ interface ChecklistPDFProps {
   }
   metadata?: {
     date?: Date | null
-    time?: string
-    lot?: string
+    ordenFabricacion?: string
     operator?: string
     lineManager?: string
     machineOperator?: string
@@ -281,7 +282,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         {/* Encabezado */}
         <View style={styles.header}>
           <Image
-            src="/logo-placeholder.png"
+            src={logoBase64}
             style={styles.logo}
           />
         </View>
@@ -300,12 +301,6 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
             <Text>
               <Text style={styles.infoLabel}>Fecha:</Text>
               <Text style={styles.infoValue}>{currentDate}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Hora:</Text>
-              <Text style={styles.infoValue}>{metadata?.time || ''}</Text>
             </Text>
           </View>
           <View style={styles.infoGroup}>
@@ -340,8 +335,8 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
           </View>
           <View style={styles.infoGroup}>
             <Text>
-              <Text style={styles.infoLabel}>Lote:</Text>
-              <Text style={styles.infoValue}>{metadata?.lot || ''}</Text>
+              <Text style={styles.infoLabel}>Orden de Fabricación:</Text>
+              <Text style={styles.infoValue}>{metadata?.ordenFabricacion || ''}</Text>
             </Text>
           </View>
         </View>
@@ -458,70 +453,14 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
 }
 
 export const ChecklistPDFLink = ({ formData, photos, metadata }: ChecklistPDFProps) => {
-  const [isClient, setIsClient] = useState(false)
-
-  React.useEffect(() => {
-    setIsClient(true)
-  }, [])
-
-  if (!isClient) {
-    return (
-      <button
-        type="button"
-        disabled
-        className="w-full sm:w-auto px-6 py-3 bg-green-300 text-white rounded-md 
-          text-base font-medium text-center opacity-75 cursor-not-allowed"
-      >
-        <div className="flex items-center justify-center gap-2">
-          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>Preparando PDF...</span>
-        </div>
-      </button>
-    )
-  }
-
   return (
     <PDFDownloadLink
-      document={
-        <ChecklistPDFDocument 
-          formData={formData}
-          photos={photos}
-          metadata={metadata}
-        />
-      }
-      fileName={`checklist-packaging-${metadata?.date || new Date().toLocaleDateString()}.pdf`}
-      className="w-full sm:w-auto px-6 py-3 bg-green-400 text-white rounded-md 
-        hover:bg-green-500 transition-colors text-base font-medium text-center
-        shadow-md hover:shadow-lg focus:ring-2 focus:ring-green-300 
-        focus:ring-offset-2"
+      document={<ChecklistPDFDocument formData={formData} photos={photos} metadata={metadata} />}
+      fileName="checklist-packaging.pdf"
+      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
     >
-      {({ loading, error }) => 
-        loading ? (
-          <div className="flex items-center justify-center gap-2">
-            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Generando PDF...</span>
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center gap-2 text-red-500">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>Error al generar PDF</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-2">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            <span>Descargar PDF</span>
-          </div>
-        )
+      {({ loading }) =>
+        loading ? 'Generando PDF...' : 'Descargar PDF'
       }
     </PDFDownloadLink>
   )
