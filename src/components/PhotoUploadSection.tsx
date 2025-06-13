@@ -77,6 +77,19 @@ const PhotoUploadSection = ({
     input.click()
   }
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof PhotoFields) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhotos(prev => ({
+        ...prev,
+        [field]: {
+          file,
+          preview: URL.createObjectURL(file)
+        }
+      }))
+    }
+  }
+
   if (!mounted) {
     return (
       <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">

@@ -10,6 +10,11 @@ import { es } from 'date-fns/locale'
 import "react-datepicker/dist/react-datepicker.css"
 import productsData from '@/data/products_db.json'
 import { ProductEntry, ProductsData } from '@/types/product'
+import { supabase } from '@/lib/supabase-browser'
+import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
+import { initialChecklistItems } from '@/lib/checklist'
+import * as XLSX from 'xlsx'
 
 // Validar y tipar los datos del JSON
 const products: ProductsData = productsData as ProductsData
@@ -260,6 +265,16 @@ export default function ChecklistPackagingPage() {
       invalidItems.includes(item.id) ||
       (requiresCorrectiveAction(item) && (!item.correctiveAction || !item.correctiveAction.trim()))
     )
+  }
+
+  const errors = {
+    marca: '',
+    material: '',
+    sku: '',
+    orden_fabricacion: '',
+    jefe_linea: '',
+    operador_maquina: '',
+    items: ''
   }
 
   return (

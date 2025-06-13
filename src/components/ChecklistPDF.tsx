@@ -16,6 +16,7 @@ import {
 import { ChecklistItem, PhotoUpload } from '@/context/ChecklistContext'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { ChecklistRecord } from '@/lib/checklist'
 
 // Registrar fuentes
 Font.register({
@@ -201,6 +202,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingTop: 10
+  },
+  image: {
+    width: '100%',
+    height: 180,
+    objectFit: 'contain'
   }
 })
 
@@ -393,6 +399,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
               <Image
                 src={photos.photo1.preview}
                 style={styles.photo}
+                alt="Foto de la bolsa"
               />
               <Text style={styles.photoCaption}>
                 Verificación de codificación en bolsa - {currentDate}
@@ -414,6 +421,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
               <Image
                 src={photos.photo2.preview}
                 style={styles.photo}
+                alt="Foto de la caja"
               />
               <Text style={styles.photoCaption}>
                 Verificación de codificación en caja - {currentDate}
@@ -435,6 +443,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
               <Image
                 src={photos.photo3.preview}
                 style={styles.photo}
+                alt="Foto de la etiqueta"
               />
               <Text style={styles.photoCaption}>
                 Verificación de etiqueta adicional - {currentDate}

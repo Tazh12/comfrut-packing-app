@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase-browser'
 import { 
   format, 
   startOfWeek, 
@@ -24,42 +24,21 @@ import "react-datepicker/dist/react-datepicker.css"
 import Link from 'next/link'
 import * as ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-
-// Importar la lista de ítems del checklist
-const initialChecklistItems = [
-  { id: 1, name: 'Air pressure' },
-  { id: 2, name: 'Multihead hopper position' },
-  { id: 3, name: 'Upper capachos state' },
-  { id: 4, name: 'Intermediate capachos state' },
-  { id: 5, name: 'Lower capachos state' },
-  { id: 6, name: 'Elevator ignition' },
-  { id: 7, name: 'Multihead atoche sensors' },
-  { id: 8, name: 'Videojet power' },
-  { id: 9, name: 'Videojet message or label (Box)' },
-  { id: 10, name: '% of ink and disolvent (Box)' },
-  { id: 11, name: 'Videojet message or label (Bag)' },
-  { id: 12, name: '% of ink and disolvent (Bag)' },
-  { id: 13, name: 'Equipment ignition' },
-  { id: 14, name: 'Bag feed clamp' },
-  { id: 15, name: 'Suction and singularization of bags' },
-  { id: 16, name: 'Conveyor clamp' },
-  { id: 17, name: 'Bag encoder' },
-  { id: 18, name: 'Initial bag opening' },
-  { id: 19, name: 'Air pulse' },
-  { id: 20, name: 'Bag opening' },
-  { id: 21, name: 'Bag filling' },
-  { id: 22, name: 'Sealing bar 1' },
-  { id: 23, name: 'Sealing bar 2' },
-  { id: 24, name: 'Heater on (T°)' },
-  { id: 25, name: 'Bag unloading' }
-] as const
+import { useToast } from '@/context/ToastContext'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/context/AuthContext'
+import { useChecklist } from '@/context/ChecklistContext'
+import { initialChecklistItems } from '@/lib/checklist'
+import * as XLSX from 'xlsx'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
 
 // Registrar el locale español
 registerLocale('es', es)
 
 interface ChecklistItem {
   id: number
-  name: string
+  nombre: string
 }
 
 interface ChecklistRecord {
@@ -134,6 +113,8 @@ export default function HistorialPage() {
   })
   const [marcas, setMarcas] = useState<string[]>([])
   const [materiales, setMateriales] = useState<string[]>([])
+
+  const { showToast } = useToast()
 
   // Manejar cambio de área
   const handleAreaChange = (area: Area) => {
@@ -286,7 +267,7 @@ export default function HistorialPage() {
 
       // Configurar encabezados de los ítems del checklist
       const itemColumns = initialChecklistItems.map(item => ({
-        header: `${item.id}. ${item.name}`,
+        header: `${item.id}. ${item.nombre}`,
         key: `item_${item.id}`,
         width: 15
       }))
@@ -371,7 +352,7 @@ export default function HistorialPage() {
       ]
       
       // Encabezados de los ítems
-      const itemHeaders = initialChecklistItems.map(item => `${item.id}. ${item.name}`)
+      const itemHeaders = initialChecklistItems.map(item => `${item.id}. ${item.nombre}`)
       
       // Combinar todos los encabezados
       const headers = [...mainHeaders, ...itemHeaders]
@@ -513,27 +494,11 @@ export default function HistorialPage() {
         const pdfPromises = registrosConPDF.map(async (registro) => {
           try {
             const response = await fetch(registro.pdf_url)
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
-            const pdfBlob = await response.blob()
-            
-            // Formatear fecha directamente desde registro.fecha
-            const [year, month, day] = registro.fecha.split('-')
-            const formattedDate = `${year}${month}${day}`
-            
-            // Generar nombre base del archivo
-            const baseFileName = `checklist_${formattedDate}_${registro.marca}_${registro.material}`
-            
-            // Manejar nombres duplicados
-            let fileName = `${baseFileName}.pdf`
-            let counter = 1
-            
-            while (usedNames.has(fileName)) {
-              fileName = `${baseFileName} (${counter}).pdf`
-              counter++
-            }
-            
-            usedNames.add(fileName)
-            zip.file(fileName, pdfBlob)
+            if (!response.ok) throw new Error(`Error al descargar PDF: ${response.statusText}`)
+            const blob = await response.blob()
+            const baseFileName = `checklist_${format(new Date(`${registro.fecha}T00:00:00`), 'yyyyMMdd')}_${registro.marca}_${registro.material}`
+            const safeFileName = sanitizeFileName(`${baseFileName}.pdf`)
+            zip.file(safeFileName, blob)
             return true
           } catch (error) {
             console.error(`Error al descargar PDF de ${registro.pdf_url}:`, error)
@@ -602,6 +567,44 @@ export default function HistorialPage() {
     } catch (error) {
       console.error('Error en la descarga de PDFs:', error)
       alert('Error al descargar los PDFs. Por favor, inténtelo de nuevo.')
+    }
+  }
+
+  const handleViewPDF = (pdfUrl: string) => {
+    if (!pdfUrl) {
+      showToast('No hay PDF disponible', 'error')
+      return
+    }
+    window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const sanitizeFileName = (fileName: string) => {
+    return fileName.replace(/[\/\\:*?"<>|\s]/g, '_')
+  }
+
+  const handleDownloadPDF = async (pdfUrl: string, registro: ChecklistRecord) => {
+    if (!pdfUrl) {
+      showToast('No hay PDF disponible', 'error')
+      return
+    }
+
+    try {
+      const response = await fetch(pdfUrl)
+      if (!response.ok) throw new Error('Error al descargar el PDF')
+      const blob = await response.blob()
+      
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const fileName = sanitizeFileName(`checklist_${format(new Date(`${registro.fecha}T00:00:00`), 'yyyyMMdd')}_${registro.marca}_${registro.material}.pdf`)
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error al descargar el PDF:', error)
+      showToast('Error al descargar el PDF', 'error')
     }
   }
 
@@ -933,11 +936,8 @@ export default function HistorialPage() {
                         <div className="flex justify-end gap-2">
                           {registro.pdf_url ? (
                             <>
-                              {/* Botón Ver PDF */}
-                              <a
-                                href={registro.pdf_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                onClick={() => handleViewPDF(registro.pdf_url)}
                                 className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded
                                   text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
                                   transition-colors"
@@ -949,33 +949,9 @@ export default function HistorialPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
                                 <span>Ver</span>
-                              </a>
-
-                              {/* Botón Descargar PDF */}
+                              </button>
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const response = await fetch(registro.pdf_url)
-                                    if (!response.ok) throw new Error('Error al descargar el PDF')
-                                    const blob = await response.blob()
-                                    
-                                    // Formatear el nombre del archivo
-                                    const fileName = `checklist_${registro.fecha}_${registro.marca.replace(/\s+/g, '_')}_${registro.material.replace(/\s+/g, '_')}.pdf`
-                                    
-                                    // Crear URL y descargar
-                                    const url = window.URL.createObjectURL(blob)
-                                    const a = document.createElement('a')
-                                    a.href = url
-                                    a.download = fileName
-                                    document.body.appendChild(a)
-                                    a.click()
-                                    document.body.removeChild(a)
-                                    window.URL.revokeObjectURL(url)
-                                  } catch (error) {
-                                    console.error('Error al descargar el PDF:', error)
-                                    alert('Error al descargar el PDF. Por favor intente nuevamente.')
-                                  }
-                                }}
+                                onClick={() => handleDownloadPDF(registro.pdf_url, registro)}
                                 className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded
                                   text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500
                                   transition-colors"

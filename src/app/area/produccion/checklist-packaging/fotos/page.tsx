@@ -10,6 +10,10 @@ import { uploadPDF, saveChecklistRecord, normalizeMaterial, ChecklistData } from
 import { format } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { useToast } from '@/context/ToastContext'
+import { supabase } from '@/lib/supabase-browser'
+import { useAuth } from '@/context/AuthContext'
+import { initialChecklistItems } from '@/lib/checklist'
+import * as XLSX from 'xlsx'
 
 export default function ChecklistPhotosPage() {
   const router = useRouter()

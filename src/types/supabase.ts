@@ -9,26 +9,42 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      // Aquí puedes agregar las definiciones de tus tablas
-      // Por ejemplo:
-      profiles: {
+      checklist_packing: {
         Row: {
           id: string
-          email: string
-          created_at: string
-          updated_at: string
+          fecha: string
+          marca: string
+          material: string
+          sku: string
+          jefe_linea: string
+          operador_maquina: string
+          orden_fabricacion: string
+          pdf_url: string
+          items: Json
         }
         Insert: {
-          id: string
-          email: string
-          created_at?: string
-          updated_at?: string
+          id?: string
+          fecha: string
+          marca: string
+          material: string
+          sku: string
+          jefe_linea: string
+          operador_maquina: string
+          orden_fabricacion: string
+          pdf_url: string
+          items: Json
         }
         Update: {
           id?: string
-          email?: string
-          created_at?: string
-          updated_at?: string
+          fecha?: string
+          marca?: string
+          material?: string
+          sku?: string
+          jefe_linea?: string
+          operador_maquina?: string
+          orden_fabricacion?: string
+          pdf_url?: string
+          items?: Json
         }
       }
     }

@@ -1,10 +1,12 @@
 export interface ProductEntry {
-  brand: string
+  marca: string
   material: string
   sku: string
 }
 
-export type ProductsData = ProductEntry[]
+export interface ProductsData {
+  [key: string]: ProductEntry[]
+}
 
 export interface ProductSelection {
   brand: string

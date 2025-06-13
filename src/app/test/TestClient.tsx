@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 export default function TestClient() {
   const [users, setUsers] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -19,6 +20,13 @@ export default function TestClient() {
 
     fetchUsers()
   }, [])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+    }
+  }
 
   return (
     <div className="p-4">

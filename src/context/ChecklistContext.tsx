@@ -1,6 +1,9 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { supabase } from '@/lib/supabase-browser'
+import { ChecklistContextType } from '@/types/checklist-context'
+import { ChecklistRecord } from '@/types/checklist'
 
 // Tipos
 export interface ChecklistItem {
@@ -42,6 +45,11 @@ interface ChecklistContextType {
   ordenFabricacion: string
   setOrdenFabricacion: (orden: string) => void
   clearContext: () => void
+  records: ChecklistRecord[]
+  loading: boolean
+  error: string | null
+  loadRecords: () => Promise<void>
+  saveRecord: (record: ChecklistRecord) => Promise<void>
 }
 
 const defaultPhotos: ChecklistPhotos = {
@@ -86,10 +94,9 @@ const defaultFormData = initialChecklistItems.map(item => ({
   correctiveAction: ''
 }))
 
-const ChecklistContext = createContext<ChecklistContextType | undefined>(undefined)
+const ChecklistContext = createContext<ChecklistContextType | null>(null)
 
 export function ChecklistProvider({ children }: { children: ReactNode }) {
-  // Estado para el formulario
   const [formData, setFormDataState] = useState<ChecklistItem[]>(defaultFormData)
   const [photos, setPhotosState] = useState<ChecklistPhotos>(defaultPhotos)
   const [lineManager, setLineManager] = useState('')
@@ -100,6 +107,9 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
   const [selectedSku, setSelectedSku] = useState('')
   const [ordenFabricacion, setOrdenFabricacion] = useState('')
   const [isInitialized, setIsInitialized] = useState(false)
+  const [records, setRecords] = useState<ChecklistRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Cargar datos guardados solo en el cliente
   useEffect(() => {
@@ -158,6 +168,45 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const loadRecords = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const { data, error } = await supabase
+        .from('checklist_packing')
+        .select('*')
+        .order('fecha', { ascending: false })
+
+      if (error) throw error
+
+      setRecords(data as ChecklistRecord[])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error loading records')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveRecord = async (record: ChecklistRecord) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const { error } = await supabase
+        .from('checklist_packing')
+        .insert([record])
+
+      if (error) throw error
+
+      await loadRecords()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error saving record')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <ChecklistContext.Provider 
       value={{ 
@@ -179,7 +228,12 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
         setSelectedSku,
         ordenFabricacion,
         setOrdenFabricacion,
-        clearContext
+        clearContext,
+        records,
+        loading,
+        error,
+        loadRecords,
+        saveRecord
       }}
     >
       {children}
@@ -189,7 +243,7 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
 
 export function useChecklist() {
   const context = useContext(ChecklistContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useChecklist must be used within a ChecklistProvider')
   }
   return context

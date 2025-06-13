@@ -1,9 +1,9 @@
-import './globals.css'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import SupabaseProvider from '@/components/providers/SupabaseProvider'
 import { Inter } from 'next/font/google'
+import './globals.css'
+import { SupabaseProvider } from '@/components/providers/SupabaseProvider'
+import { AuthProvider } from '@/context/AuthContext'
 import { ToastProvider } from '@/context/ToastContext'
+import { ChecklistProvider } from '@/context/ChecklistContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -15,41 +15,24 @@ export const metadata = {
 // No revalidar la página en cada request
 export const revalidate = 0
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  try {
-    const supabase = createServerComponentClient({ cookies })
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    return (
-      <html lang="es">
-        <body className={inter.className}>
-          <ToastProvider>
-            <SupabaseProvider session={session}>
-              {children}
-            </SupabaseProvider>
-          </ToastProvider>
-        </body>
-      </html>
-    )
-  } catch (error) {
-    console.error('Error en RootLayout:', error)
-    // En caso de error, renderizar sin sesión
   return (
-      <html lang="es">
-        <body className={inter.className}>
-          <ToastProvider>
-            <SupabaseProvider session={null}>
-        {children}
-          </SupabaseProvider>
-          </ToastProvider>
+    <html lang="es">
+      <body className={inter.className}>
+        <SupabaseProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <ChecklistProvider>
+                {children}
+              </ChecklistProvider>
+            </ToastProvider>
+          </AuthProvider>
+        </SupabaseProvider>
       </body>
     </html>
-    )
-  }
+  )
 }

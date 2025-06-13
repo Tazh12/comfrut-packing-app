@@ -1,47 +1,29 @@
-import { supabase } from '../supabase'
+import { createClient } from '@supabase/supabase-js'
 
-export async function createStorageBucket() {
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+async function createStorageBucket() {
   try {
-    // 1. Verificar si el bucket existe
-    const { data: buckets } = await supabase.storage.listBuckets()
-    const bucketExists = buckets?.some(bucket => bucket.name === 'checklistpacking')
-
-    if (!bucketExists) {
-      // 2. Crear el bucket si no existe
-      const { data, error } = await supabase.storage.createBucket('checklistpacking', {
-        public: true, // Hacer el bucket público
-        fileSizeLimit: 5242880, // 5MB en bytes
-        allowedMimeTypes: ['application/pdf']
+    const { error } = await supabase
+      .storage
+      .createBucket('checklist-photos', {
+        public: false,
+        fileSizeLimit: 5242880, // 5MB
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp']
       })
 
-      if (error) {
-        throw error
-      }
-
-      console.log('Bucket checklistpacking creado exitosamente')
-    } else {
-      console.log('El bucket checklistpacking ya existe')
+    if (error) {
+      throw error
     }
 
-    // 3. Verificar que la tabla existe
-    const { error: tableError } = await supabase
-      .from('checklist_packing')
-      .select('id')
-      .limit(1)
-
-    if (tableError) {
-      // Si la tabla no existe, crearla
-      const { error: createError } = await supabase.rpc('create_checklist_packing_table')
-      if (createError) {
-        throw createError
-      }
-      console.log('Tabla checklist_packing creada exitosamente')
-    } else {
-      console.log('La tabla checklist_packing ya existe')
-    }
-
+    console.log('Storage bucket created successfully')
   } catch (error) {
-    console.error('Error al configurar el almacenamiento:', error)
+    console.error('Error creating storage bucket:', error)
     throw error
   }
-} 
+}
+
+createStorageBucket() 

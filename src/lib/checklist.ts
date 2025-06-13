@@ -1,6 +1,7 @@
 import { createClient } from './supabase-config'
 import { checkStorageBucket } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
+import { supabase } from './supabase-browser'
 
 // Tipos
 export interface ChecklistItem {
@@ -20,6 +21,51 @@ export interface ChecklistData {
   items: ChecklistItem[]
   pdf_url: string
 }
+
+export interface ChecklistRecord {
+  id: string
+  fecha: string
+  marca: string
+  material: string
+  sku: string
+  jefe_linea: string
+  operador_maquina: string
+  orden_fabricacion: string
+  pdf_url: string
+  items: Array<{
+    id: number
+    nombre: string
+    estado: 'cumple' | 'no_cumple'
+  }>
+}
+
+export const initialChecklistItems: ChecklistItem[] = [
+  { id: 1, nombre: 'Air pressure' },
+  { id: 2, nombre: 'Multihead hopper position' },
+  { id: 3, nombre: 'Upper capachos state' },
+  { id: 4, nombre: 'Intermediate capachos state' },
+  { id: 5, nombre: 'Lower capachos state' },
+  { id: 6, nombre: 'Elevator ignition' },
+  { id: 7, nombre: 'Multihead atoche sensors' },
+  { id: 8, nombre: 'Videojet power' },
+  { id: 9, nombre: 'Videojet message or label (Box)' },
+  { id: 10, nombre: '% of ink and disolvent (Box)' },
+  { id: 11, nombre: 'Videojet message or label (Bag)' },
+  { id: 12, nombre: '% of ink and disolvent (Bag)' },
+  { id: 13, nombre: 'Equipment ignition' },
+  { id: 14, nombre: 'Bag feed clamp' },
+  { id: 15, nombre: 'Suction and singularization of bags' },
+  { id: 16, nombre: 'Conveyor clamp' },
+  { id: 17, nombre: 'Bag encoder' },
+  { id: 18, nombre: 'Initial bag opening' },
+  { id: 19, nombre: 'Air pulse' },
+  { id: 20, nombre: 'Bag opening' },
+  { id: 21, nombre: 'Bag filling' },
+  { id: 22, nombre: 'Sealing bar 1' },
+  { id: 23, nombre: 'Sealing bar 2' },
+  { id: 24, nombre: 'Heater on (T°)' },
+  { id: 25, nombre: 'Bag unloading' }
+]
 
 // Función para validar detalladamente los datos del checklist
 const validateChecklistData = (data: any): { isValid: boolean; errors: string[] } => {
@@ -240,4 +286,67 @@ export const saveChecklistRecord = async (checklistData: ChecklistData): Promise
     } : error)
     throw error
   }
+}
+
+export async function getChecklistRecords(filters: {
+  startDate?: string
+  endDate?: string
+  marca?: string
+  material?: string
+  orden_fabricacion?: string
+}): Promise<ChecklistRecord[]> {
+  let query = supabase
+    .from('checklist_packing')
+    .select('*')
+    .order('fecha', { ascending: false })
+
+  if (filters.startDate) {
+    query = query.gte('fecha', filters.startDate)
+  }
+  if (filters.endDate) {
+    query = query.lt('fecha', filters.endDate)
+  }
+  if (filters.marca) {
+    query = query.eq('marca', filters.marca)
+  }
+  if (filters.material) {
+    query = query.eq('material', filters.material)
+  }
+  if (filters.orden_fabricacion) {
+    query = query.ilike('orden_fabricacion', `%${filters.orden_fabricacion}%`)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(`Error fetching checklist records: ${error.message}`)
+  }
+
+  return data as ChecklistRecord[]
+}
+
+export async function getUniqueMarcas(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('checklist_packing')
+    .select('marca')
+    .order('marca')
+
+  if (error) {
+    throw new Error(`Error fetching marcas: ${error.message}`)
+  }
+
+  return [...new Set(data.map((item: { marca: string }) => item.marca))]
+}
+
+export async function getUniqueMateriales(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('checklist_packing')
+    .select('material')
+    .order('material')
+
+  if (error) {
+    throw new Error(`Error fetching materiales: ${error.message}`)
+  }
+
+  return [...new Set(data.map((item: { material: string }) => item.material))]
 } 
