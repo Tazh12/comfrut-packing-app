@@ -1,15 +1,14 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { supabase } from '@/lib/supabase-browser'
-import { ChecklistContextType } from '@/types/checklist-context'
-import { ChecklistRecord } from '@/types/checklist'
+import { supabase } from '@/lib/supabase'
 
 // Tipos
 export interface ChecklistItem {
   id: number
-  name: string
-  status: 'cumple' | 'no_cumple' | 'no_aplica'
+  nombre: string
+  estado: string
+  status?: string
   comment?: string
   correctiveAction?: string
 }
@@ -25,7 +24,26 @@ export interface ChecklistPhotos {
   photo3: PhotoUpload
 }
 
-interface ChecklistContextType {
+export const initialPhotos: ChecklistPhotos = {
+  photo1: { file: null, preview: '' },
+  photo2: { file: null, preview: '' },
+  photo3: { file: null, preview: '' }
+}
+
+export interface ChecklistRecord {
+  id: string
+  fecha: string
+  jefe_linea: string
+  operador_maquina: string
+  marca: string
+  material: string
+  sku: string
+  orden_fabricacion: string
+  items: ChecklistItem[]
+  pdf_url: string
+}
+
+export interface ChecklistContextType {
   formData: ChecklistItem[]
   setFormData: (data: ChecklistItem[]) => void
   photos: ChecklistPhotos
@@ -34,8 +52,8 @@ interface ChecklistContextType {
   setLineManager: (name: string) => void
   machineOperator: string
   setMachineOperator: (name: string) => void
-  checklistDate: Date | null
-  setChecklistDate: (date: Date | null) => void
+  checklistDate: string | null
+  setChecklistDate: (date: string | null) => void
   selectedBrand: string
   setSelectedBrand: (brand: string) => void
   selectedMaterial: string
@@ -52,39 +70,16 @@ interface ChecklistContextType {
   saveRecord: (record: ChecklistRecord) => Promise<void>
 }
 
-const defaultPhotos: ChecklistPhotos = {
-  photo1: { file: null, preview: null },
-  photo2: { file: null, preview: null },
-  photo3: { file: null, preview: null }
-}
-
 // Lista inicial de ítems del checklist
 const initialChecklistItems: Omit<ChecklistItem, 'status' | 'comment' | 'correctiveAction'>[] = [
-  { id: 1, name: 'Air pressure' },
-  { id: 2, name: 'Multihead hopper position' },
-  { id: 3, name: 'Upper capachos state' },
-  { id: 4, name: 'Intermediate capachos state' },
-  { id: 5, name: 'Lower capachos state' },
-  { id: 6, name: 'Elevator ignition' },
-  { id: 7, name: 'Multihead atoche sensors' },
-  { id: 8, name: 'Videojet power' },
-  { id: 9, name: 'Videojet message or label (Box)' },
-  { id: 10, name: '% of ink and disolvent (Box)' },
-  { id: 11, name: 'Videojet message or label (Bag)' },
-  { id: 12, name: '% of ink and disolvent (Bag)' },
-  { id: 13, name: 'Equipment ignition' },
-  { id: 14, name: 'Bag feed clamp' },
-  { id: 15, name: 'Suction and singularization of bags' },
-  { id: 16, name: 'Conveyor clamp' },
-  { id: 17, name: 'Bag encoder' },
-  { id: 18, name: 'Initial bag opening' },
-  { id: 19, name: 'Air pulse' },
-  { id: 20, name: 'Bag opening' },
-  { id: 21, name: 'Bag filling' },
-  { id: 22, name: 'Sealing bar 1' },
-  { id: 23, name: 'Sealing bar 2' },
-  { id: 24, name: 'Heater on (T°)' },
-  { id: 25, name: 'Bag unloading' }
+  { id: 1, nombre: 'Air pressure', estado: 'pendiente' },
+  { id: 2, nombre: 'Multihead hopper position', estado: 'pendiente' },
+  { id: 3, nombre: 'Upper capachos state', estado: 'pendiente' },
+  { id: 4, nombre: 'Intermediate capachos state', estado: 'pendiente' },
+  { id: 5, nombre: 'Lower capachos state', estado: 'pendiente' },
+  { id: 6, nombre: 'Elevator ignition', estado: 'pendiente' },
+  { id: 7, nombre: 'Multihead atoche sensors', estado: 'pendiente' },
+  { id: 8, nombre: 'Videojet power', estado: 'pendiente' }
 ]
 
 const defaultFormData = initialChecklistItems.map(item => ({
@@ -98,10 +93,10 @@ const ChecklistContext = createContext<ChecklistContextType | null>(null)
 
 export function ChecklistProvider({ children }: { children: ReactNode }) {
   const [formData, setFormDataState] = useState<ChecklistItem[]>(defaultFormData)
-  const [photos, setPhotosState] = useState<ChecklistPhotos>(defaultPhotos)
+  const [photos, setPhotosState] = useState<ChecklistPhotos>(initialPhotos)
   const [lineManager, setLineManager] = useState('')
   const [machineOperator, setMachineOperator] = useState('')
-  const [checklistDate, setChecklistDate] = useState<Date | null>(null)
+  const [checklistDate, setChecklistDate] = useState<string | null>(null)
   const [selectedBrand, setSelectedBrand] = useState('')
   const [selectedMaterial, setSelectedMaterial] = useState('')
   const [selectedSku, setSelectedSku] = useState('')
@@ -154,7 +149,7 @@ export function ChecklistProvider({ children }: { children: ReactNode }) {
   // Función para limpiar el contexto
   const clearContext = () => {
     setFormDataState(defaultFormData)
-    setPhotosState(defaultPhotos)
+    setPhotosState(initialPhotos)
     setLineManager('')
     setMachineOperator('')
     setChecklistDate(null)

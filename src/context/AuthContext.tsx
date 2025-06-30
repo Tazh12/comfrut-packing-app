@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase-browser'
+import { supabase } from '@/lib/supabase'
 import { AuthContextType } from '@/types/auth'
 
 const AuthContext = createContext<AuthContextType | null>(null)

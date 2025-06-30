@@ -1,629 +1,609 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useChecklist } from '@/context/ChecklistContext'
-import ReactDatePicker, { registerLocale } from 'react-datepicker'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
-import "react-datepicker/dist/react-datepicker.css"
-import productsData from '@/data/products_db.json'
-import { ProductEntry, ProductsData } from '@/types/product'
-import { supabase } from '@/lib/supabase-browser'
-import { useToast } from '@/context/ToastContext'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { initialChecklistItems } from '@/lib/checklist'
-import * as XLSX from 'xlsx'
+import { useToast } from '@/context/ToastContext'
+import { useRouter } from 'next/navigation'
+import { supabase, uploadPDF, saveChecklistRecord } from '@/lib/supabase'
+import { ChecklistItem, ProductEntry, ProductsData } from '@/types/checklist'
+import { PhotoUpload, ChecklistPhotos } from '@/context/ChecklistContext'
+import PhotoUploadSection from '@/components/PhotoUploadSection'
+import { ChecklistPDFLink } from '@/components/ChecklistPDFLink'
+import Link from 'next/link'
 
-// Validar y tipar los datos del JSON
-const products: ProductsData = productsData as ProductsData
+// Items del checklist
+const initialChecklistItems: ChecklistItem[] = [
+  { id: 1, nombre: 'Air pressure / Presión de aire', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 2, nombre: 'Multihead hopper position / Posición del hopper de la multihead', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 3, nombre: 'Upper capachos state / Estado de los capachos superiores', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 4, nombre: 'Intermediate capachos state / Estado de los capachos intermedios', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 5, nombre: 'Lower capachos state / Estado de los capachos inferiores', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 6, nombre: 'Elevator ignition / Encendido del elevador', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 7, nombre: 'Multihead atoche sensors / Sensores atoche de la multihead', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 8, nombre: 'Videojet power / Encendido de Videojet', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 9, nombre: 'Ignition of the equipment (packaging machine and Yamato) / Encendido de los equipos (envasadora y Yamato)', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 10, nombre: 'Packaging bag feed clamp / Pinza alimentadora de bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 11, nombre: 'Suction and singularization of bags / Succión y singularización de bolsas', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 12, nombre: 'Conveyor clamp / Pinza de transporte', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 13, nombre: 'Bag encoder / Encoder de bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 14, nombre: 'Initial opening of the bag / Apertura inicial de la bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 15, nombre: 'Air pulse / Pulso de aire', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 16, nombre: 'Bag opening / Apertura de bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 17, nombre: 'Bag filling / Llenado de bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 18, nombre: 'Sealing bar 1 / Barra de sellado 1', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 19, nombre: 'Sealing bar 2 / Barra de sellado 2', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 20, nombre: 'Heater on (T° at production) / Calentador encendido (T° en producción)', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' },
+  { id: 21, nombre: 'Bag unloading / Descarga de bolsa', estado: 'pendiente', status: undefined, comment: '', correctiveAction: '' }
+]
 
-// Registrar el locale español
-registerLocale('es', es)
-
-// Tipos
-interface ChecklistItem {
-  id: number
-  name: string
-  status: 'cumple' | 'no_cumple' | 'no_aplica'
-  comment?: string
-  correctiveAction?: string
-}
-
-// Lista de ítems del checklist
-const checklistItems: Omit<ChecklistItem, 'status' | 'comment' | 'correctiveAction'>[] = [
-  { id: 1, name: 'Air pressure' },
-  { id: 2, name: 'Multihead hopper position' },
-  { id: 3, name: 'Upper capachos state' },
-  { id: 4, name: 'Intermediate capachos state' },
-  { id: 5, name: 'Lower capachos state' },
-  { id: 6, name: 'Elevator ignition' },
-  { id: 7, name: 'Multihead atoche sensors' },
-  { id: 8, name: 'Videojet power' },
-  { id: 9, name: 'Videojet message or label (Box)' },
-  { id: 10, name: '% of ink and disolvent (Box)' },
-  { id: 11, name: 'Videojet message or label (Bag)' },
-  { id: 12, name: '% of ink and disolvent (Bag)' },
-  { id: 13, name: 'Equipment ignition' },
-  { id: 14, name: 'Bag feed clamp' },
-  { id: 15, name: 'Suction and singularization of bags' },
-  { id: 16, name: 'Conveyor clamp' },
-  { id: 17, name: 'Bag encoder' },
-  { id: 18, name: 'Initial bag opening' },
-  { id: 19, name: 'Air pulse' },
-  { id: 20, name: 'Bag opening' },
-  { id: 21, name: 'Bag filling' },
-  { id: 22, name: 'Sealing bar 1' },
-  { id: 23, name: 'Sealing bar 2' },
-  { id: 24, name: 'Heater on (T°)' },
-  { id: 25, name: 'Bag unloading' }
+// Definir los campos requeridos
+const REQUIRED_FIELDS = [
+  { id: 'lineManager', label: 'Jefe de Línea' },
+  { id: 'machineOperator', label: 'Operador de Máquina' },
+  { id: 'checklistDate', label: 'Fecha del Checklist' },
+  { id: 'ordenFabricacion', label: 'Orden de Fabricación' },
+  { id: 'brand', label: 'Marca' },
+  { id: 'material', label: 'Material' }
 ]
 
 export default function ChecklistPackagingPage() {
+  const { user } = useAuth()
+  const { showToast } = useToast()
   const router = useRouter()
-  const { 
-    formData, 
-    setFormData, 
-    lineManager, 
-    setLineManager, 
-    machineOperator, 
-    setMachineOperator,
-    checklistDate,
-    setChecklistDate,
-    selectedBrand,
-    setSelectedBrand,
-    selectedMaterial,
-    setSelectedMaterial,
-    selectedSku,
-    setSelectedSku,
-    ordenFabricacion,
-    setOrdenFabricacion
-  } = useChecklist()
-  const [globalError, setGlobalError] = useState('')
-  const [invalidItems, setInvalidItems] = useState<number[]>([])
+  
+  // Estados para la selección dependiente
+  const [selectedBrand, setSelectedBrand] = useState<string>('')
+  const [selectedMaterial, setSelectedMaterial] = useState<string>('')
+  const [selectedProduct, setSelectedProduct] = useState<ProductEntry | null>(null)
+  
+  // Estados para las listas de opciones
+  const [brands, setBrands] = useState<string[]>([])
+  const [materials, setMaterials] = useState<string[]>([])
+  const [products, setProducts] = useState<ProductEntry[]>([])
+  
+  // Estados para el formulario
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [items, setItems] = useState<ChecklistItem[]>(initialChecklistItems)
+  const [lineManager, setLineManager] = useState('')
+  const [machineOperator, setMachineOperator] = useState('')
+  const [checklistDate, setChecklistDate] = useState('')
+  const [ordenFabricacion, setOrdenFabricacion] = useState('')
+  const [photos, setPhotos] = useState<ChecklistPhotos>({
+    photo1: { file: null, preview: null } as PhotoUpload,
+    photo2: { file: null, preview: null } as PhotoUpload,
+    photo3: { file: null, preview: null } as PhotoUpload
+  })
 
-  // Obtener marcas únicas del JSON
-  const uniqueBrands = useMemo(() => {
-    const brandSet = new Set(products.map(p => p.brand))
-    return Array.from(brandSet).sort()
+  // Cargar productos al montar el componente
+  useEffect(() => {
+    loadProducts()
   }, [])
 
-  // Obtener materiales filtrados por marca
-  const filteredMaterials = useMemo(() => {
-    if (!selectedBrand) return []
-    return products
-      .filter(p => p.brand === selectedBrand)
-      .map(p => p.material)
-      .sort()
-  }, [selectedBrand])
+  const loadProducts = async () => {
+    try {
+      setIsLoading(true)
+      setError('')
 
-  // Efecto para actualizar el SKU cuando cambia el material
-  useEffect(() => {
-    if (selectedBrand && selectedMaterial) {
-      const product = products.find(
-        p => p.brand === selectedBrand && p.material === selectedMaterial
-      )
-      if (product) {
-        setSelectedSku(product.sku)
-      } else {
-        setSelectedSku('')
-        setError('No se encontró un SKU válido para la combinación seleccionada')
+      console.log('Iniciando carga de productos desde Supabase...')
+      
+      const { data, error } = await supabase
+        .from('productos')
+        .select('brand, material, sku')
+
+      // Log completo de la respuesta
+      console.log('Respuesta de Supabase:', { data, error })
+
+      if (error) {
+        console.error('Error al cargar productos:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        setError(`Error al cargar productos: ${error.message}`)
+        return
       }
+
+      if (!data || data.length === 0) {
+        console.log('No se encontraron productos en la base de datos')
+        setError('No hay productos disponibles')
+        setBrands([])
+        setProducts([])
+        return
+      }
+
+      // Log de los datos recibidos
+      console.log('Productos recibidos de Supabase:', data)
+
+      // Formatear productos según el formato requerido
+      const formattedProducts: ProductEntry[] = data.map((item, index) => ({
+        id: item.sku || `product-${index}`,
+        sku: item.sku || '',
+        nombre: item.material || '', // Usar material como nombre temporal
+        brand: item.brand || '',
+        material: item.material || '',
+        estado: 'pendiente' as const
+      }))
+
+      // Log de los productos formateados
+      console.log('Productos formateados:', formattedProducts)
+
+      // Extraer y validar lista de marcas únicas
+      const uniqueBrands = Array.from(new Set(
+        formattedProducts
+          .map(p => p.brand)
+          .filter(brand => brand && brand.trim() !== '')
+      )).sort((a, b) => a.localeCompare(b))
+
+      console.log('Marcas únicas encontradas:', uniqueBrands)
+
+      if (uniqueBrands.length === 0) {
+        console.warn('No se encontraron marcas válidas en los productos')
+        setError('No se encontraron marcas válidas')
+        setBrands([])
+        setProducts([])
+        return
+      }
+
+      // Actualizar el estado solo si tenemos datos válidos
+      setBrands(uniqueBrands)
+      setProducts(formattedProducts)
+      setError('')
+
+      console.log('Estado actualizado exitosamente:', {
+        totalProducts: formattedProducts.length,
+        uniqueBrands: uniqueBrands.length,
+        firstProduct: formattedProducts[0],
+        firstBrand: uniqueBrands[0]
+      })
+
+    } catch (error) {
+      console.error('Error inesperado al cargar productos:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      setError(`Error al cargar los productos: ${errorMessage}`)
+      setBrands([])
+      setProducts([])
+    } finally {
+      setIsLoading(false)
     }
-  }, [selectedBrand, selectedMaterial, setSelectedSku])
-
-  const handleStatusChange = (id: number, value: 'cumple' | 'no_cumple') => {
-    setFormData(
-      formData.map(item =>
-        item.id === id ? { ...item, status: item.status === value ? 'no_aplica' : value } : item
-      )
-    )
-    // Limpiar errores al cambiar un estado
-    setInvalidItems(prev => prev.filter(itemId => itemId !== id))
-    if (globalError) setGlobalError('')
   }
 
-  const handleCommentChange = (id: number, value: string) => {
-    setFormData(
-      formData.map(item =>
-        item.id === id ? { ...item, comment: value } : item
-      )
-    )
-  }
-
-  const handleCorrectiveActionChange = (id: number, value: string) => {
-    setFormData(
-      formData.map(item =>
-        item.id === id ? { ...item, correctiveAction: value } : item
-      )
-    )
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (isFormValid()) {
-      router.push('/area/produccion/checklist-packaging/fotos')
-    }
-  }
-
-  // Manejar cambio de marca
-  const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const brand = e.target.value
+  // Manejador para cuando se selecciona una marca
+  const handleBrandChange = (brand: string) => {
     setSelectedBrand(brand)
     setSelectedMaterial('')
-    setSelectedSku('')
-    setError('')
-  }
-
-  // Manejar cambio de material
-  const handleMaterialChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const material = e.target.value
-    setSelectedMaterial(material)
-    setError('')
-  }
-
-  // Validar si los campos obligatorios están completos
-  const isFormValid = () => {
-    let errors: string[] = []
+    setSelectedProduct(null)
     
-    // Validar campos básicos
-    if (!lineManager.trim()) {
-      errors.push('El campo Jefe de Línea es requerido')
-    }
-    
-    if (!machineOperator.trim()) {
-      errors.push('El campo Operador de Máquina es requerido')
-    }
-
-    if (!checklistDate) {
-      errors.push('La fecha del checklist es requerida')
-    }
-
-    if (!ordenFabricacion.trim()) {
-      errors.push('El campo Orden de Fabricación es requerido')
-    }
-
-    if (!selectedBrand) {
-      errors.push('Debe seleccionar una marca')
-    }
-
-    if (!selectedMaterial) {
-      errors.push('Debe seleccionar un material')
-    }
-
-    if (!selectedSku) {
-      errors.push('No se encontró un SKU válido para la combinación seleccionada')
-    }
-
-    // Verificar que la combinación existe en el JSON
-    if (selectedBrand && selectedMaterial && selectedSku) {
-      const isValidCombination = products.some(
-        p => p.brand === selectedBrand && 
-            p.material === selectedMaterial && 
-            p.sku === selectedSku
+    // Filtrar materiales disponibles para esta marca
+    const materialsForBrand = Array.from(
+      new Set(
+        products
+          .filter(p => p.brand === brand)
+          .map(p => p.material)
       )
-
-      if (!isValidCombination) {
-        errors.push('La combinación de marca y material seleccionada no es válida')
-      }
-    }
-    
-    // Verificar que todos los ítems tengan un estado definido
-    const itemsWithoutStatus = formData.filter(item => !item.status || item.status === 'no_aplica')
-    if (itemsWithoutStatus.length > 0) {
-      errors.push(`Debes responder todos los ítems del checklist (faltan ${itemsWithoutStatus.length} ítems)`)
-      setInvalidItems(itemsWithoutStatus.map(item => item.id))
-    }
-
-    // Verificar que los ítems marcados como "no_cumple" tengan acción correctiva
-    const itemsWithoutCorrectiveAction = formData.filter(
-      item => item.status === 'no_cumple' && (!item.correctiveAction || !item.correctiveAction.trim())
     )
-    if (itemsWithoutCorrectiveAction.length > 0) {
-      errors.push(`Debes completar la acción correctiva para ${itemsWithoutCorrectiveAction.length} ${
-        itemsWithoutCorrectiveAction.length === 1 ? 'ítem que no cumple' : 'ítems que no cumplen'
-      }`)
-      // Agregar estos ítems a la lista de inválidos también
-      setInvalidItems(prev => [...new Set([...prev, ...itemsWithoutCorrectiveAction.map(item => item.id)])])
+    setMaterials(materialsForBrand)
+  }
+
+  // Manejador para cuando se selecciona un material
+  const handleMaterialChange = (material: string) => {
+    setSelectedMaterial(material)
+    setSelectedProduct(null)
+    
+    // Encontrar el primer producto que coincida con la marca y material
+    const matchingProduct = products.find(
+      p => p.brand === selectedBrand && p.material === material
+    )
+    
+    if (matchingProduct) {
+      setSelectedProduct(matchingProduct)
+    }
+  }
+
+  const handleItemStatusChange = (itemId: number, status: 'cumple' | 'no_cumple' | 'no_aplica') => {
+    setItems(items.map(item =>
+      item.id === itemId ? { ...item, status } : item
+    ))
+  }
+
+  const handleItemCommentChange = (itemId: number, comment: string) => {
+    setItems(items.map(item =>
+      item.id === itemId ? { ...item, comment } : item
+    ))
+  }
+
+  const handleItemCorrectiveActionChange = (itemId: number, correctiveAction: string) => {
+    setItems(items.map(item =>
+      item.id === itemId ? { ...item, correctiveAction } : item
+    ))
+  }
+
+  const validateForm = () => {
+    let firstInvalidField = null
+
+    // Limpiar clases de error previas
+    REQUIRED_FIELDS.forEach(({ id }) => {
+      const field = document.getElementById(id)
+      if (field) {
+        field.classList.remove('missing-field')
+      }
+    })
+
+    // Validar campos del formulario
+    const formFields = {
+      lineManager,
+      machineOperator,
+      checklistDate,
+      ordenFabricacion,
+      brand: selectedBrand,
+      material: selectedMaterial
     }
 
-    if (errors.length > 0) {
-      setError(errors.join('\n'))
-      // Si hay ítems inválidos, hacer scroll al primero
-      const firstInvalidItem = document.getElementById(`item-${invalidItems[0]}`)
-      if (firstInvalidItem) {
-        firstInvalidItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    for (const [fieldId, value] of Object.entries(formFields)) {
+      if (!value) {
+        const field = document.getElementById(fieldId)
+        if (field) {
+          field.classList.add('missing-field')
+          if (!firstInvalidField) {
+            firstInvalidField = field
+          }
+        }
       }
+    }
+
+    if (firstInvalidField) {
+      firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      showToast('Por favor complete todos los campos obligatorios', 'error')
       return false
     }
 
-    setError('')
-    setInvalidItems([])
+    // Validar que todos los items tengan un status seleccionado
+    const incompleteItems = items.filter(item => !item.status)
+    if (incompleteItems.length > 0) {
+      const firstIncompleteItem = document.getElementById(`item-${incompleteItems[0].id}`)
+      if (firstIncompleteItem) {
+        firstIncompleteItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        firstIncompleteItem.classList.add('missing-field')
+      }
+      showToast('Por favor seleccione "Cumple" o "No cumple" para todos los items', 'error')
+      return false
+    }
+
+    // Validar que los items "No cumple" tengan comentario y acción correctiva
+    const invalidItems = items.filter(
+      item => item.status === 'no_cumple' && (!item.comment || !item.correctiveAction)
+    )
+    if (invalidItems.length > 0) {
+      const firstInvalidItem = document.getElementById(`item-${invalidItems[0].id}`)
+      if (firstInvalidItem) {
+        firstInvalidItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        firstInvalidItem.classList.add('missing-field')
+      }
+      showToast('Los items marcados como "No cumple" deben tener comentario y acción correctiva', 'error')
+      return false
+    }
+
     return true
   }
 
+  // Limpiar clase de error al cambiar valor
+  const handleFieldChange = (fieldId: string, value: string, setter: (value: string) => void) => {
+    const field = document.getElementById(fieldId)
+    if (field) {
+      field.classList.remove('missing-field')
+    }
+    setter(value)
+  }
+
   const handleNext = () => {
-    if (!isFormValid()) return
-    router.push('/area/produccion/checklist-packaging/fotos')
+    if (!validateForm()) return
+
+    // Guardar estado actual en localStorage
+    const checklistData = {
+      lineManager,
+      machineOperator,
+      checklistDate,
+      ordenFabricacion,
+      selectedBrand,
+      selectedMaterial,
+      selectedSku: selectedProduct?.sku || '',
+      items
+    };
+    localStorage.setItem('checklistData', JSON.stringify(checklistData));
+    
+    // Navegar a la página de fotos
+    router.push('/area/produccion/checklist-packaging/fotos');
   }
 
-  const handleDateChange = (date: Date | null) => {
-    setChecklistDate(date)
-  }
-
-  // Función para verificar si un ítem requiere acción correctiva
-  const requiresCorrectiveAction = (item: ChecklistItem) => {
-    return item.status === 'no_cumple'
-  }
-
-  // Función para verificar si un ítem tiene error de validación
-  const hasValidationError = (item: ChecklistItem) => {
+  if (isLoading) {
     return (
-      invalidItems.includes(item.id) ||
-      (requiresCorrectiveAction(item) && (!item.correctiveAction || !item.correctiveAction.trim()))
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
     )
   }
 
-  const errors = {
-    marca: '',
-    material: '',
-    sku: '',
-    orden_fabricacion: '',
-    jefe_linea: '',
-    operador_maquina: '',
-    items: ''
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <p className="text-red-500 mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-background py-6 sm:py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Encabezado */}
-        <div className="mb-6 sm:mb-8">
-          <Link
-            href="/area/produccion"
-            className="inline-flex items-center text-blue-400 hover:text-blue-500 transition-colors mb-4"
-          >
-            <span className="mr-2">←</span>
-            <span>Volver</span>
-          </Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-center text-blue-400 mt-4">
-            Checklist de Packaging – Producción
-          </h1>
-        </div>
-
-        {/* Campos de personal y fecha */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Información del Registro
-          </h2>
-          
-          {/* Primera fila: Jefe de Línea y Operador */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label 
-                htmlFor="lineManager"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Jefe de Línea *
-              </label>
-              <input
-                type="text"
-                id="lineManager"
-                value={lineManager}
-                onChange={(e) => setLineManager(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  placeholder-gray-400"
-                placeholder="Ingrese el nombre del Jefe de Línea"
-                required
-              />
-            </div>
-            <div>
-              <label 
-                htmlFor="machineOperator"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Operador de Máquina *
-              </label>
-              <input
-                type="text"
-                id="machineOperator"
-                value={machineOperator}
-                onChange={(e) => setMachineOperator(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  placeholder-gray-400"
-                placeholder="Ingrese el nombre del Operador"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Segunda fila: Fecha y Orden de Fabricación */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label 
-                htmlFor="checklistDate"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Fecha del Checklist *
-              </label>
-              <ReactDatePicker
-                id="checklistDate"
-                selected={checklistDate}
-                onChange={handleDateChange}
-                dateFormat="dd / MMM / yyyy"
-                locale="es"
-                maxDate={new Date()}
-                placeholderText="Seleccione una fecha"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  placeholder-gray-400"
-                required
-              />
-            </div>
-            <div>
-              <label 
-                htmlFor="ordenFabricacion"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Orden de Fabricación *
-              </label>
-              <input
-                type="text"
-                id="ordenFabricacion"
-                value={ordenFabricacion}
-                onChange={(e) => setOrdenFabricacion(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  placeholder-gray-400"
-                placeholder="Ingrese la orden de fabricación"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Tercera fila: Marca y Material */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label 
-                htmlFor="brand"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Marca / Brand *
-              </label>
-              <select
-                id="brand"
-                value={selectedBrand}
-                onChange={handleBrandChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  text-gray-700 disabled:bg-gray-100"
-                required
-              >
-                <option value="">Seleccione una marca</option>
-                {uniqueBrands.map(brand => (
-                  <option key={brand} value={brand}>
-                    {brand}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label 
-                htmlFor="material"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Producto / Material *
-              </label>
-              <select
-                id="material"
-                value={selectedMaterial}
-                onChange={handleMaterialChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                  shadow-sm focus:ring-blue-500 focus:border-blue-500
-                  text-gray-700 disabled:bg-gray-100"
-                required
-                disabled={!selectedBrand}
-              >
-                <option value="">
-                  {selectedBrand 
-                    ? 'Seleccione un material'
-                    : 'Primero seleccione una marca'
-                  }
-                </option>
-                {filteredMaterials.map(material => (
-                  <option key={material} value={material}>
-                    {material}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Cuarta fila: SKU */}
-          <div>
-            <label 
-              htmlFor="sku"
-              className="block text-sm font-medium text-gray-700 mb-1"
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="bg-white shadow rounded-lg p-6">
+            {/* Botón Volver */}
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 mb-4"
             >
-              SKU (COD SAP) *
-            </label>
-            <input
-              type="text"
-              id="sku"
-              value={selectedSku}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md 
-                shadow-sm bg-gray-50 text-gray-700"
-              readOnly
-              placeholder="Se completará automáticamente al seleccionar marca y material"
-            />
-          </div>
-        </div>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Volver
+            </Link>
 
-        {/* Mensaje de error global */}
-        {globalError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-            <p className="text-red-600 text-sm font-medium">{globalError}</p>
-          </div>
-        )}
+            {/* Título y subtítulo */}
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              Checklist packing machine / Checklist envasadora
+            </h1>
+            <p className="text-sm text-gray-500 mb-6">CD/PC-PG-PRO-001-RG001</p>
+            
+            {/* Formulario de registro */}
+            <div className="space-y-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="lineManager" className="block text-sm font-medium text-gray-700">
+                    Jefe de Línea *
+                  </label>
+                  <input
+                    type="text"
+                    id="lineManager"
+                    value={lineManager}
+                    onChange={(e) => handleFieldChange('lineManager', e.target.value, setLineManager)}
+                    required
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
 
-        {/* Mensaje de error */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
-            <p className="text-red-500 text-sm font-medium">{error}</p>
-          </div>
-        )}
+                <div>
+                  <label htmlFor="machineOperator" className="block text-sm font-medium text-gray-700">
+                    Operador de Máquina *
+                  </label>
+                  <input
+                    type="text"
+                    id="machineOperator"
+                    value={machineOperator}
+                    onChange={(e) => handleFieldChange('machineOperator', e.target.value, setMachineOperator)}
+                    required
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
-          {/* Grupos de 5 items */}
-          {Array.from({ length: Math.ceil(formData.length / 5) }).map((_, groupIndex) => (
-            <div
-              key={groupIndex}
-              className="bg-white rounded-lg shadow-md p-4 sm:p-6 space-y-6"
-            >
-              {formData.slice(groupIndex * 5, (groupIndex + 1) * 5).map((item) => (
-                <div 
-                  key={item.id} 
-                  id={`item-${item.id}`}
-                  className={`border-b border-gray-200 pb-6 last:border-0 last:pb-0 ${
-                    invalidItems.includes(item.id) ? 'bg-red-50 rounded-md p-4 -mx-4' : ''
-                  }`}
-                >
-                  {/* Contenedor principal del item */}
-                  <div className="space-y-4">
-                    {/* Título y selector */}
-                    <div className="space-y-3">
-                      {/* Nombre del ítem */}
-                      <div className="bg-background rounded-md p-3">
-                        <label className="block text-base font-medium text-gray-700">
-                          {item.id}. {item.name}
-                        </label>
-                      </div>
-                      
-                      {/* Selector de estado */}
-                      <div className="w-full max-w-md">
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(item.id, 'cumple')}
-                            aria-pressed={item.status === 'cumple'}
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all
-                              ${item.status === 'cumple'
-                                ? 'bg-blue-400 text-white shadow-md ring-2 ring-blue-300 ring-offset-2'
-                                : 'bg-white text-gray-700 border border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                              }`}
-                          >
-                            Cumple
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(item.id, 'no_cumple')}
-                            aria-pressed={item.status === 'no_cumple'}
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all
-                              ${item.status === 'no_cumple'
-                                ? 'bg-red-400 text-white shadow-md ring-2 ring-red-300 ring-offset-2'
-                                : 'bg-white text-gray-700 border border-gray-300 hover:border-red-400 hover:bg-red-50'
-                              }`}
-                          >
-                            No cumple
-                          </button>
-                        </div>
-                        {invalidItems.includes(item.id) && (
-                          <p className="mt-2 text-sm text-red-500">
-                            Por favor selecciona un estado para este ítem
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Campos de texto */}
-                    <div className="pl-0 sm:pl-4 mt-4 space-y-4">
-                      {/* Comentario */}
-                      <div className="bg-background rounded-md p-4">
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium text-gray-600">
-                            Comentario
-                          </label>
-                          <input
-                            type="text"
-                            value={item.comment}
-                            onChange={(e) => handleCommentChange(item.id, e.target.value)}
-                            className="block w-full rounded-md border-gray-300 shadow-sm 
-                              focus:border-blue-400 focus:ring-blue-400 text-sm
-                              bg-white"
-                            placeholder="Agregar comentario (opcional)"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Acción correctiva */}
-                      <div className="bg-background rounded-md p-4">
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium text-gray-600">
-                            Acción correctiva inmediata
-                            {requiresCorrectiveAction(item) && (
-                              <span className="text-red-500 ml-1">*</span>
-                            )}
-                          </label>
-                          <input
-                            type="text"
-                            value={item.correctiveAction || ''}
-                            onChange={(e) => handleCorrectiveActionChange(item.id, e.target.value)}
-                            className={`block w-full rounded-md shadow-sm 
-                              focus:border-blue-400 focus:ring-blue-400 text-sm
-                              bg-white ${
-                                hasValidationError(item) && requiresCorrectiveAction(item)
-                                ? 'border-red-300 focus:border-red-400 focus:ring-red-400'
-                                : 'border-gray-300'
-                              }`}
-                            placeholder={
-                              requiresCorrectiveAction(item)
-                                ? "Ingrese la acción correctiva (requerido)"
-                                : "Agregar acción correctiva (opcional)"
-                            }
-                          />
-                          {hasValidationError(item) && requiresCorrectiveAction(item) && (
-                            <p className="mt-1 text-sm text-red-500">
-                              Este campo es requerido cuando el estado es "No cumple"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="checklistDate" className="block text-sm font-medium text-gray-700">
+                    Fecha del Checklist *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      id="checklistDate"
+                      value={checklistDate ?? ''}
+                      onChange={(e) => handleFieldChange('checklistDate', e.target.value, setChecklistDate)}
+                      required
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm cursor-pointer"
+                    />
                   </div>
+                </div>
+
+                <div>
+                  <label htmlFor="ordenFabricacion" className="block text-sm font-medium text-gray-700">
+                    Orden de Fabricación *
+                  </label>
+                  <input
+                    type="text"
+                    id="ordenFabricacion"
+                    value={ordenFabricacion}
+                    onChange={(e) => handleFieldChange('ordenFabricacion', e.target.value, setOrdenFabricacion)}
+                    required
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Selector de Marca y Material */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="brand" className="block text-sm font-medium text-gray-700">
+                    Marca *
+                  </label>
+                  <select
+                    id="brand"
+                    value={selectedBrand}
+                    onChange={(e) => {
+                      handleFieldChange('brand', e.target.value, () => handleBrandChange(e.target.value))
+                    }}
+                    required
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="">Seleccione una marca</option>
+                    {brands.map((brand) => (
+                      <option key={brand} value={brand}>
+                        {brand}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="material" className="block text-sm font-medium text-gray-700">
+                    Material *
+                  </label>
+                  <select
+                    id="material"
+                    value={selectedMaterial}
+                    onChange={(e) => {
+                      handleFieldChange('material', e.target.value, () => handleMaterialChange(e.target.value))
+                    }}
+                    required
+                    disabled={!selectedBrand}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="">Seleccione un material</option>
+                    {materials.map((material) => (
+                      <option key={material} value={material}>
+                        {material}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {selectedProduct && (
+                <div>
+                  <label htmlFor="sku" className="block text-sm font-medium text-gray-700">
+                    SKU (Código SAP)
+                  </label>
+                  <input
+                    type="text"
+                    id="sku"
+                    value={selectedProduct.sku}
+                    readOnly
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 sm:text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Checklist Items */}
+            <div className="space-y-4 mb-6">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  id={`item-${item.id}`}
+                  className="bg-gray-50 rounded-xl p-4 shadow-sm border border-gray-200"
+                >
+                  <p className="text-sm font-semibold text-gray-800 mb-3">
+                    {item.id}. {item.nombre}
+                  </p>
+
+                  <div className="flex items-center space-x-4 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleItemStatusChange(item.id, 'cumple')
+                        const itemElement = document.getElementById(`item-${item.id}`)
+                        if (itemElement) {
+                          itemElement.classList.remove('missing-field')
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        item.status === 'cumple'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Cumple
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleItemStatusChange(item.id, 'no_cumple')
+                        const itemElement = document.getElementById(`item-${item.id}`)
+                        if (itemElement) {
+                          itemElement.classList.remove('missing-field')
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        item.status === 'no_cumple'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      No cumple
+                    </button>
+                  </div>
+
+                  {item.status === 'no_cumple' && (
+                    <>
+                      <div className="mb-2">
+                        <textarea
+                          required
+                          value={item.comment || ''}
+                          onChange={(e) => {
+                            handleItemCommentChange(item.id, e.target.value)
+                            const itemElement = document.getElementById(`item-${item.id}`)
+                            if (itemElement) {
+                              itemElement.classList.remove('missing-field')
+                            }
+                          }}
+                          placeholder="Comentario"
+                          className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <textarea
+                          required
+                          value={item.correctiveAction || ''}
+                          onChange={(e) => {
+                            handleItemCorrectiveActionChange(item.id, e.target.value)
+                            const itemElement = document.getElementById(`item-${item.id}`)
+                            if (itemElement) {
+                              itemElement.classList.remove('missing-field')
+                            }
+                          }}
+                          placeholder="Acción correctiva inmediata"
+                          className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                          rows={2}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
-          ))}
 
-          {/* Mensaje de error global */}
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-              {error.split('\n').map((line, index) => (
-                <p key={index} className="text-red-600 text-sm font-medium">{line}</p>
-              ))}
+            {/* Botón Siguiente */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                Siguiente
+              </button>
             </div>
-          )}
-
-          {/* Botón Siguiente */}
-          <div className="flex justify-center sm:justify-end mt-8">
-            <button
-              type="submit"
-              className="w-full sm:w-auto bg-blue-400 text-white px-6 py-3 rounded-md 
-                hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300 
-                focus:ring-offset-2 transition-colors text-base font-medium shadow-md
-                hover:shadow-lg"
-            >
-              Siguiente
-            </button>
           </div>
-        </form>
+        </div>
       </div>
+
+      <style jsx global>{`
+        .missing-field {
+          border: 2px solid #f66 !important;
+          background-color: #ffe5e5 !important;
+          transition: background-color 0.3s, border 0.3s;
+        }
+      `}</style>
     </div>
   )
 } 

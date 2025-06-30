@@ -19,17 +19,16 @@ const registros: RegistroCard[] = [
     href: '/area/produccion/checklist-packaging',
     description: 'Control y verificación del proceso de empaque'
   },
+  {
+    title: 'Historial',
+    icon: ClipboardDocumentCheckIcon,
+    href: '/area/produccion/historial',
+    description: 'Buscar registros de producción históricos'
+  }
   // Aquí se pueden agregar más registros en el futuro
 ]
 
 export default function ProduccionPage() {
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Encabezado */}

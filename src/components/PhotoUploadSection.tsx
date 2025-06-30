@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { PhotoUpload, ChecklistPhotos } from '@/context/ChecklistContext'
@@ -90,6 +91,29 @@ const PhotoUploadSection = ({
     }
   }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newPhotos = Array.from(e.target.files)
+      setPhotos(prev => ({
+        ...prev,
+        [photoKey]: {
+          file: newPhotos[0],
+          preview: URL.createObjectURL(newPhotos[0])
+        }
+      }))
+    }
+  }
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => ({
+      ...prev,
+      [photoKey]: {
+        file: null,
+        preview: null
+      }
+    }))
+  }
+
   if (!mounted) {
     return (
       <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
@@ -128,7 +152,7 @@ const PhotoUploadSection = ({
         <div className="mt-4">
           {photo?.preview ? (
             <div className="space-y-3">
-              <div className="relative w-full aspect-[4/3] bg-gray-100 rounded-lg overflow-hidden">
+              <div className="relative w-full h-32 md:h-40 bg-gray-100 rounded-lg overflow-hidden">
                 <Image
                   src={photo.preview}
                   alt={title}

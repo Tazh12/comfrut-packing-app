@@ -1,18 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useChecklist, ChecklistPhotos } from '@/context/ChecklistContext'
+import { useChecklist, ChecklistPhotos, ChecklistItem } from '@/context/ChecklistContext'
 import PhotoUploadSection from '@/components/PhotoUploadSection'
 import { ChecklistPDFLink } from '@/components/ChecklistPDF'
-import { uploadPDF, saveChecklistRecord, normalizeMaterial, ChecklistData } from '@/lib/checklist'
+import { uploadPDF, saveChecklistRecord, normalizeMaterial, ChecklistData, ChecklistItem as ChecklistDataItem } from '@/lib/checklist'
 import { format } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { useToast } from '@/context/ToastContext'
-import { supabase } from '@/lib/supabase-browser'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { initialChecklistItems } from '@/lib/checklist'
+import { MASTER_ITEM_LIST } from '@/lib/constants'
 import * as XLSX from 'xlsx'
 
 export default function ChecklistPhotosPage() {
@@ -28,9 +29,40 @@ export default function ChecklistPhotosPage() {
     selectedMaterial,
     selectedSku,
     ordenFabricacion,
-    clearContext
+    clearContext,
+    setLineManager,
+    setMachineOperator,
+    setChecklistDate,
+    setSelectedBrand,
+    setSelectedMaterial,
+    setSelectedSku,
+    setOrdenFabricacion,
+    setFormData
   } = useChecklist()
   const { showToast } = useToast()
+
+  // Recuperar datos del checklist al cargar la página
+  useEffect(() => {
+    const saved = localStorage.getItem('checklistData')
+    if (saved) {
+      const d = JSON.parse(saved)
+      if (d.lineManager) setLineManager(d.lineManager)
+      if (d.machineOperator) setMachineOperator(d.machineOperator)
+      if (d.checklistDate) setChecklistDate(d.checklistDate)
+      if (d.ordenFabricacion) setOrdenFabricacion(d.ordenFabricacion)
+      if (d.selectedBrand) setSelectedBrand(d.selectedBrand)
+      if (d.selectedMaterial) setSelectedMaterial(d.selectedMaterial)
+      if (d.selectedSku) setSelectedSku(d.selectedSku)
+      if (Array.isArray(d.items) && d.items.length) {
+        setFormData(d.items)
+      }
+    }
+  }, [])
+
+  // Guard de fallback si photos no está inicializado
+  if (!photos) {
+    return null;
+  }
 
   const [error, setError] = useState('')
   const [showPDFButton, setShowPDFButton] = useState(false)
@@ -44,6 +76,18 @@ export default function ChecklistPhotosPage() {
     const month = months[date.getMonth()]
     const year = date.getFullYear()
     return `${day}-${month}-${year}`
+  }
+
+  // Función para mapear los ítems del formulario a la lista completa
+  const mapItemsToFullList = (formData: ChecklistItem[]): ChecklistDataItem[] => {
+    return initialChecklistItems.map((item) => {
+      const found = formData.find(i => i.id === item.id)
+      return {
+        id: item.id,
+        nombre: item.nombre,
+        estado: found?.status === 'cumple' ? 'cumple' : 'no_cumple'
+      }
+    })
   }
 
   // Función para generar el objeto JSON del checklist
@@ -86,11 +130,8 @@ export default function ChecklistPhotosPage() {
       pdfUrl
     })
 
-    // Formatear la fecha directamente en la zona horaria EST
-    const fecha = format(
-      checklistDate || new Date(),
-      'yyyy-MM-dd'
-    )
+    // Usar la cadena de fecha proporcionada por el operario o fallback a la fecha actual
+    const fecha = checklistDate ?? format(new Date(), 'yyyy-MM-dd')
     
     return {
       fecha,
@@ -100,11 +141,7 @@ export default function ChecklistPhotosPage() {
       material: selectedMaterial,
       sku: selectedSku,
       orden_fabricacion: ordenFabricacion,
-      items: formData.map(item => ({
-        id: item.id,
-        nombre: item.name,
-        estado: item.status === 'cumple' ? 'cumple' : 'no_cumple'
-      })) as ChecklistData['items'],
+      items: mapItemsToFullList(formData),
       pdf_url: pdfUrl
     }
   }
@@ -137,11 +174,17 @@ export default function ChecklistPhotosPage() {
     input.click()
   }
 
-  const isFormComplete = photos.photo1.file && (photos.photo2.file || photos.photo3.file)
+  const isFormComplete =
+    !!photos?.photo1?.file &&
+    (!!photos?.photo2?.file || !!photos?.photo3?.file);
 
   const handleFinish = () => {
     if (!isFormComplete) {
-      setError('Por favor complete todos los campos requeridos antes de finalizar')
+      setError(
+        !photos?.photo1?.file
+          ? 'Debe cargar la foto de codificación de bolsa'
+          : 'Debe cargar al menos una foto adicional (caja o etiqueta)'
+      )
       return
     }
     setError('')
@@ -151,13 +194,11 @@ export default function ChecklistPhotosPage() {
 
   const handleFinishAndExit = async () => {
     if (!isFormComplete) {
-      setError('Por favor complete todos los campos requeridos antes de finalizar')
-      return
-    }
-
-    // Validar campos requeridos antes de proceder
-    if (!lineManager || !machineOperator || !selectedBrand || !selectedMaterial || !selectedSku || !ordenFabricacion) {
-      setError('Por favor complete todos los campos del formulario antes de continuar')
+      setError(
+        !photos?.photo1?.file
+          ? 'Debe cargar la foto de codificación de bolsa'
+          : 'Debe cargar al menos una foto adicional (caja o etiqueta)'
+      )
       return
     }
 
@@ -166,28 +207,27 @@ export default function ChecklistPhotosPage() {
     setError('')
 
     try {
-      // Log del estado del formulario antes de procesar
       console.log('Estado del formulario antes de procesar:', {
         formData: {
           itemCount: formData.length,
           items: formData.map(item => ({
             id: item.id,
-            name: item.name,
+            name: item.nombre,
             status: item.status
           }))
         },
         photos: {
-          photo1: photos.photo1.file ? {
+          photo1: photos?.photo1?.file ? {
             name: photos.photo1.file.name,
             size: photos.photo1.file.size,
             type: photos.photo1.file.type
           } : null,
-          photo2: photos.photo2.file ? {
+          photo2: photos?.photo2?.file ? {
             name: photos.photo2.file.name,
             size: photos.photo2.file.size,
             type: photos.photo2.file.type
           } : null,
-          photo3: photos.photo3.file ? {
+          photo3: photos?.photo3?.file ? {
             name: photos.photo3.file.name,
             size: photos.photo3.file.size,
             type: photos.photo3.file.type
@@ -236,8 +276,8 @@ export default function ChecklistPhotosPage() {
         type: pdfBlob.type
       })
       
-      // 2. Subir el PDF a Supabase Storage
-      const fecha = format(checklistDate || new Date(), 'yyyy-MM-dd')
+      // 2. Subir el PDF a Supabase Storage usando la fecha en texto proporcionada por el operario
+      const fecha = checklistDate ?? format(new Date(), 'yyyy-MM-dd')
       console.log('Subiendo PDF con fecha:', fecha, 'y material:', selectedMaterial)
       
       const pdfUrl = await uploadPDF(pdfBlob, fecha, selectedMaterial)
@@ -263,100 +303,21 @@ export default function ChecklistPhotosPage() {
         type: 'success'
       }))
 
-      // 4. Limpiar el formulario y redirigir
+      // Limpiar estado y localStorage antes de navegar
       clearContext()
+      localStorage.removeItem('checklistData')
       router.push('/dashboard')
-    } catch (error) {
-      console.error('Error detallado al finalizar el registro:', {
-        error: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-          cause: error.cause
-        } : error,
-        context: {
-          fecha: checklistDate ? format(checklistDate, 'yyyy-MM-dd') : null,
-          marca: selectedBrand,
-          material: selectedMaterial,
-          sku: selectedSku,
-          ordenFabricacion,
-          formDataLength: formData.length,
-          photosLoaded: {
-            photo1: !!photos.photo1.file,
-            photo2: !!photos.photo2.file,
-            photo3: !!photos.photo3.file
-          }
-        }
-      })
-      
-      let errorMessage = 'Ocurrió un error al guardar el registro. '
-      
-      if (error instanceof Error) {
-        const [errorCode, errorDetails] = error.message.split(': ')
-        switch (errorCode) {
-          // Errores de formulario
-          case 'form/missing-field':
-            errorMessage = errorDetails
-            break
+    } catch (error: any) {
+      // Imprime el error crudo para ver name y message
+      console.error('Error detallado al finalizar el registro:', error)
 
-          // Errores de PDF
-          case 'pdf/download-link-not-found':
-            errorMessage = `No se pudo generar el PDF: ${errorDetails}`
-            break
-          case 'pdf/fetch-failed':
-            errorMessage = `Error al descargar el PDF: ${errorDetails}`
-            break
-          case 'pdf/invalid-blob':
-            errorMessage = `El PDF generado es inválido: ${errorDetails}`
-            break
+      // Usa el message real o un fallback
+      const message = error instanceof Error ? error.message : 'Error inesperado al guardar'
 
-          // Errores de Storage
-          case 'storage/bucket-not-available':
-            errorMessage = 'El sistema de almacenamiento no está disponible. Por favor contacte al administrador.'
-            break
-          case 'storage/upload-failed':
-            errorMessage = `Error al subir el PDF: ${errorDetails}`
-            break
-          case 'storage/public-url-not-available':
-            errorMessage = 'No se pudo obtener el enlace del PDF. Por favor intente nuevamente.'
-            break
-          case 'storage/upload-no-data':
-            errorMessage = 'Error al procesar el archivo subido. Por favor intente nuevamente.'
-            break
+      // Mostrar toast y mensaje en pantalla
+      showToast(message, 'error')
+      setError(message)
 
-          // Errores de Base de Datos
-          case 'database/missing-fields':
-            errorMessage = `Faltan campos requeridos: ${errorDetails}`
-            break
-          case 'database/invalid-items-format':
-            errorMessage = `Formato de items inválido: ${errorDetails}`
-            break
-          case 'database/duplicate-record':
-            errorMessage = `Ya existe un registro: ${errorDetails}`
-            break
-          case 'database/invalid-reference':
-            errorMessage = `Referencia inválida: ${errorDetails}`
-            break
-          case 'database/missing-required-field':
-            errorMessage = `Campo requerido faltante: ${errorDetails}`
-            break
-          case 'database/insert-failed':
-            errorMessage = `Error al guardar en la base de datos: ${errorDetails}`
-            break
-          case 'database/unknown-error':
-            errorMessage = `Error desconocido: ${errorDetails}`
-            break
-          default:
-            if (errorCode.startsWith('database/error-')) {
-              errorMessage = `Error en la base de datos (${errorCode.split('-')[1]}): ${errorDetails}`
-            } else {
-              errorMessage = `Error inesperado: ${error.message}`
-            }
-        }
-      }
-      
-      setError(errorMessage)
-      showToast(errorMessage, 'error')
       setIsSubmitting(false)
     }
   }
@@ -437,58 +398,50 @@ export default function ChecklistPhotosPage() {
             ) : (
               <>
                 {showPDFButton && pdfPreviewEnabled && (
-                  <div className="mt-8">
-                    <ChecklistPDFLink
-                      formData={formData}
-                      photos={photos}
-                      metadata={{
-                        date: checklistDate || new Date(),
-                        lineManager,
-                        machineOperator,
-                        brand: selectedBrand,
-                        material: selectedMaterial,
-                        sku: selectedSku,
-                        ordenFabricacion
-                      }}
-                    />
+                  <div className="mt-8 flex items-center gap-4">
+                    <div className="flex-none">
+                      <ChecklistPDFLink
+                        formData={formData}
+                        photos={photos}
+                        metadata={{
+                          date: checklistDate ?? format(new Date(), 'yyyy-MM-dd'),
+                          lineManager,
+                          machineOperator,
+                          brand: selectedBrand,
+                          material: selectedMaterial,
+                          sku: selectedSku,
+                          ordenFabricacion,
+                          operator: machineOperator
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFinishAndExit}
+                      disabled={isSubmitting}
+                      className={`flex-none px-6 py-3 rounded-md text-base font-medium transition-colors ${
+                        isSubmitting
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-400 hover:bg-green-500 text-white shadow-md hover:shadow-lg focus:ring-green-300'
+                      }`}
+                    >
+                      {isSubmitting ? 'Guardando…' : 'Finalizar y salir'}
+                    </button>
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleFinishAndExit}
-                  disabled={isSubmitting}
-                  className={`w-full sm:w-auto px-6 py-3 rounded-md transition-colors
-                    text-base font-medium text-center
-                    ${isSubmitting
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-green-400 hover:bg-green-500 text-white shadow-md hover:shadow-lg focus:ring-2 focus:ring-green-300 focus:ring-offset-2'
-                    }`}
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Guardando...</span>
-                    </div>
-                  ) : (
-                    'Finalizar y salir'
-                  )}
-                </button>
+                {/* Mensaje de validación */}
+                {!isFormComplete && (
+                  <p className="text-sm text-gray-600 text-right mt-2">
+                    {!photos?.photo1?.file
+                      ? 'Debe cargar la foto de codificación de bolsa'
+                      : 'Debe cargar al menos una foto adicional (caja o etiqueta)'}
+                  </p>
+                )}
               </>
             )}
           </div>
-
-          {/* Mensaje de validación */}
-          {!isFormComplete && (
-            <p className="text-sm text-gray-600 text-right mt-2">
-              {!photos.photo1.file 
-                ? 'Debe cargar la foto de codificación de bolsa'
-                : 'Debe cargar al menos una foto adicional (caja o etiqueta)'}
-            </p>
-          )}
         </div>
       </div>
     </div>

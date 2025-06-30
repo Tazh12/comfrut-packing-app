@@ -1,15 +1,12 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { env, validateEnv } from '@/env'
 import { type Database } from '@/types/supabase'
 
 // Validar variables de entorno al inicializar
 validateEnv()
 
-// Crear cliente de Supabase con las variables validadas
-export const supabase = createSupabaseClient<Database>(
-  env.NEXT_PUBLIC_SUPABASE_URL,
-  env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+// Crear una única instancia del cliente Supabase para componentes de cliente
+export const supabase = createClientComponentClient<Database>()
 
 // Función para verificar el bucket de almacenamiento
 export const checkStorageBucket = async () => {
@@ -71,4 +68,63 @@ export const checkStorageBucket = async () => {
     } : error)
     return false
   }
+}
+
+export async function uploadPDF(pdfBlob: Blob): Promise<string> {
+  const fileName = `checklist_${Date.now()}.pdf`
+  const { data, error } = await supabase.storage
+    .from('checklists')
+    .upload(fileName, pdfBlob, {
+      contentType: 'application/pdf',
+      cacheControl: '3600'
+    })
+
+  if (error) {
+    console.error('Error uploading PDF:', error)
+    throw new Error('Error uploading PDF')
+  }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('checklists')
+    .getPublicUrl(fileName)
+
+  return publicUrl
+}
+
+export async function saveChecklistRecord({
+  items,
+  lineManager,
+  machineOperator,
+  checklistDate,
+  product,
+  pdfUrl
+}: {
+  items: any[]
+  lineManager: string
+  machineOperator: string
+  checklistDate: string
+  product: any
+  pdfUrl: string
+}) {
+  const { data, error } = await supabase
+    .from('checklist_packing')
+    .insert([
+      {
+        items,
+        line_manager: lineManager,
+        machine_operator: machineOperator,
+        checklist_date: checklistDate,
+        product_id: product.id,
+        product_sku: product.sku,
+        pdf_url: pdfUrl,
+        created_at: new Date().toISOString()
+      }
+    ])
+
+  if (error) {
+    console.error('Error saving checklist record:', error)
+    throw new Error('Error saving checklist record')
+  }
+
+  return data
 }

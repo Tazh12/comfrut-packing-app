@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,7 +19,6 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const supabase = createClientComponentClient()
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -28,7 +27,7 @@ export default function LoginPage() {
       if (error) throw error
 
       // Si no hay error, redirigir al dashboard
-      router.push('/dashboard')
+      router.push('/auth/dashboard')
     } catch (error) {
       console.error('Error:', error)
       setError(error instanceof Error ? error.message : 'Error al iniciar sesión')

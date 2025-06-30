@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
     minHeight: 28,
     padding: 4,
-    alignItems: 'center'
+    alignItems: 'flex-start'
   },
   tableRowEven: {
     backgroundColor: '#F9FAFB'
@@ -125,22 +125,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4
   },
   colStatus: {
-    width: '15%',
+    width: '12%',
     paddingHorizontal: 2,
     textAlign: 'center'
   },
   colComment: {
-    width: '22%',
-    paddingHorizontal: 4
+    width: '24%',
+    paddingHorizontal: 4,
+    flexWrap: 'wrap'
   },
   colAction: {
-    width: '23%',
-    paddingHorizontal: 4
+    width: '24%',
+    paddingHorizontal: 4,
+    flexWrap: 'wrap'
   },
   statusText: {
     textAlign: 'center',
     color: '#111827',
-    fontSize: 7
+    fontSize: 7,
+    width: '100%'
   },
   statusCumple: {
     color: '#059669' // Verde
@@ -222,20 +225,53 @@ interface ChecklistPDFProps {
     photo2: PhotoUpload
     photo3: PhotoUpload
   }
-  metadata?: {
-    date?: Date | null
-    ordenFabricacion?: string
-    operator?: string
-    lineManager?: string
-    machineOperator?: string
-    brand?: string
-    material?: string
-    sku?: string
+  metadata: {
+    date: string  // YYYY-MM-DD format
+    ordenFabricacion: string
+    operator: string
+    lineManager: string
+    machineOperator: string
+    brand: string
+    material: string
+    sku: string
   }
 }
 
 const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps) => {
-  const currentDate = formatDate(metadata?.date)
+  // Guard inicial - no renderizar si no hay datos válidos
+  if (!Array.isArray(formData) || formData.length === 0) {
+    return null;
+  }
+
+  // Valores seguros para props que podrían ser null
+  const safeMetadata = metadata ?? {
+    date: '',
+    lineManager: '',
+    machineOperator: '',
+    brand: '',
+    material: '',
+    sku: '',
+    ordenFabricacion: '',
+    operator: ''
+  };
+
+  const safePhotos = photos ?? {
+    photo1: { preview: '' },
+    photo2: { preview: '' },
+    photo3: { preview: '' }
+  };
+
+  // Formatear la fecha para mostrar en el PDF usando la cadena 'YYYY-MM-DD'
+  const formattedDate = safeMetadata.date
+    ? (() => {
+        const parts = safeMetadata.date.split('-');
+        if (parts.length === 3) {
+          const [year, month, day] = parts;
+          return `${day}/${month}/${year}`;
+        }
+        return safeMetadata.date;
+      })()
+    : '';
 
   // Función para convertir data URL a URL de blob
   const dataUrlToBlob = (dataUrl: string) => {
@@ -253,19 +289,19 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
   }
 
   // Función para convertir el estado a texto
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string | undefined) => {
     switch (status) {
       case 'cumple':
         return 'Cumple'
       case 'no_cumple':
         return 'No cumple'
       default:
-        return 'No aplica'
+        return ''
     }
   }
 
   // Función para obtener el estilo del estado
-  const getStatusStyle = (status: string) => {
+  const getStatusStyle = (status: string | undefined) => {
     switch (status) {
       case 'cumple':
         return styles.statusCumple
@@ -278,71 +314,66 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
 
   return (
     <Document>
-      {/* Primera página: Checklist */}
       <Page size="A4" style={styles.page}>
         {/* Información del documento */}
-        <Text style={styles.documentInfo}>
-          CF.PC-PG-PRO-001-RG001 PACKAGING CHECKLIST V.03
-        </Text>
-
-        {/* Encabezado */}
         <View style={styles.header}>
           <Image
             src={logoBase64}
             style={styles.logo}
           />
+          <Text style={styles.documentInfo}>V.03</Text>
         </View>
 
         {/* Título y subtítulo */}
         <Text style={styles.title}>
-          CHECKLIST DE PACKAGING – PRODUCCIÓN
+          Checklist packing machine / Checklist envasadora
         </Text>
         <Text style={styles.subtitle}>
-          Control de calidad y verificación de proceso de packaging
+          CD/PC-PG-PRO-001-RG001
         </Text>
 
-        {/* Información del personal */}
+        {/* Información del personal y detalles */}
         <View style={styles.infoContainer}>
           <View style={styles.infoGroup}>
             <Text>
               <Text style={styles.infoLabel}>Fecha:</Text>
-              <Text style={styles.infoValue}>{currentDate}</Text>
+              <Text style={styles.infoValue}>{formattedDate}</Text>
             </Text>
           </View>
           <View style={styles.infoGroup}>
             <Text>
               <Text style={styles.infoLabel}>Jefe de Línea:</Text>
-              <Text style={styles.infoValue}>{metadata?.lineManager || ''}</Text>
+              <Text style={styles.infoValue}>{safeMetadata.lineManager}</Text>
             </Text>
           </View>
           <View style={styles.infoGroup}>
             <Text>
-              <Text style={styles.infoLabel}>Operador de Máquina:</Text>
-              <Text style={styles.infoValue}>{metadata?.machineOperator || ''}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Marca:</Text>
-              <Text style={styles.infoValue}>{metadata?.brand || ''}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Material:</Text>
-              <Text style={styles.infoValue}>{metadata?.material || ''}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>SKU:</Text>
-              <Text style={styles.infoValue}>{metadata?.sku || ''}</Text>
+              <Text style={styles.infoLabel}>Operador:</Text>
+              <Text style={styles.infoValue}>{safeMetadata.operator}</Text>
             </Text>
           </View>
           <View style={styles.infoGroup}>
             <Text>
               <Text style={styles.infoLabel}>Orden de Fabricación:</Text>
-              <Text style={styles.infoValue}>{metadata?.ordenFabricacion || ''}</Text>
+              <Text style={styles.infoValue}>{safeMetadata.ordenFabricacion}</Text>
+            </Text>
+          </View>
+          <View style={styles.infoGroup}>
+            <Text>
+              <Text style={styles.infoLabel}>Marca:</Text>
+              <Text style={styles.infoValue}>{safeMetadata.brand}</Text>
+            </Text>
+          </View>
+          <View style={styles.infoGroup}>
+            <Text>
+              <Text style={styles.infoLabel}>Material:</Text>
+              <Text style={styles.infoValue}>{safeMetadata.material}</Text>
+            </Text>
+          </View>
+          <View style={styles.infoGroup}>
+            <Text>
+              <Text style={styles.infoLabel}>SKU:</Text>
+              <Text style={styles.infoValue}>{safeMetadata.sku}</Text>
             </Text>
           </View>
         </View>
@@ -351,8 +382,8 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         <View style={styles.table}>
           {/* Encabezado de la tabla */}
           <View style={styles.tableHeader}>
-            <Text style={styles.colNum}>N°</Text>
-            <Text style={styles.colItem}>Ítem</Text>
+            <Text style={styles.colNum}>#</Text>
+            <Text style={styles.colItem}>Item</Text>
             <Text style={styles.colStatus}>Estado</Text>
             <Text style={styles.colComment}>Comentario</Text>
             <Text style={styles.colAction}>Acción correctiva</Text>
@@ -364,16 +395,16 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
               key={item.id}
               style={[
                 styles.tableRow,
-                index % 2 === 1 ? styles.tableRowEven : {}
+                index % 2 === 0 ? styles.tableRowEven : {}
               ]}
             >
               <Text style={styles.colNum}>{item.id}</Text>
-              <Text style={styles.colItem}>{item.name}</Text>
-              <Text style={[styles.colStatus, getStatusStyle(item.status)]}>
+              <Text style={styles.colItem}>{item.nombre}</Text>
+              <Text style={[styles.statusText, getStatusStyle(item.status)]}>
                 {getStatusText(item.status)}
               </Text>
-              <Text style={styles.colComment}>{item.comment || '-'}</Text>
-              <Text style={styles.colAction}>{item.correctiveAction || '-'}</Text>
+              <Text style={styles.colComment}>{item.comment || ''}</Text>
+              <Text style={styles.colAction}>{item.correctiveAction || ''}</Text>
             </View>
           ))}
         </View>
@@ -387,70 +418,43 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
       {/* Segunda página: Fotos */}
       <Page size="A4" style={styles.photosPage}>
         {/* Foto 1: Codificación de bolsa */}
-        {photos.photo1.preview && (
-          <View style={styles.photoSection}>
-            <View style={styles.photoHeader}>
-              <Text style={styles.photoTitle}>Fotografía 1: Codificación de bolsa</Text>
-              <Text style={styles.photoSubtitle}>
-                Captura clara de la codificación en la bolsa del producto
-              </Text>
-            </View>
-            <View style={styles.photoFrame}>
-              <Image
-                src={photos.photo1.preview}
-                style={styles.photo}
-                alt="Foto de la bolsa"
-              />
-              <Text style={styles.photoCaption}>
-                Verificación de codificación en bolsa - {currentDate}
-              </Text>
-            </View>
+        <View style={styles.photoSection}>
+          <View style={styles.photoHeader}>
+            <Text style={styles.photoTitle}>Foto 1</Text>
+            <Text style={styles.photoSubtitle}>Vista general del equipo</Text>
           </View>
-        )}
+          <View style={styles.photoFrame}>
+            {safePhotos?.photo1?.preview && (
+              <Image src={safePhotos.photo1.preview} style={styles.photo} />
+            )}
+          </View>
+        </View>
 
         {/* Foto 2: Codificación de caja */}
-        {photos.photo2.preview && (
-          <View style={styles.photoSection}>
-            <View style={styles.photoHeader}>
-              <Text style={styles.photoTitle}>Fotografía 2: Codificación de caja</Text>
-              <Text style={styles.photoSubtitle}>
-                Captura de la codificación en la caja
-              </Text>
-            </View>
-            <View style={styles.photoFrame}>
-              <Image
-                src={photos.photo2.preview}
-                style={styles.photo}
-                alt="Foto de la caja"
-              />
-              <Text style={styles.photoCaption}>
-                Verificación de codificación en caja - {currentDate}
-              </Text>
-            </View>
+        <View style={styles.photoSection}>
+          <View style={styles.photoHeader}>
+            <Text style={styles.photoTitle}>Foto 2</Text>
+            <Text style={styles.photoSubtitle}>Detalle específico</Text>
           </View>
-        )}
+          <View style={styles.photoFrame}>
+            {safePhotos?.photo2?.preview && (
+              <Image src={safePhotos.photo2.preview} style={styles.photo} />
+            )}
+          </View>
+        </View>
 
         {/* Foto 3: Etiqueta adicional */}
-        {photos.photo3.preview && (
-          <View style={styles.photoSection}>
-            <View style={styles.photoHeader}>
-              <Text style={styles.photoTitle}>Fotografía 3: Etiqueta adicional</Text>
-              <Text style={styles.photoSubtitle}>
-                Captura de etiqueta adicional
-              </Text>
-            </View>
-            <View style={styles.photoFrame}>
-              <Image
-                src={photos.photo3.preview}
-                style={styles.photo}
-                alt="Foto de la etiqueta"
-              />
-              <Text style={styles.photoCaption}>
-                Verificación de etiqueta adicional - {currentDate}
-              </Text>
-            </View>
+        <View style={styles.photoSection}>
+          <View style={styles.photoHeader}>
+            <Text style={styles.photoTitle}>Foto 3</Text>
+            <Text style={styles.photoSubtitle}>Detalle adicional</Text>
           </View>
-        )}
+          <View style={styles.photoFrame}>
+            {safePhotos?.photo3?.preview && (
+              <Image src={safePhotos.photo3.preview} style={styles.photo} />
+            )}
+          </View>
+        </View>
 
         {/* Pie de página */}
         <Text style={styles.footer}>
@@ -458,21 +462,28 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         </Text>
       </Page>
     </Document>
-  )
+  );
 }
 
 export const ChecklistPDFLink = ({ formData, photos, metadata }: ChecklistPDFProps) => {
+  if (!Array.isArray(formData) || formData.length === 0) {
+    return null;
+  }
+
+  // Usar metadata.date para el nombre del archivo, con fallback a la fecha actual
+  const fileDate = metadata.date || format(new Date(), 'yyyy-MM-dd');
+
   return (
     <PDFDownloadLink
       document={<ChecklistPDFDocument formData={formData} photos={photos} metadata={metadata} />}
-      fileName="checklist-packaging.pdf"
-      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+      fileName={`checklist-${fileDate}.pdf`}
+      className="px-6 py-3 rounded-md font-medium transition-colors focus:ring-2 focus:ring-offset-2 bg-blue-400 hover:bg-blue-500 text-white shadow-md hover:shadow-lg focus:ring-blue-300 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
     >
-      {({ loading }) =>
+      {({ loading }) => (
         loading ? 'Generando PDF...' : 'Descargar PDF'
-      }
+      )}
     </PDFDownloadLink>
-  )
+  );
 }
 
 export default ChecklistPDFDocument 

@@ -1,13 +1,13 @@
 import { createClient } from './supabase-config'
 import { checkStorageBucket } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
-import { supabase } from './supabase-browser'
+import { supabase } from '@/lib/supabase'
 
 // Tipos
 export interface ChecklistItem {
   id: number
   nombre: string
-  estado: 'cumple' | 'no_cumple'
+  estado?: 'cumple' | 'no_cumple'
 }
 
 export interface ChecklistData {
@@ -288,15 +288,18 @@ export const saveChecklistRecord = async (checklistData: ChecklistData): Promise
   }
 }
 
-export async function getChecklistRecords(filters: {
-  startDate?: string
-  endDate?: string
-  marca?: string
-  material?: string
-  orden_fabricacion?: string
-}): Promise<ChecklistRecord[]> {
+export async function getChecklistRecords(
+  tableName: string,
+  filters: {
+    startDate?: string
+    endDate?: string
+    marca?: string
+    material?: string
+    orden_fabricacion?: string
+  }
+): Promise<ChecklistRecord[]> {
   let query = supabase
-    .from('checklist_packing')
+    .from(tableName)
     .select('*')
     .order('fecha', { ascending: false })
 
@@ -335,7 +338,7 @@ export async function getUniqueMarcas(): Promise<string[]> {
     throw new Error(`Error fetching marcas: ${error.message}`)
   }
 
-  return [...new Set(data.map((item: { marca: string }) => item.marca))]
+  return Array.from(new Set(data.map((item: { marca: string }) => item.marca)))
 }
 
 export async function getUniqueMateriales(): Promise<string[]> {
@@ -348,5 +351,5 @@ export async function getUniqueMateriales(): Promise<string[]> {
     throw new Error(`Error fetching materiales: ${error.message}`)
   }
 
-  return [...new Set(data.map((item: { material: string }) => item.material))]
+  return Array.from(new Set(data.map((item: { material: string }) => item.material)))
 } 
