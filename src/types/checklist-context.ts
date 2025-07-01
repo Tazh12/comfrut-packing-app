@@ -1,9 +1,9 @@
-import { ChecklistRecord } from './checklist'
+import { ChecklistRegistro } from './checklist'
 
 export interface ChecklistContextType {
-  records: ChecklistRecord[]
+  records: ChecklistRegistro[]
   loading: boolean
   error: string | null
   loadRecords: () => Promise<void>
-  saveRecord: (record: ChecklistRecord) => Promise<void>
+  saveRecord: (record: ChecklistRegistro) => Promise<void>
 } 
