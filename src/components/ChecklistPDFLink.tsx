@@ -37,7 +37,9 @@ export async function ChecklistPDFLink({
   y += lineHeight
   doc.text(`Fecha: ${checklistDate}`, margin, y)
   y += lineHeight
-  doc.text(`Producto: ${product.nombre}`, margin, y)
+  doc.text(`Marca: ${product.brand}`, margin, y)
+  y += lineHeight
+  doc.text(`Material: ${product.material}`, margin, y)
   y += lineHeight
   doc.text(`SKU: ${product.sku}`, margin, y)
   y += lineHeight * 2
