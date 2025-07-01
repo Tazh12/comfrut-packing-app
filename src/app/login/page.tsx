@@ -27,7 +27,7 @@ export default function LoginPage() {
       if (error) throw error
 
       // Si no hay error, redirigir al dashboard
-      router.push('/auth/dashboard')
+      router.push('/dashboard')
     } catch (error) {
       console.error('Error:', error)
       setError(error instanceof Error ? error.message : 'Error al iniciar sesión')

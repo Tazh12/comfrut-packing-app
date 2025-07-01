@@ -9,8 +9,7 @@ export async function middleware(request: NextRequest) {
 
   const isAuthPage = request.nextUrl.pathname === '/login'
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') ||
-                          request.nextUrl.pathname.startsWith('/area') ||
-                          request.nextUrl.pathname.startsWith('/historial')
+                          request.nextUrl.pathname.startsWith('/area')
 
   // Redirigir a dashboard si está autenticado y trata de acceder a /login
   if (isAuthPage && session) {
@@ -31,7 +30,6 @@ export const config = {
   matcher: [
     '/login',
     '/dashboard/:path*',
-    '/area/:path*',
-    '/historial/:path*'
+    '/area/:path*'
   ]
 } 

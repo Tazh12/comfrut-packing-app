@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
-import { FileTextIcon, ArrowLeftIcon, HistoryIcon } from 'lucide-react'
+import { FileText, ArrowLeft, History } from 'lucide-react'
 import Link from 'next/link'
 
 interface Documento {
@@ -73,7 +73,7 @@ export default function DocumentacionPage() {
               href="/dashboard"
               className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mr-4"
             >
-              <ArrowLeftIcon className="h-4 w-4 mr-1" />
+              <ArrowLeft className="h-4 w-4 mr-1" />
               Volver al Dashboard
             </Link>
             <h1 className="text-2xl font-semibold text-gray-900">Área de Documentación</h1>
@@ -89,7 +89,7 @@ export default function DocumentacionPage() {
                 <div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <HistoryIcon className="h-6 w-6 text-blue-600" />
+                      <History className="h-6 w-6 text-blue-600" />
                       <h3 className="ml-3 text-lg font-medium text-gray-900">
                         {documento.nombre}
                       </h3>

@@ -63,7 +63,7 @@ export default function DashboardPage() {
         }
 
         if (!session) {
-          return router.replace('/auth/login')
+          return router.replace('/login')
         }
 
         setEmail(session.user.email || '')
@@ -84,7 +84,7 @@ export default function DashboardPage() {
         showToast('Error al cerrar sesión', 'error')
         return
       }
-      router.replace('/auth/login')
+      router.replace('/login')
     } catch (error) {
       console.error('Unexpected error during sign out:', error)
       showToast('Error inesperado al cerrar sesión', 'error')
