@@ -78,40 +78,43 @@ const PhotoUploadSection = ({
     input.click()
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof PhotoFields) => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: keyof typeof photos
+  ) => {
     const file = e.target.files?.[0]
     if (file) {
-      setPhotos(prev => ({
-        ...prev,
+      setPhotos({
+        ...photos,
         [field]: {
           file,
           preview: URL.createObjectURL(file)
         }
-      }))
+      })
     }
   }
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newPhotos = Array.from(e.target.files)
-      setPhotos(prev => ({
-        ...prev,
+      setPhotos({
+        ...photos,
         [photoKey]: {
           file: newPhotos[0],
           preview: URL.createObjectURL(newPhotos[0])
         }
-      }))
+      })
     }
   }
 
   const removePhoto = (index: number) => {
-    setPhotos(prev => ({
-      ...prev,
+    setPhotos({
+      ...photos,
       [photoKey]: {
         file: null,
         preview: null
       }
-    }))
+    })
   }
 
   if (!mounted) {
