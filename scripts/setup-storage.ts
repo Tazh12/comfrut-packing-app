@@ -1,98 +1,65 @@
-import { createClient } from '@supabase/supabase-js'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
-import * as dotenv from 'dotenv'
+#!/usr/bin/env ts-node
+// @ts-nocheck
+import dotenv from 'dotenv'
+// Cargar variables de entorno desde .env.local
+dotenv.config({ path: '.env.local' })
+import { Client } from 'pg'
 
-// Configurar la ruta del archivo .env
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const envPath = join(__dirname, '..', '.env')
-
-// Cargar variables de entorno
-dotenv.config({ path: envPath })
-
-// Validar variables de entorno requeridas
-const requiredEnvVars = [
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY'
-] as const
-
-// Verificar que todas las variables requeridas estén definidas
-console.log('\n=== Verificando variables de entorno ===')
-for (const envVar of requiredEnvVars) {
-  console.log(`${envVar}: ${process.env[envVar] ? '✅' : '❌'}`)
-  if (!process.env[envVar]) {
-    throw new Error(`Variable de entorno requerida no encontrada: ${envVar}`)
-  }
-}
-
-// Crear cliente de Supabase con la service role key
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-async function setupStorage() {
-  try {
-    console.log('Configurando almacenamiento en Supabase...')
-
-    // 1. Crear el bucket si no existe
-    const { data: buckets, error: bucketsError } = await supabase
-      .storage
-      .listBuckets()
-
-    if (bucketsError) {
-      throw new Error(`Error al listar buckets: ${bucketsError.message}`)
-    }
-
-    const checklistBucket = buckets.find(b => b.name === 'checklistpacking')
-    
-    if (!checklistBucket) {
-      console.log('Creando bucket checklistpacking...')
-      const { error: createError } = await supabase
-        .storage
-        .createBucket('checklistpacking', {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-          allowedMimeTypes: ['application/pdf']
-        })
-
-      if (createError) {
-        throw new Error(`Error al crear bucket: ${createError.message}`)
-      }
-      console.log('Bucket creado exitosamente')
-    } else {
-      console.log('El bucket checklistpacking ya existe')
-    }
-
-    // 2. Configurar políticas de acceso público
-    const { error: policyError } = await supabase
-      .storage
-      .from('checklistpacking')
-      .createSignedUrl('test.txt', 60)
-
-    if (policyError) {
-      console.log('Configurando políticas de acceso público...')
-      console.log('Por favor, configura las siguientes políticas en la interfaz de Supabase:')
-      console.log('1. Permitir lectura pública:')
-      console.log('   - Bucket: checklistpacking')
-      console.log('   - Policy name: Allow public read')
-      console.log('   - Definition: storage.objects')
-      console.log('   - Policy: (bucket_id = \'checklistpacking\'::text)')
-      console.log('\n2. Permitir escritura autenticada:')
-      console.log('   - Bucket: checklistpacking')
-      console.log('   - Policy name: Allow authenticated uploads')
-      console.log('   - Definition: storage.objects')
-      console.log('   - Policy: (bucket_id = \'checklistpacking\'::text AND auth.role() = \'authenticated\'::text)')
-    }
-
-    console.log('Configuración completada exitosamente')
-  } catch (error) {
-    console.error('Error durante la configuración:', error)
+async function main() {
+  // Verificar variables de entorno
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  console.log('NEXT_PUBLIC_SUPABASE_URL =', supabaseUrl)
+  console.log('SUPABASE_SERVICE_ROLE_KEY =', serviceKey ? serviceKey.slice(0, 4) + '****' : serviceKey)
+  if (!supabaseUrl || !serviceKey) {
+    console.error('ERROR: ENV variables NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.')
     process.exit(1)
   }
+
+  // Derivar host de la URL de Supabase
+  const { hostname } = new URL(supabaseUrl)
+
+  // Crear cliente Postgres
+  const client = new Client({
+    host: hostname,
+    port: 5432,
+    user: 'postgres',
+    password: serviceKey,
+    database: 'postgres',
+    ssl: { rejectUnauthorized: false }
+  })
+
+  try {
+    await client.connect()
+    console.log(`Connected to Supabase DB at ${hostname}`)
+
+    const sql = `
+CREATE OR REPLACE FUNCTION storage.set_auth_uid()
+RETURNS trigger AS $$
+BEGIN
+  NEW.owner := auth.uid();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS set_auth_uid ON storage.objects;
+
+CREATE TRIGGER set_auth_uid
+BEFORE INSERT ON storage.objects
+FOR EACH ROW EXECUTE PROCEDURE storage.set_auth_uid();
+`
+
+    console.log('Executing SQL to create storage.set_auth_uid function and trigger...')
+    await client.query(sql)
+    console.log('Function and trigger set_auth_uid created successfully.')
+  } catch (error: any) {
+    console.error('Error executing SQL for set_auth_uid:', error.message || error)
+    process.exit(1)
+  } finally {
+    await client.end()
+    console.log('Database connection closed. Script completed.')
+  }
 }
 
-// Ejecutar configuración
-setupStorage() 
+// Ejecutar el script
+main() 
