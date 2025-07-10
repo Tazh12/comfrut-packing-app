@@ -40,6 +40,17 @@ export default function CalidadPage() {
             </div>
           </Link>
 
+          <Link
+            href="/area/calidad/checklist-labPT"
+            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+          >
+            <div className="flex flex-col items-center text-center space-y-4">
+              <FlaskConical className="h-8 w-8 text-indigo-600" />
+              <h3 className="text-lg font-medium text-gray-900">Ingreso resultados Lab PT</h3>
+              <p className="text-sm text-gray-500">Ingreso de resultados microbiológicos Producto Terminado</p>
+            </div>
+          </Link>
+
           <button
             onClick={handleMixClick}
             className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"

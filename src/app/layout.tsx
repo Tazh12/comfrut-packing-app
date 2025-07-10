@@ -3,6 +3,7 @@ import './globals.css'
 import { SupabaseProvider } from '@/components/providers/SupabaseProvider'
 import { AuthProvider } from '@/context/AuthContext'
 import { ToastProvider } from '@/context/ToastContext'
+import ToastUI from '@/components/ToastUI'
 import { ChecklistProvider } from '@/context/ChecklistContext'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -29,6 +30,7 @@ export default function RootLayout({
               <ChecklistProvider>
                 {children}
               </ChecklistProvider>
+              <ToastUI />
             </ToastProvider>
           </AuthProvider>
         </SupabaseProvider>
