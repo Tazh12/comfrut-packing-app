@@ -307,8 +307,8 @@ export default function DashboardQualityPage() {
                     formatter={(value: number) => [`${value.toFixed(1)}°F`, 'Temperatura Promedio']}
                   />
                   <Legend />
-                  <ReferenceLine y={42} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Inferior (42°F)', position: 'topRight' }} />
-                  <ReferenceLine y={50} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Superior (50°F)', position: 'topRight' }} />
+                  <ReferenceLine y={42} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Inferior (42°F)', position: 'right' }} />
+                  <ReferenceLine y={50} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Superior (50°F)', position: 'right' }} />
                   <Line
                     type="monotone"
                     dataKey="averageTemp"
