@@ -1,21 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3 } from 'lucide-react'
 
 export default function CalidadPage() {
-  const router = useRouter()
   const { showToast } = useToast()
 
-  const handleMixClick = () => {
-    showToast('Página en mantención', 'info')
-  }
-
-  const handleHistorialClick = () => {
-    showToast('Página en mantención', 'info')
-  }
+  // Eliminado handleHistorialClick porque ahora redirige al historial de calidad
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -51,8 +43,8 @@ export default function CalidadPage() {
             </div>
           </Link>
 
-          <button
-            onClick={handleMixClick}
+          <Link
+            href="/area/calidad/checklist_producto_mix"
             className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
           >
             <div className="flex flex-col items-center text-center space-y-4">
@@ -60,10 +52,21 @@ export default function CalidadPage() {
               <h3 className="text-lg font-medium text-gray-900">Checklist Mix Producto</h3>
               <p className="text-sm text-gray-500">Gestión de checklist para mezcla de productos</p>
             </div>
-          </button>
+          </Link>
 
-          <button
-            onClick={handleHistorialClick}
+          <Link
+            href="/area/calidad/checklist-envtemp"
+            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+          >
+            <div className="flex flex-col items-center text-center space-y-4">
+              <FlaskConical className="h-8 w-8 text-orange-600" />
+              <h3 className="text-lg font-medium text-gray-900">Process Environmental Temperature Control</h3>
+              <p className="text-sm text-gray-500">Environmental temperature monitoring checklist</p>
+            </div>
+          </Link>
+
+          <Link
+            href="/area/calidad/historial"
             className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
           >
             <div className="flex flex-col items-center text-center space-y-4">
@@ -71,7 +74,18 @@ export default function CalidadPage() {
               <h3 className="text-lg font-medium text-gray-900">Historial</h3>
               <p className="text-sm text-gray-500">Revisa registros históricos de calidad</p>
             </div>
-          </button>
+          </Link>
+
+          <Link
+            href="/area/calidad/dashboard-quality"
+            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+          >
+            <div className="flex flex-col items-center text-center space-y-4">
+              <BarChart3 className="h-8 w-8 text-teal-600" />
+              <h3 className="text-lg font-medium text-gray-900">Dashboard Quality</h3>
+              <p className="text-sm text-gray-500">Visualiza y analiza datos de calidad</p>
+            </div>
+          </Link>
         </div>
       </div>
     </div>
