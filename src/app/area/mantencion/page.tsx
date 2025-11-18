@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Wrench, ClipboardCheck, Clock, ArrowLeft } from 'lucide-react'
+import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 export default function ChecklistPage() {
   const router = useRouter()
@@ -20,8 +21,9 @@ export default function ChecklistPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div
             onClick={() => router.push('/area/mantencion/checklist/solicitud_mtto')}
-            className="group bg-white rounded-2xl shadow-md p-6 flex flex-col items-center text-center hover:shadow-lg transition-shadow cursor-pointer"
+            className="group relative bg-white rounded-2xl shadow-md p-6 flex flex-col items-center text-center hover:shadow-lg transition-shadow cursor-pointer"
           >
+            <ChecklistCardStatusBadge storageKey="checklist-solicitud-mtto-draft" />
             <Wrench className="h-12 w-12 text-yellow-600 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">Crear solicitud de mantenimiento</h3>
             <p className="text-sm text-gray-500 mt-2">Registra una nueva solicitud de mantenimiento correctivo programado</p>

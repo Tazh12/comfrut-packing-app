@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline'
+import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
 interface RegistroCard {
@@ -52,6 +53,9 @@ export default function ProduccionPage() {
               href={registro.href}
               className="group relative bg-white p-6 rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-1 transition-all duration-200"
             >
+              {registro.href.includes('checklist-packaging') && (
+                <ChecklistCardStatusBadge storageKey="checklist-packaging-draft" />
+              )}
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="p-3 bg-indigo-100 rounded-full group-hover:bg-indigo-200 transition-colors">
                   <registro.icon className="h-8 w-8 text-indigo-600" />

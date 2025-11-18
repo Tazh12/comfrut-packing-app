@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3 } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search } from 'lucide-react'
+import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 export default function CalidadPage() {
   const { showToast } = useToast()
@@ -23,8 +24,9 @@ export default function CalidadPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <Link
             href="/area/calidad/checklist-monoproducto"
-            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+            className="group relative bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
           >
+            <ChecklistCardStatusBadge storageKey="checklist-monoproducto-draft" />
             <div className="flex flex-col items-center text-center space-y-4">
               <PackageCheck className="h-8 w-8 text-green-600" />
               <h3 className="text-lg font-medium text-gray-900">Checklist Monoproducto</h3>
@@ -33,20 +35,10 @@ export default function CalidadPage() {
           </Link>
 
           <Link
-            href="/area/calidad/checklist-labPT"
-            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
-          >
-            <div className="flex flex-col items-center text-center space-y-4">
-              <FlaskConical className="h-8 w-8 text-indigo-600" />
-              <h3 className="text-lg font-medium text-gray-900">Ingreso resultados Lab PT</h3>
-              <p className="text-sm text-gray-500">Ingreso de resultados microbiológicos Producto Terminado</p>
-            </div>
-          </Link>
-
-          <Link
             href="/area/calidad/checklist_producto_mix"
-            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+            className="group relative bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
           >
+            <ChecklistCardStatusBadge storageKey="checklist-producto-mix-draft" />
             <div className="flex flex-col items-center text-center space-y-4">
               <FlaskConical className="h-8 w-8 text-purple-600" />
               <h3 className="text-lg font-medium text-gray-900">Checklist Mix Producto</h3>
@@ -56,12 +48,25 @@ export default function CalidadPage() {
 
           <Link
             href="/area/calidad/checklist-envtemp"
-            className="group bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+            className="group relative bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
           >
+            <ChecklistCardStatusBadge storageKey="checklist-envtemp-draft" />
             <div className="flex flex-col items-center text-center space-y-4">
               <FlaskConical className="h-8 w-8 text-orange-600" />
               <h3 className="text-lg font-medium text-gray-900">Process Environmental Temperature Control</h3>
               <p className="text-sm text-gray-500">Environmental temperature monitoring checklist</p>
+            </div>
+          </Link>
+
+          <Link
+            href="/area/calidad/checklist-metal-detector"
+            className="group relative bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow"
+          >
+            <ChecklistCardStatusBadge storageKey="checklist-metal-detector-draft" />
+            <div className="flex flex-col items-center text-center space-y-4">
+              <Search className="h-8 w-8 text-red-600" />
+              <h3 className="text-lg font-medium text-gray-900">Metal Detector (PCC #1)</h3>
+              <p className="text-sm text-gray-500">Metal detector control checklist</p>
             </div>
           </Link>
 

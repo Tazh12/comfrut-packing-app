@@ -9,6 +9,8 @@ import { useToast } from '@/context/ToastContext'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistPDFMantenimientoDocument } from '@/components/ChecklistPDFMantenimiento'
 import { format } from 'date-fns'
+import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
+import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 
 // Función para redimensionar imagenes antes de convertir a Base64
 const resizeImage = (file: File, maxWidth = 1200): Promise<string> => {
@@ -47,17 +49,84 @@ export default function SolicitudMttoPage() {
   const [descripcion, setDescripcion] = useState<string>('')
   const [recomendacion, setRecomendacion] = useState<string>('')
   const [fotos, setFotos] = useState<File[]>([])
+  const [fotoPreviews, setFotoPreviews] = useState<string[]>([]) // Store base64 previews for persistence
+  const [isSubmitted, setIsSubmitted] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Convert File to base64 for persistence
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // Convert base64 back to File (for display purposes, we'll use the preview)
+  const base64ToFile = (base64: string, filename: string): File => {
+    const arr = base64.split(',')
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg'
+    const bstr = atob(arr[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    return new File([u8arr], filename, { type: mime })
+  }
+
+  // Reset form function
+  const resetForm = () => {
+    setSolicitante('')
+    setZona('')
+    setTipoFalla('')
+    setDescripcion('')
+    setRecomendacion('')
+    setFotos([])
+    setFotoPreviews([])
+    setIsSubmitted(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Persistence hook
+  const { clearDraft } = useChecklistPersistence(
+    'checklist-solicitud-mtto-draft',
+    { solicitante, zona, tipoFalla, descripcion, recomendacion, fotoPreviews },
+    isSubmitted,
+    async (data) => {
+      if (data.solicitante) setSolicitante(data.solicitante)
+      if (data.zona) setZona(data.zona)
+      if (data.tipoFalla) setTipoFalla(data.tipoFalla)
+      if (data.descripcion) setDescripcion(data.descripcion)
+      if (data.recomendacion) setRecomendacion(data.recomendacion)
+      if (data.fotoPreviews && Array.isArray(data.fotoPreviews)) {
+        setFotoPreviews(data.fotoPreviews)
+        // Convert base64 previews back to File objects for the form
+        const files = data.fotoPreviews.map((preview, index) => 
+          base64ToFile(preview, `foto-${index}.jpg`)
+        )
+        setFotos(files)
+      }
+    }
+  )
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return
     const filesArray = Array.from(e.target.files)
     const allowed = filesArray.slice(0, 3 - fotos.length).filter(file => file.size <= 5 * 1024 * 1024)
     setFotos(prev => [...prev, ...allowed])
+    
+    // Convert to base64 for persistence
+    const base64Previews = await Promise.all(allowed.map(file => fileToBase64(file)))
+    setFotoPreviews(prev => [...prev, ...base64Previews])
   }
 
   const removeFoto = (index: number) => {
     setFotos(prev => prev.filter((_, i) => i !== index))
+    setFotoPreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   const isFormValid = zona !== '' && tipoFalla !== '' && descripcion.trim() !== ''
@@ -190,6 +259,8 @@ export default function SolicitudMttoPage() {
       }
       console.log('Fotos temporales eliminadas:', removedData)
       showToast('Solicitud guardada y PDF generado con éxito', 'success', 3000)
+      setIsSubmitted(true)
+      clearDraft()
       // Limpiar formulario
       setSolicitante('')
       setZona('')
@@ -197,6 +268,8 @@ export default function SolicitudMttoPage() {
       setDescripcion('')
       setRecomendacion('')
       setFotos([])
+      setFotoPreviews([])
+      setIsSubmitted(false)
     } catch (error: any) {
       console.error('Error inesperado al guardar la solicitud:', {
         message: error?.message,
@@ -209,7 +282,7 @@ export default function SolicitudMttoPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-start">
         <Link
           href="/area/mantencion"
           className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
@@ -217,6 +290,11 @@ export default function SolicitudMttoPage() {
           <ArrowLeft className="h-5 w-5 mr-2" />
           Volver
         </Link>
+        <DeleteDraftButton 
+          storageKey="checklist-solicitud-mtto-draft"
+          checklistName="Solicitud de Mantenimiento"
+          onReset={resetForm}
+        />
       </div>
       <h1 className="text-3xl font-bold mb-6">Solicitud de Mantenimiento Correctivo Programado</h1>
       <p className="text-sm text-gray-500 mb-6">CF-PC-MAN-001-RG006</p>
@@ -320,10 +398,10 @@ export default function SolicitudMttoPage() {
             className="hidden"
           />
           <div className="mt-2 flex space-x-2">
-            {fotos.map((file, index) => (
+            {fotoPreviews.map((preview, index) => (
               <div key={index} className="relative">
                 <img
-                  src={URL.createObjectURL(file)}
+                  src={preview}
                   alt={`Foto ${index + 1}`}
                   className="h-20 w-20 object-cover rounded-md"
                 />

@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
 import { ArrowLeft, Plus, Pencil } from 'lucide-react'
+import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
+import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 
 export default function ChecklistMixPage() {
   const { showToast } = useToast()
@@ -28,6 +30,54 @@ export default function ChecklistMixPage() {
   const [loading, setLoading] = useState<boolean>(false)
   // Estado para pallets dinámicos
   const [pallets, setPallets] = useState<any[]>([])
+  const [isSubmitted, setIsSubmitted] = useState(false)
+
+  // Reset form function
+  const resetForm = () => {
+    setOrderNumber('')
+    setDate('')
+    setLineManager('')
+    setQualityControl('')
+    setSelectedBrand('')
+    setSelectedMaterial('')
+    setSelectedSku('')
+    setPallets([])
+    setIsSubmitted(false)
+  }
+
+  // Persistence hook
+  const { clearDraft } = useChecklistPersistence(
+    'checklist-producto-mix-draft',
+    { 
+      orderNumber, 
+      date, 
+      lineManager, 
+      qualityControl, 
+      selectedBrand, 
+      selectedMaterial, 
+      selectedSku,
+      pallets: pallets.map(p => ({ 
+        id: p.id, 
+        collapsed: p.collapsed, 
+        values: p.values,
+        fieldsByFruit: p.fieldsByFruit,
+        commonFields: p.commonFields
+      }))
+    },
+    isSubmitted,
+    (data) => {
+      if (data.orderNumber) setOrderNumber(data.orderNumber)
+      if (data.date) setDate(data.date)
+      if (data.lineManager) setLineManager(data.lineManager)
+      if (data.qualityControl) setQualityControl(data.qualityControl)
+      if (data.selectedBrand) setSelectedBrand(data.selectedBrand)
+      if (data.selectedMaterial) setSelectedMaterial(data.selectedMaterial)
+      if (data.selectedSku) setSelectedSku(data.selectedSku)
+      if (data.pallets && Array.isArray(data.pallets)) {
+        setPallets(data.pallets)
+      }
+    }
+  )
 
   // Utilitario: obtiene campos comunes entre varios arreglos de nombres
   const getCommonFields = (arrays: string[][]): string[] => {
@@ -208,11 +258,16 @@ export default function ChecklistMixPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-start">
         <Link href="/area/calidad" className="inline-flex items-center text-gray-600 hover:text-gray-900">
           <ArrowLeft className="h-5 w-5 mr-2" />
           Volver
         </Link>
+        <DeleteDraftButton 
+          storageKey="checklist-producto-mix-draft"
+          checklistName="Checklist Mix Producto"
+          onReset={resetForm}
+        />
       </div>
       <h1 className="text-3xl font-bold mb-2 text-center">
         Quality control of freezing fruit process (Mix) /<br/>

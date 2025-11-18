@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import * as XLSX from 'xlsx'
+import { exportToFile } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
   const { showToast } = useToast()
@@ -171,8 +172,25 @@ export default function HistorialPage() {
     setSelectedSku('')
   }
 
-  // Función para descargar Excel de un registro (horizontal)
-  const handleDownloadExcel = (record: ChecklistRecord) => {
+  const [showExportMenu, setShowExportMenu] = useState<{ [key: string]: boolean }>({})
+
+  // Close export menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.export-menu-container')) {
+        setShowExportMenu({})
+      }
+    }
+
+    if (Object.keys(showExportMenu).length > 0) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showExportMenu])
+
+  // Función para descargar datos de un registro (horizontal)
+  const handleDownloadData = (record: ChecklistRecord, format: 'excel' | 'csv') => {
     // Cabecera
     const headers = [
       'Fecha', 'Orden de Fabricación', 'Marca', 'Material', 'SKU', 'Jefe de línea', 'Operador',
@@ -212,12 +230,11 @@ export default function HistorialPage() {
       .map((i: any) => `${i.nombre}: ${i.correctiveAction}`)
       .join('; ')
     row.push(comments, actions)
-    // Construir hoja y libro
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([headers, row])
-    XLSX.utils.book_append_sheet(wb, ws, 'Checklist')
-    const fileName = `${record.fecha}_${record.orden_fabricacion}_${record.material}.xlsx`;
-    ;(XLSX as any).writeFile(wb, fileName);
+    
+    const fileName = `${record.fecha}_${record.orden_fabricacion}_${record.material}`
+    exportToFile([headers, row], fileName, format, 'Checklist')
+    setShowExportMenu({})
+    showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
   }
 
   return (
@@ -334,9 +351,34 @@ export default function HistorialPage() {
                         <a href={record.pdf_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                           Ver PDF
                         </a>
-                        <button onClick={() => handleDownloadExcel(record)} className="text-green-600 hover:underline">
-                          📥 Descargar Excel
-                        </button>
+                        <div className="relative inline-block export-menu-container">
+                          <button 
+                            onClick={() => setShowExportMenu({
+                              ...showExportMenu,
+                              [record.id]: !showExportMenu[record.id]
+                            })} 
+                            className="text-green-600 hover:underline flex items-center gap-1"
+                          >
+                            📥 Descargar Datos
+                            <span className="text-xs">▼</span>
+                          </button>
+                          {showExportMenu[record.id] && (
+                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-[150px]">
+                              <button
+                                onClick={() => handleDownloadData(record, 'excel')}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700"
+                              >
+                                📊 Excel (.xlsx)
+                              </button>
+                              <button
+                                onClick={() => handleDownloadData(record, 'csv')}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 border-t border-gray-200"
+                              >
+                                📄 CSV (.csv)
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

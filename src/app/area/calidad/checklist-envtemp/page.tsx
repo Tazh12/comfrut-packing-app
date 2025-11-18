@@ -8,6 +8,8 @@ import { pdf } from '@react-pdf/renderer'
 import { ChecklistEnvTempPDFDocument } from '@/components/ChecklistPDFEnvTemp'
 import { uploadChecklistPDF, insertChecklistEnvTemp } from '@/lib/supabase/checklistEnvTemp'
 import { useToast } from '@/context/ToastContext'
+import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
+import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 
 // Signature Canvas Component
 interface SignatureCanvasProps {
@@ -294,52 +296,53 @@ export default function ChecklistEnvTempPage() {
     return `${hours}:${minutes}`
   }
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const savedData = localStorage.getItem('checklist-envtemp-draft')
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData)
-        if (parsed.date) setDate(parsed.date)
-        if (parsed.shift) setShift(parsed.shift)
-        if (parsed.monitorName) setMonitorName(parsed.monitorName)
-        if (parsed.monitorSignature) setMonitorSignature(parsed.monitorSignature)
-        if (parsed.readings && parsed.readings.length > 0) {
-          setReadings(parsed.readings)
-        } else {
-          // Set initial time for first reading if no saved data
-          const today = new Date().toISOString().split('T')[0]
-          setDate(today)
-          setReadings([{ id: Date.now(), time: getCurrentESTTime(), digitalTemp: '', wallTemp: '', observation: '' }])
-        }
-      } catch (error) {
-        console.error('Error loading saved data:', error)
-        // Initialize with defaults if loading fails
+  // Reset form function
+  const resetForm = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setDate(today)
+    setShift('')
+    setMonitorName('')
+    setMonitorSignature('')
+    setReadings([{ id: Date.now(), time: getCurrentESTTime(), digitalTemp: '', wallTemp: '', observation: '' }])
+    setCheckerName('')
+    setCheckerSignature('')
+    setVerificationDate('')
+    setIsInitialSubmitted(false)
+    setPdfUrl(null)
+  }
+
+  // Persistence hook
+  const { clearDraft } = useChecklistPersistence(
+    'checklist-envtemp-draft',
+    { date, shift, monitorName, monitorSignature, readings },
+    isInitialSubmitted,
+    (data) => {
+      if (data.date) setDate(data.date)
+      if (data.shift) setShift(data.shift)
+      if (data.monitorName) setMonitorName(data.monitorName)
+      if (data.monitorSignature) setMonitorSignature(data.monitorSignature)
+      if (data.readings && data.readings.length > 0) {
+        setReadings(data.readings)
+      } else {
+        // Set initial time for first reading if no saved data
         const today = new Date().toISOString().split('T')[0]
         setDate(today)
         setReadings([{ id: Date.now(), time: getCurrentESTTime(), digitalTemp: '', wallTemp: '', observation: '' }])
       }
-    } else {
-      // Initialize dates if no saved data
+    }
+  )
+
+  // Initialize dates on mount if no saved data
+  useEffect(() => {
+    if (!date) {
       const today = new Date().toISOString().split('T')[0]
       setDate(today)
+    }
+    if (readings.length === 0) {
       setReadings([{ id: Date.now(), time: getCurrentESTTime(), digitalTemp: '', wallTemp: '', observation: '' }])
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Save to localStorage whenever form data changes
-  useEffect(() => {
-    if (!isInitialSubmitted) {
-      const draftData = {
-        date,
-        shift,
-        monitorName,
-        monitorSignature,
-        readings
-      }
-      localStorage.setItem('checklist-envtemp-draft', JSON.stringify(draftData))
-    }
-  }, [date, shift, monitorName, monitorSignature, readings, isInitialSubmitted])
 
   // Initialize verification date when Section 3 becomes visible
   useEffect(() => {
@@ -558,7 +561,7 @@ export default function ChecklistEnvTempPage() {
       setIsInitialSubmitted(true)
 
       // Clear localStorage after successful submission
-      localStorage.removeItem('checklist-envtemp-draft')
+      clearDraft()
 
       showToast('Checklist submitted successfully! Email notification sent to QA Practitioner (Marlene Peterson) for final verification.', 'success')
 
@@ -581,11 +584,16 @@ export default function ChecklistEnvTempPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-start">
         <Link href="/area/calidad" className="inline-flex items-center text-gray-600 hover:text-gray-900">
           <ArrowLeft className="h-5 w-5 mr-2" />
           Volver
         </Link>
+        <DeleteDraftButton 
+          storageKey="checklist-envtemp-draft"
+          checklistName="Process Environmental Temperature Control"
+          onReset={resetForm}
+        />
       </div>
 
       <h1 className="text-3xl font-bold mb-2 text-center">

@@ -9,6 +9,8 @@ import { useRouter } from 'next/navigation'
 import { ChecklistPDFMonoproductoLink } from '@/components/ChecklistPDFMonoproducto'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistPDFMonoproductoDocument } from '@/components/ChecklistPDFMonoproducto'
+import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
+import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 
 export default function MonoproductoChecklistPage() {
   // Campos de formulario
@@ -41,6 +43,51 @@ export default function MonoproductoChecklistPage() {
   const router = useRouter()
   // Refs para inputs dinámicos de pallets
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  // Reset form function
+  const resetForm = () => {
+    setOrderNumber('')
+    setDate('')
+    setLineManager('')
+    setQualityControl('')
+    setSelectedBrand('')
+    setSelectedMaterial('')
+    setSelectedSku('')
+    setPallets([])
+    setFields([])
+    setErrorMessage('')
+    setFinalized(false)
+    setPdfGenerated(false)
+  }
+
+  // Persistence hook
+  const { clearDraft } = useChecklistPersistence(
+    'checklist-monoproducto-draft',
+    { 
+      orderNumber, 
+      date, 
+      lineManager, 
+      qualityControl, 
+      selectedBrand, 
+      selectedMaterial, 
+      selectedSku,
+      pallets: pallets.map(p => ({ id: p.id, collapsed: p.collapsed, values: p.values }))
+    },
+    finalized,
+    (data) => {
+      if (data.orderNumber) setOrderNumber(data.orderNumber)
+      if (data.date) setDate(data.date)
+      if (data.lineManager) setLineManager(data.lineManager)
+      if (data.qualityControl) setQualityControl(data.qualityControl)
+      if (data.selectedBrand) setSelectedBrand(data.selectedBrand)
+      if (data.selectedMaterial) setSelectedMaterial(data.selectedMaterial)
+      if (data.selectedSku) setSelectedSku(data.selectedSku)
+      if (data.pallets && Array.isArray(data.pallets)) {
+        // Restore pallets - note: fields will be reloaded based on SKU
+        setPallets(data.pallets)
+      }
+    }
+  )
 
   // Cargar clientes (brands)
   useEffect(() => {
@@ -295,6 +342,7 @@ export default function MonoproductoChecklistPage() {
     // 4. Descargar PDF
     doc.save('checklist_monoproducto.pdf')
     setPdfGenerated(true)
+    clearDraft()
   }
 
   // Función para generar el PDF como Blob (arraybuffer -> Blob)
@@ -432,14 +480,21 @@ export default function MonoproductoChecklistPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* Botón Volver al Dashboard */}
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors mb-4"
-        >
-          <span className="mr-2">←</span>
-          <span>Volver</span>
-        </Link>
+        {/* Botón Volver al Dashboard y Delete */}
+        <div className="flex justify-between items-start mb-4">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <span className="mr-2">←</span>
+            <span>Volver</span>
+          </Link>
+          <DeleteDraftButton 
+            storageKey="checklist-monoproducto-draft"
+            checklistName="Checklist Monoproducto"
+            onReset={resetForm}
+          />
+        </div>
         {/* Título principal */}
         <h1 className="text-2xl font-semibold text-gray-900 text-center">
           Quality control of freezing fruit process / Control de calidad del proceso de congelado de frutas

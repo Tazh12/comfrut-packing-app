@@ -11,37 +11,43 @@ import {
   Settings, 
   LogOut 
 } from 'lucide-react'
+import { ChecklistStatusBadge } from '@/components/ChecklistStatusBadge'
 
 const areas = [
   {
     name: 'Producción',
     description: 'Checklists de producción y empaque',
     icon: Package,
-    path: '/area/produccion'
+    path: '/area/produccion',
+    areaKey: 'produccion'
   },
   {
     name: 'Logística',
     description: 'Checklists de logística',
     icon: Truck,
-    path: '/area/logistica'
+    path: '/area/logistica',
+    areaKey: 'logistica'
   },
   {
     name: 'Calidad',
     description: 'Checklists y controles de calidad',
     icon: FileText,
-    path: '/area/calidad'
+    path: '/area/calidad',
+    areaKey: 'calidad'
   },
   {
     name: 'Mantención',
     description: 'Gestión de mantenimientos y checklist',
     icon: Settings,
-    path: '/area/mantencion'
+    path: '/area/mantencion',
+    areaKey: 'mantencion'
   },
   {
     name: 'Historial Global',
     description: 'Consulta de registros históricos de todas las áreas',
     icon: FileText,
-    path: '/area/historial'
+    path: '/area/historial',
+    areaKey: 'historial'
   }
 ]
 
@@ -131,6 +137,9 @@ export default function DashboardPage() {
       onClick={() => router.push(area.path)}
       className="relative group bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-left"
     >
+      {area.areaKey !== 'historial' && area.areaKey !== 'logistica' && (
+        <ChecklistStatusBadge area={area.areaKey} />
+      )}
       <div>
         <div className="flex items-center justify-between">
           <div className="flex items-center">
