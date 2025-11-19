@@ -14,8 +14,8 @@ export function exportToFile(
   sheetName: string = 'Data'
 ) {
   try {
-    let ws: XLSX.WorkSheet
-    let wb: XLSX.WorkBook | null = null
+    let ws: ReturnType<typeof XLSX.utils.aoa_to_sheet>
+    let wb: ReturnType<typeof XLSX.utils.book_new> | null = null
 
     // Convert data to array of arrays format
     let rows: any[][] = []
