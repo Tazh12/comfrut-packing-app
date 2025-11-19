@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { ToastProvider } from '@/context/ToastContext'
 import ToastUI from '@/components/ToastUI'
 import { ChecklistProvider } from '@/context/ChecklistContext'
+import Footer from '@/components/Footer'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -28,7 +29,10 @@ export default function RootLayout({
           <AuthProvider>
             <ToastProvider>
               <ChecklistProvider>
-                {children}
+                <div className="min-h-screen flex flex-col">
+                  {children}
+                  <Footer />
+                </div>
               </ChecklistProvider>
               <ToastUI />
             </ToastProvider>

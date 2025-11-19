@@ -1,78 +1,91 @@
 'use client'
 
 import Link from 'next/link'
-import { ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline'
+import { FileText, History, ArrowLeft } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
 interface RegistroCard {
   title: string
-  icon: any // Tipo any para el ícono por ahora, podríamos ser más específicos si es necesario
+  icon: any
   href: string
-  description?: string
+  description: string
 }
 
 // Array de registros - fácil de expandir en el futuro
 const registros: RegistroCard[] = [
   {
     title: 'Checklist de Packaging',
-    icon: ClipboardDocumentCheckIcon,
+    icon: FileText,
     href: '/area/produccion/checklist-packaging',
-    description: 'Control y verificación del proceso de empaque'
+    description: 'Registra y verifica el proceso de empaque diario.'
   },
   {
     title: 'Historial',
-    icon: ClipboardDocumentCheckIcon,
+    icon: History,
     href: '/area/produccion/historial',
-    description: 'Buscar registros de producción históricos'
+    description: 'Busca y revisa registros históricos de producción.'
   }
   // Aquí se pueden agregar más registros en el futuro
 ]
 
 export default function ProduccionPage() {
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Encabezado */}
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#F5F7FB] p-6">
+      {/* Container con ancho fijo y centrado */}
+      <div className="max-w-[1150px] mx-auto">
+        {/* Encabezado */}
         <div className="mb-8">
           <Link 
             href="/dashboard"
-            className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors mb-4"
+            className="inline-flex items-center text-[#6B7280] hover:text-[#111827] transition-colors mb-4"
           >
-            <span className="mr-2">←</span>
+            <ArrowLeft className="h-5 w-5 mr-2" />
             <span>Volver</span>
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Registros de Producción</h1>
+          <h1 className="text-2xl font-semibold text-[#111827] mb-2">Registros de Producción</h1>
+          <p className="text-sm text-[#6B7280]">
+            Accede a los checklists diarios y al historial de producción.
+          </p>
         </div>
 
-        {/* Grid de registros */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {registros.map((registro) => (
-            <Link
-              key={registro.title}
-              href={registro.href}
-              className="group relative bg-white p-6 rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-1 transition-all duration-200"
-            >
-              {registro.href.includes('checklist-packaging') && (
-                <ChecklistCardStatusBadge storageKey="checklist-packaging-draft" />
-              )}
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="p-3 bg-indigo-100 rounded-full group-hover:bg-indigo-200 transition-colors">
-                  <registro.icon className="h-8 w-8 text-indigo-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 group-hover:text-indigo-600 transition-colors">
+        {/* Sección de registros */}
+        <div className="mb-6">
+          <h2 className="text-lg font-medium text-[#6B7280] mb-6">
+            ¿Qué quieres hacer?
+          </h2>
+        </div>
+
+        {/* Grid de registros - 2 columnas en desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {registros.map((registro) => {
+            const Icon = registro.icon
+            return (
+              <Link
+                key={registro.title}
+                href={registro.href}
+                className="group relative bg-[#FFFFFF] border border-[#E2E8F0] p-8 rounded-lg shadow-[0_8px_18px_rgba(15,23,42,0.06)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:border-[#BFDBFE] focus:outline-none focus:ring-2 focus:ring-[#BFDBFE] transition-all duration-200 cursor-pointer transform hover:scale-[1.01]"
+              >
+                {registro.href.includes('checklist-packaging') && (
+                  <ChecklistCardStatusBadge storageKey="checklist-packaging-draft" />
+                )}
+                <div className="flex flex-col items-center text-center">
+                  {/* Icon circle */}
+                  <div className="w-16 h-16 rounded-full bg-[#E5EFFA] flex items-center justify-center mb-3 group-hover:bg-[#1D6FE3] transition-colors">
+                    <Icon className="h-8 w-8 text-[#1D6FE3] group-hover:text-[#FFFFFF] transition-colors" />
+                  </div>
+                  {/* Title */}
+                  <h3 className="text-lg font-medium text-[#111827] mb-1.5">
                     {registro.title}
                   </h3>
-                  {registro.description && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      {registro.description}
-                    </p>
-                  )}
+                  {/* Description */}
+                  <p className="text-sm text-[#6B7280]">
+                    {registro.description}
+                  </p>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
 
         {/* Espacio para contenido adicional */}
