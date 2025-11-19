@@ -50,15 +50,25 @@ interface ChartDataPoint {
   shift: string
 }
 
-interface DailyStats {
-  date: string
-  avgTemp: number
-  minTemp: number
-  maxTemp: number
-  withinRange: number
-  outOfRange: number
-  totalReadings: number
-}
+type DailyStats = 
+  | {
+      date: string
+      avgTemp: number
+      minTemp: number
+      maxTemp: number
+      withinRange: number
+      outOfRange: number
+      totalReadings: number
+    }
+  | {
+      date: string
+      totalReadings: number
+      deviations: number
+      compliant: number
+      brands: number
+      products: number
+      complianceRate: string
+    }
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -1233,29 +1243,34 @@ export default function DashboardQualityPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalReadings}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {stat.compliant}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                {stat.deviations}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                              {stat.complianceRate}%
-                            </td>
-                          </tr>
-                        ))}
+                        {dailyStats.map((stat) => {
+                          if ('compliant' in stat) {
+                            return (
+                              <tr key={stat.date} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {stat.date}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.totalReadings}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {stat.compliant}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    {stat.deviations}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                  {stat.complianceRate}%
+                                </td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1280,19 +1295,24 @@ export default function DashboardQualityPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat: any) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.brands || 0}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.products || 0}
-                            </td>
-                          </tr>
-                        ))}
+                        {dailyStats.map((stat) => {
+                          if ('brands' in stat) {
+                            return (
+                              <tr key={stat.date} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {stat.date}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.brands || 0}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.products || 0}
+                                </td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1327,25 +1347,30 @@ export default function DashboardQualityPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.minTemp.toFixed(1)}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                              {stat.avgTemp.toFixed(1)}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.maxTemp.toFixed(1)}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalReadings}
-                            </td>
-                          </tr>
-                        ))}
+                        {dailyStats.map((stat) => {
+                          if ('avgTemp' in stat) {
+                            return (
+                              <tr key={stat.date} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {stat.date}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.minTemp.toFixed(1)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                  {stat.avgTemp.toFixed(1)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.maxTemp.toFixed(1)}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.totalReadings}
+                                </td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1373,26 +1398,31 @@ export default function DashboardQualityPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {stat.withinRange}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                {stat.outOfRange}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                              {stat.totalReadings}
-                            </td>
-                          </tr>
-                        ))}
+                        {dailyStats.map((stat) => {
+                          if ('withinRange' in stat) {
+                            return (
+                              <tr key={stat.date} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {stat.date}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {stat.withinRange}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    {stat.outOfRange}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                  {stat.totalReadings}
+                                </td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        })}
                       </tbody>
                     </table>
                   </div>
