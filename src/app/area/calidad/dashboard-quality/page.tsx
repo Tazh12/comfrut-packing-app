@@ -50,25 +50,27 @@ interface ChartDataPoint {
   shift: string
 }
 
-type DailyStats = 
-  | {
-      date: string
-      avgTemp: number
-      minTemp: number
-      maxTemp: number
-      withinRange: number
-      outOfRange: number
-      totalReadings: number
-    }
-  | {
-      date: string
-      totalReadings: number
-      deviations: number
-      compliant: number
-      brands: number
-      products: number
-      complianceRate: string
-    }
+type TemperatureDailyStats = {
+  date: string
+  avgTemp: number
+  minTemp: number
+  maxTemp: number
+  withinRange: number
+  outOfRange: number
+  totalReadings: number
+}
+
+type MetalDetectorDailyStats = {
+  date: string
+  totalReadings: number
+  deviations: number
+  compliant: number
+  brands: number
+  products: number
+  complianceRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -136,7 +138,7 @@ export default function DashboardQualityPage() {
         setChartData(processedData)
 
         // Calculate daily statistics
-        const statsMap = new Map<string, DailyStats>()
+        const statsMap = new Map<string, TemperatureDailyStats>()
         
         processedData.forEach((point) => {
           const date = point.date
@@ -166,7 +168,7 @@ export default function DashboardQualityPage() {
         })
 
         // Calculate averages
-        const dailyStatsArray = Array.from(statsMap.values()).map((stats) => ({
+        const dailyStatsArray: DailyStats[] = Array.from(statsMap.values()).map((stats) => ({
           ...stats,
           avgTemp: stats.avgTemp / stats.totalReadings
         }))
@@ -452,7 +454,14 @@ export default function DashboardQualityPage() {
         setChartData(chartDataArray)
         
         // Always calculate daily stats for the table
-        const dateMap = new Map<string, any>()
+        const dateMap = new Map<string, {
+          date: string
+          totalReadings: number
+          deviations: number
+          compliant: number
+          brands: Set<string>
+          products: Set<string>
+        }>()
         processedData.forEach((point) => {
           const date = point.date
           if (!dateMap.has(date)) {
@@ -476,7 +485,7 @@ export default function DashboardQualityPage() {
           if (point.product) dayData.products.add(point.product)
         })
 
-        const dailyStatsArray = Array.from(dateMap.values()).map((stats) => ({
+        const dailyStatsArray: DailyStats[] = Array.from(dateMap.values()).map((stats) => ({
           date: stats.date,
           totalReadings: stats.totalReadings,
           deviations: stats.deviations,
