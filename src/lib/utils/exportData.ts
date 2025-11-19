@@ -75,7 +75,15 @@ export function exportToFile(
       ws = XLSX.utils.aoa_to_sheet(rows)
       wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, sheetName)
-      XLSX.writeFile(wb, `${fileName}.xlsx`)
+      // Write to buffer and create blob for browser download
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${fileName}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
     }
   } catch (error) {
     console.error('Error exporting data:', error)
