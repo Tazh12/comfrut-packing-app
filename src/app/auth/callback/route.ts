@@ -8,8 +8,8 @@ export async function GET(request: Request) {
   const type = requestUrl.searchParams.get('type')
 
   if (code) {
-    const cookieStore = await cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    // Pass cookies function directly - createRouteHandlerClient expects a function that returns a Promise
+    const supabase = createRouteHandlerClient({ cookies })
 
     // Si es una recuperación de contraseña, redirigir a la página de actualización
     if (type === 'recovery') {

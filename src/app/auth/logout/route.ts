@@ -6,9 +6,11 @@ export async function POST(request: Request) {
   const response = NextResponse.json({ success: true })
   
   try {
-    // In Next.js 15, cookies() returns a Promise, so we need to await it
+    // Pass cookies function directly - createRouteHandlerClient expects a function that returns a Promise
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // We still need to await cookies() for manual cookie clearing
     const cookieStore = await cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
     
     // Sign out with global scope to clear all sessions
     // This should automatically clear cookies managed by Supabase
