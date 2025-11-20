@@ -9,32 +9,18 @@ interface ChecklistCardStatusBadgeProps {
 }
 
 export function ChecklistCardStatusBadge({ storageKey, className = '' }: ChecklistCardStatusBadgeProps) {
-  // Check localStorage synchronously on initial render to avoid showing badge if it's already cleared
-  const checkInitial = () => {
-    try {
-      const draftData = localStorage.getItem(storageKey)
-      if (!draftData) return false
-      
-      const parsed = JSON.parse(draftData)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
-      
-      return Object.keys(parsed).length > 0 && 
-        Object.values(parsed).some(value => {
-          if (value === null || value === undefined) return false
-          if (Array.isArray(value)) return value.length > 0
-          if (typeof value === 'object') return Object.keys(value).length > 0
-          if (typeof value === 'string') return value.trim() !== ''
-          if (typeof value === 'number') return value !== 0
-          return true
-        })
-    } catch (error) {
-      return false
-    }
-  }
-
-  const [hasIncomplete, setHasIncomplete] = useState(() => checkInitial())
+  // Always start with false to avoid hydration mismatch
+  // We'll check localStorage only after mount (client-side)
+  const [hasIncomplete, setHasIncomplete] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isMounted) return
+
     const checkIncomplete = () => {
       try {
         const draftData = localStorage.getItem(storageKey)
@@ -69,7 +55,7 @@ export function ChecklistCardStatusBadge({ storageKey, className = '' }: Checkli
       }
     }
 
-    // Check immediately on mount (double-check)
+    // Check immediately on mount (client-side only)
     checkIncomplete()
     
     // Check periodically for changes (localStorage changes in same window don't trigger storage event)
@@ -99,7 +85,7 @@ export function ChecklistCardStatusBadge({ storageKey, className = '' }: Checkli
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('localStorageChange', handleCustomStorageChange)
     }
-  }, [storageKey])
+  }, [storageKey, isMounted])
 
   if (!hasIncomplete) {
     return null

@@ -55,28 +55,31 @@ export default function DocumentacionPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--page-bg)' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: 'var(--primary-bg)' }}></div>
+          <p className="mt-4" style={{ color: 'var(--muted-text)' }}>Cargando...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--page-bg)' }}>
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex items-center mb-8">
             <Link
               href="/dashboard"
-              className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mr-4"
+              className="inline-flex items-center text-sm mr-4 transition-colors"
+              style={{ color: 'var(--link-color)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--link-hover)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--link-color)' }}
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
               Volver al Dashboard
             </Link>
-            <h1 className="text-2xl font-semibold text-gray-900">Área de Documentación</h1>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--title-text)' }}>Área de Documentación</h1>
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -84,21 +87,39 @@ export default function DocumentacionPage() {
               <button
                 key={documento.id}
                 onClick={() => router.push(documento.path)}
-                className="relative group bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-left"
+                className="relative group p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-left"
+                style={{
+                  backgroundColor: 'var(--card-bg)',
+                  border: '1px solid var(--card-border)',
+                  boxShadow: '0 1px 2px var(--card-shadow)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 4px 6px var(--card-shadow-hover)'
+                  const arrow = e.currentTarget.querySelector('.arrow') as HTMLElement
+                  if (arrow) arrow.style.opacity = '1'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = '0 1px 2px var(--card-shadow)'
+                  const arrow = e.currentTarget.querySelector('.arrow') as HTMLElement
+                  if (arrow) arrow.style.opacity = '0'
+                }}
               >
                 <div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <History className="h-6 w-6 text-blue-600" />
-                      <h3 className="ml-3 text-lg font-medium text-gray-900">
+                      <History className="h-6 w-6" style={{ color: 'var(--icon-primary)' }} />
+                      <h3 className="ml-3 text-lg font-medium" style={{ color: 'var(--title-text)' }}>
                         {documento.nombre}
                       </h3>
                     </div>
-                    <div className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div 
+                      className="arrow opacity-0 transition-opacity duration-200"
+                      style={{ color: 'var(--icon-primary)' }}
+                    >
                       →
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-gray-500">
+                  <p className="mt-2 text-sm" style={{ color: 'var(--muted-text)' }}>
                     {documento.descripcion}
                   </p>
                 </div>

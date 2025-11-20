@@ -34,6 +34,12 @@ const CHECKLIST_MAP: Record<string, Omit<IncompleteChecklist, 'storageKey'>> = {
     path: '/area/calidad/checklist-monoproducto',
     area: 'calidad'
   },
+  'checklist-metal-detector-draft': {
+    id: 'metal-detector',
+    name: 'Metal Detector (PCC #1)',
+    path: '/area/calidad/checklist-metal-detector',
+    area: 'calidad'
+  },
   'checklist-solicitud-mtto-draft': {
     id: 'solicitud-mtto',
     name: 'Solicitud de Mantenimiento',

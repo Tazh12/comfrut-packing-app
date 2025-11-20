@@ -27,7 +27,7 @@ export function ChecklistStatusBadge({ area, className = '' }: ChecklistStatusBa
         <span className="text-xs font-medium text-amber-800">
           {incompleteChecklists.length} pendiente{incompleteChecklists.length > 1 ? 's' : ''}
         </span>
-        {incompleteChecklists.length > 1 && (
+        {incompleteChecklists.length >= 1 && (
           <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50">
             <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 shadow-lg min-w-[200px]">
               <div className="font-semibold mb-1">Checklists incompletos:</div>

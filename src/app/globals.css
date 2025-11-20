@@ -1,8 +1,112 @@
 @import "tailwindcss";
 
+/* Light theme (default) */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+[data-theme="light"] {
+  --page-bg: #F5F7FB;
+  --card-bg: #FFFFFF;
+  --card-border: #E2E8F0;
+  --title-text: #111827;
+  --muted-text: #6B7280;
+  --input-bg: #FFFFFF;
+  --input-border: #D1D5DB;
+  --input-border-focus: #1D6FE3;
+  --input-text: #111827;
+  --primary-bg: #1D6FE3;
+  --primary-text: #FFFFFF;
+  --error-text: #DC2626;
+  --error-border: #FCA5A5;
+  --footer-border: #E2E8F0;
+  --app-title: #003C71;
+  --avatar-bg: #003C71;
+  --dropdown-bg: #FFFFFF;
+  --dropdown-border: #E2E8F0;
+  --dropdown-hover: #F5F7FB;
+  --dropdown-text: #111827;
+  --dropdown-active: #1D6FE3;
+  --card-shadow: rgba(15, 23, 42, 0.06);
+  --card-shadow-hover: rgba(15, 23, 42, 0.08);
+  --card-hover-border: #BFDBFE;
+  --icon-primary: #1D6FE3;
+  --chevron-color: #111827;
+  --icon-circle-normal: #E5EFFA;
+  --icon-circle-critical: #FEF3C7;
+  --icon-circle-dashboard: #DCFCE7;
+  --icon-critical-color: #F97316;
+  --icon-dashboard-color: #16A34A;
+  --link-color: #6B7280;
+  --link-hover: #111827;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --page-bg: #020617;
+  --card-bg: #0B1120;
+  --card-border: #1E293B;
+  --title-text: #F9FAFB;
+  --muted-text: #9CA3AF;
+  --input-bg: #020617;
+  --input-border: #1F2937;
+  --input-border-focus: #60A5FA;
+  --input-text: #F9FAFB;
+  --primary-bg: #3B82F6;
+  --primary-text: #FFFFFF;
+  --error-text: #FCA5A5;
+  --error-border: #F87171;
+  --footer-border: #1E293B;
+  --app-title: #60A5FA;
+  --avatar-bg: #3B82F6;
+  --dropdown-bg: #0B1120;
+  --dropdown-border: #1E293B;
+  --dropdown-hover: #1E293B;
+  --dropdown-text: #F9FAFB;
+  --dropdown-active: #60A5FA;
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: rgba(0, 0, 0, 0.4);
+  --card-hover-border: #3B82F6;
+  --icon-primary: #60A5FA;
+  --chevron-color: #F9FAFB;
+  --icon-circle-normal: rgba(59, 130, 246, 0.2);
+  --icon-circle-critical: rgba(251, 146, 60, 0.2);
+  --icon-circle-dashboard: rgba(34, 197, 94, 0.2);
+  --icon-critical-color: #FB923C;
+  --icon-dashboard-color: #22C55E;
+  --link-color: #9CA3AF;
+  --link-hover: #F9FAFB;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --page-bg: #020617;
+  --card-bg: #0B1120;
+  --card-border: #1E293B;
+  --title-text: #F9FAFB;
+  --muted-text: #9CA3AF;
+  --input-bg: #020617;
+  --input-border: #1F2937;
+  --input-border-focus: #60A5FA;
+  --input-text: #F9FAFB;
+  --primary-bg: #3B82F6;
+  --primary-text: #FFFFFF;
+  --error-text: #FCA5A5;
+  --error-border: #F87171;
+  --footer-border: #1E293B;
+  --app-title: #60A5FA;
+  --avatar-bg: #3B82F6;
+  --dropdown-bg: #0B1120;
+  --dropdown-border: #1E293B;
+  --dropdown-hover: #1E293B;
+  --dropdown-text: #F9FAFB;
+  --dropdown-active: #60A5FA;
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: rgba(0, 0, 0, 0.4);
+  --card-hover-border: #3B82F6;
+  --icon-primary: #60A5FA;
+  --chevron-color: #F9FAFB;
 }
 
 @theme inline {
@@ -12,15 +116,28 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Input focus styles */
+.login-input {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--input-text);
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+}
+
+.login-input.error {
+  border-color: var(--error-border);
+}
+
+.login-input.error:focus {
+  border-color: var(--error-border);
 }

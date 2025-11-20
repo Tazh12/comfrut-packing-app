@@ -763,6 +763,18 @@ export default function DashboardQualityPage() {
     loadData()
   }
 
+  const handleClearFilters = () => {
+    setSelectedOrden('')
+    setSelectedBrand('')
+    setSelectedProduct('')
+    // Reset dates to default (last 30 days)
+    const today = new Date()
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(today.getDate() - 30)
+    setEndDate(today.toISOString().split('T')[0])
+    setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -824,13 +836,20 @@ export default function DashboardQualityPage() {
               />
             </div>
             
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <button
                 onClick={handleFilter}
                 disabled={loading}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Cargando...' : 'Filtrar'}
+              </button>
+              <button
+                onClick={handleClearFilters}
+                disabled={loading}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Limpiar
               </button>
             </div>
           </div>

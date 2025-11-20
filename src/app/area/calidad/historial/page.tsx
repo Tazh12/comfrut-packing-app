@@ -7,7 +7,6 @@ import { useToast } from '@/context/ToastContext'
 import { ArrowLeft } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
-import { fetchChecklistMetalDetectorData } from '@/lib/supabase/checklistMetalDetector'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -70,6 +69,33 @@ export default function HistorialPage() {
         if (error) throw error
         data = result || []
         
+      } else if (selected === 'Ensayos Microbiológicos Lab PT') {
+        let query = supabase.from('resultados_microbiologicos_labpt').select('*')
+        
+        if (fromDate) {
+          if (!toDate) {
+            query = query.eq('fecha', fromDate)
+          } else {
+            query = query.gte('fecha', fromDate).lte('fecha', toDate)
+          }
+        } else if (toDate) {
+          query = query.lte('fecha', toDate)
+        }
+        
+        if (orden) {
+          query = query.ilike('orden', `%${orden}%`)
+        }
+        if (sku) {
+          query = query.ilike('sku', `%${sku}%`)
+        }
+        if (producto) {
+          query = query.ilike('producto', `%${producto}%`)
+        }
+        
+        const { data: result, error } = await query
+        if (error) throw error
+        data = result || []
+        
       } else if (selected === 'Checklist Mix Producto') {
         let query = supabase.from('checklist_calidad_mix').select('*')
         
@@ -106,30 +132,6 @@ export default function HistorialPage() {
           filtered = records.filter((r: any) => 
             r.date_string?.includes(orden) || 
             r.monitor_name?.toLowerCase().includes(orden.toLowerCase())
-          )
-        }
-        data = filtered
-        
-      } else if (selected === 'Metal Detector (PCC #1)') {
-        // Use the special fetch function for metal detector
-        const records = await fetchChecklistMetalDetectorData(fromDate || undefined, toDate || undefined)
-        // Filter by orden if provided
-        let filtered = records
-        if (orden) {
-          filtered = records.filter((r: any) => 
-            r.orden?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.metal_detector_id?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.process_line?.toLowerCase().includes(orden.toLowerCase())
-          )
-        }
-        if (marca) {
-          filtered = filtered.filter((r: any) => 
-            r.brand?.toLowerCase().includes(marca.toLowerCase())
-          )
-        }
-        if (producto) {
-          filtered = filtered.filter((r: any) => 
-            r.product?.toLowerCase().includes(producto.toLowerCase())
           )
         }
         data = filtered
@@ -183,41 +185,6 @@ export default function HistorialPage() {
         exportRecord(flatRecord, fileName, format)
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
         
-      } else if (selected === 'Metal Detector (PCC #1)') {
-        // Export Metal Detector Checklist data
-        const record = selectedRecord
-        const flatRecord: any = {
-          'Date': record.date_string || '',
-          'Process Line': record.process_line || '',
-          'Metal Detector ID': record.metal_detector_id || '',
-          'Start Time': record.metal_detector_start_time || '',
-          'Finish Time': record.metal_detector_finish_time || '',
-          'Orden': record.orden || '',
-          'Brand': record.brand || '',
-          'Product': record.product || '',
-          'Monitor Name': record.monitor_name || '',
-          'Total Readings': record.readings?.length || 0,
-        }
-        
-        // Add readings as separate columns
-        if (record.readings && record.readings.length > 0) {
-          record.readings.forEach((reading: any, index: number) => {
-            flatRecord[`Reading ${index + 1} - Hour`] = reading.hour || ''
-            flatRecord[`Reading ${index + 1} - BF`] = reading.bf || ''
-            flatRecord[`Reading ${index + 1} - B.NF`] = reading.bnf || ''
-            flatRecord[`Reading ${index + 1} - B.S.S`] = reading.bss || ''
-            flatRecord[`Reading ${index + 1} - Sensitivity`] = reading.sensitivity || ''
-            flatRecord[`Reading ${index + 1} - Noise Alarm`] = reading.noiseAlarm || ''
-            flatRecord[`Reading ${index + 1} - Rejecting Arm`] = reading.rejectingArm || ''
-            flatRecord[`Reading ${index + 1} - Observation`] = reading.observation || ''
-            flatRecord[`Reading ${index + 1} - Corrective Actions`] = reading.correctiveActions || ''
-          })
-        }
-        
-        const fileName = `metal_detector_${record.date_string || 'data'}_${record.orden || ''}`
-        exportRecord(flatRecord, fileName, format)
-        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
-        
       } else if (selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') {
         const orden = selectedRecord.orden_fabricacion
         const tableName = selected === 'Checklist Monoproducto' 
@@ -241,6 +208,12 @@ export default function HistorialPage() {
         exportToFile(data, fileName, format, 'Checklist')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
         
+      } else if (selected === 'Ensayos Microbiológicos Lab PT') {
+        // Export Lab PT data
+        const record = selectedRecord
+        const fileName = `labpt_${record.orden || record.orden_fabricacion || 'data'}_${record.fecha || ''}`
+        exportRecord(record, fileName, format)
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -275,8 +248,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Metal Detector (PCC #1)') {
-          // For Temp and Metal Detector checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control') {
+          // For Temp checklist, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -346,8 +319,8 @@ export default function HistorialPage() {
             <option value="">Seleccione un checklist</option>
             <option value="Checklist Monoproducto">Checklist Monoproducto</option>
             <option value="Checklist Mix Producto">Checklist Mix Producto</option>
+            <option value="Ensayos Microbiológicos Lab PT">Ensayos Microbiológicos Lab PT</option>
             <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
-            <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
           </select>
         </div>
         <div>
@@ -403,7 +376,7 @@ export default function HistorialPage() {
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
           />
         </div>
-        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto' || selected === 'Metal Detector (PCC #1)') && (
+        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
           <div>
             <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">Marca/Cliente</label>
             <input
@@ -462,7 +435,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Metal Detector (PCC #1)' && (
+                {selected !== 'Process Environmental Temperature Control' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -472,15 +445,6 @@ export default function HistorialPage() {
                 {selected === 'Process Environmental Temperature Control' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Lecturas</th>
-                  </>
-                )}
-                {selected === 'Metal Detector (PCC #1)' && (
-                  <>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Process Line</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Brand</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Lecturas</th>
                   </>
@@ -497,7 +461,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Metal Detector (PCC #1)' && (
+                  {selected !== 'Process Environmental Temperature Control' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -509,17 +473,6 @@ export default function HistorialPage() {
                   {selected === 'Process Environmental Temperature Control' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">{record.shift || '-'}</td>
-                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
-                      <td className="px-4 py-2 text-sm text-gray-800">
-                        {record.readings?.length || 0} lectura(s)
-                      </td>
-                    </>
-                  )}
-                  {selected === 'Metal Detector (PCC #1)' && (
-                    <>
-                      <td className="px-4 py-2 text-sm text-gray-800">{record.orden || '-'}</td>
-                      <td className="px-4 py-2 text-sm text-gray-800">{record.process_line || '-'}</td>
-                      <td className="px-4 py-2 text-sm text-gray-800">{record.brand || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.readings?.length || 0} lectura(s)

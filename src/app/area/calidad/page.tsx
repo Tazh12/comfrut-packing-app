@@ -74,49 +74,81 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
   const Icon = card.icon
   const colorType = card.colorType || 'normal'
   
-  // Definir clases CSS según el tipo
-  const colorClasses = {
-    normal: {
-      circleBg: 'bg-[#E5EFFA]',
-      iconColor: 'text-[#1D6FE3]',
-      hoverCircleBg: 'group-hover:bg-[#1D6FE3]',
-      hoverIconColor: 'group-hover:text-[#FFFFFF]'
-    },
-    critical: {
-      circleBg: 'bg-[#FEF3C7]',
-      iconColor: 'text-[#F97316]',
-      hoverCircleBg: 'group-hover:bg-[#F97316]',
-      hoverIconColor: 'group-hover:text-[#FFFFFF]'
-    },
-    dashboard: {
-      circleBg: 'bg-[#DCFCE7]',
-      iconColor: 'text-[#16A34A]',
-      hoverCircleBg: 'group-hover:bg-[#16A34A]',
-      hoverIconColor: 'group-hover:text-[#FFFFFF]'
+  // Get icon colors based on type
+  const getIconStyles = () => {
+    switch (colorType) {
+      case 'critical':
+        return {
+          circleBg: 'var(--icon-circle-critical)',
+          iconColor: 'var(--icon-critical-color)',
+          hoverCircleBg: 'var(--icon-critical-color)',
+        }
+      case 'dashboard':
+        return {
+          circleBg: 'var(--icon-circle-dashboard)',
+          iconColor: 'var(--icon-dashboard-color)',
+          hoverCircleBg: 'var(--icon-dashboard-color)',
+        }
+      default:
+        return {
+          circleBg: 'var(--icon-circle-normal)',
+          iconColor: 'var(--icon-primary)',
+          hoverCircleBg: 'var(--icon-primary)',
+        }
     }
   }
   
-  const classes = colorClasses[colorType]
+  const iconStyles = getIconStyles()
   
   return (
     <Link
       href={card.href}
-      className="group relative bg-[#FFFFFF] border border-[#E2E8F0] p-8 rounded-lg shadow-[0_8px_18px_rgba(15,23,42,0.06)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:border-[#BFDBFE] focus:outline-none focus:ring-2 focus:ring-[#BFDBFE] focus:border-[#2563EB] transition-all duration-200 cursor-pointer transform hover:scale-[1.01]"
+      className="group relative p-8 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
+      style={{
+        backgroundColor: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        boxShadow: '0 8px 18px var(--card-shadow)',
+        '--tw-ring-color': 'var(--card-hover-border)'
+      } as React.CSSProperties}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 10px 24px var(--card-shadow-hover)'
+        e.currentTarget.style.borderColor = 'var(--card-hover-border)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 8px 18px var(--card-shadow)'
+        e.currentTarget.style.borderColor = 'var(--card-border)'
+      }}
     >
       {card.storageKey && (
         <ChecklistCardStatusBadge storageKey={card.storageKey} />
       )}
       <div className="flex flex-col items-center text-center">
         {/* Icon circle */}
-        <div className={`w-16 h-16 rounded-full ${classes.circleBg} ${classes.hoverCircleBg} flex items-center justify-center mb-3 transition-colors`}>
-          <Icon className={`h-8 w-8 ${classes.iconColor} ${classes.hoverIconColor} transition-colors`} />
+        <div 
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-3 transition-colors"
+          style={{ backgroundColor: iconStyles.circleBg }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = iconStyles.hoverCircleBg
+            const icon = e.currentTarget.querySelector('svg')
+            if (icon) icon.style.color = '#FFFFFF'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = iconStyles.circleBg
+            const icon = e.currentTarget.querySelector('svg')
+            if (icon) icon.style.color = iconStyles.iconColor
+          }}
+        >
+          <Icon 
+            className="h-8 w-8 transition-colors" 
+            style={{ color: iconStyles.iconColor }}
+          />
         </div>
         {/* Title */}
-        <h3 className="text-lg font-semibold text-[#111827] mb-1.5">
+        <h3 className="text-lg font-semibold mb-1.5" style={{ color: 'var(--title-text)' }}>
           {card.title}
         </h3>
         {/* Description */}
-        <p className="text-sm text-[#6B7280]">
+        <p className="text-sm" style={{ color: 'var(--muted-text)' }}>
           {card.description}
         </p>
       </div>
@@ -128,27 +160,30 @@ export default function CalidadPage() {
   const { showToast } = useToast()
 
   return (
-    <div className="min-h-screen bg-[#F5F7FB] p-6">
+    <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--page-bg)' }}>
       {/* Container con ancho fijo y centrado */}
       <div className="max-w-[1150px] mx-auto">
         {/* Encabezado */}
         <div className="mb-8">
           <Link 
             href="/dashboard"
-            className="inline-flex items-center text-[#6B7280] hover:text-[#111827] transition-colors mb-4"
+            className="inline-flex items-center transition-colors mb-4"
+            style={{ color: 'var(--link-color)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--link-hover)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--link-color)' }}
           >
             <ArrowLeft className="h-5 w-5 mr-2" />
             <span>Volver</span>
           </Link>
-          <h1 className="text-2xl font-semibold text-[#111827] mb-2">Área de Calidad</h1>
-          <p className="text-sm text-[#6B7280]">
+          <h1 className="text-2xl font-semibold mb-2" style={{ color: 'var(--title-text)' }}>Área de Calidad</h1>
+          <p className="text-sm" style={{ color: 'var(--muted-text)' }}>
             Gestiona los checklists, controles críticos y análisis de calidad.
           </p>
         </div>
 
         {/* Sección de registros */}
         <div className="mb-6">
-          <h2 className="text-lg font-medium text-[#6B7280] mb-6">
+          <h2 className="text-lg font-medium mb-6" style={{ color: 'var(--muted-text)' }}>
             ¿Qué quieres hacer?
           </h2>
         </div>
