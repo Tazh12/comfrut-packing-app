@@ -33,8 +33,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    // Try to sign out, but don't throw if session is already invalid
+    // This handles cases where the session might already be expired
+    const { error } = await supabase.auth.signOut({ scope: 'global' })
+    if (error) {
+      // Only throw if it's not a session-related error
+      // Session missing errors are common in production and shouldn't block logout
+      if (!error.message?.includes('session') && !error.message?.includes('Auth session missing')) {
+        throw error
+      }
+      // Log session errors but don't throw
+      console.warn('Session already invalid during logout:', error.message)
+    }
   }
 
   return (

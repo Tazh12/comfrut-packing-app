@@ -133,16 +133,32 @@ export default function DashboardPage() {
 
   const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Error signing out:', error)
-        showToast('Error al cerrar sesión', 'error')
-        return
+      // Call server-side logout route to properly handle cookies in production
+      const response = await fetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      // Even if the server request fails, try client-side logout as fallback
+      if (!response.ok) {
+        console.warn('Server logout failed, trying client-side logout')
+        try {
+          await supabase.auth.signOut({ scope: 'global' })
+        } catch (clientError) {
+          // Ignore client-side errors, session might already be invalid
+          console.warn('Client-side logout warning:', clientError)
+        }
       }
-      router.replace('/login')
+      
+      // Always redirect to login with hard redirect to clear any cached state
+      window.location.href = '/login'
     } catch (error) {
+      // Even if there's an unexpected error, still redirect to login
       console.error('Unexpected error during sign out:', error)
-      showToast('Error inesperado al cerrar sesión', 'error')
+      router.replace('/login')
+      window.location.href = '/login'
     }
   }
 
