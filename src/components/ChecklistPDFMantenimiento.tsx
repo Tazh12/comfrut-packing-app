@@ -102,6 +102,8 @@ export interface ChecklistPDFMantenimientoProps {
     solicitante: string
     zona: string
     tipo_falla: string
+    nivel_riesgo?: string
+    equipo_afectado?: string
     descripcion_falla: string
     recomendacion: string
   }
@@ -115,6 +117,8 @@ export const ChecklistPDFMantenimientoDocument: React.FC<ChecklistPDFMantenimien
     ['Solicitante', data.solicitante],
     ['Zona', data.zona],
     ['Tipo de falla', data.tipo_falla],
+    ['Nivel de Riesgo', data.nivel_riesgo || '-'],
+    ['Equipo / Activo Afectado', data.equipo_afectado || '-'],
     ['Descripción de la falla', data.descripcion_falla],
     ['Recomendación', data.recomendacion || '-']
   ]
