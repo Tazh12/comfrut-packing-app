@@ -661,9 +661,10 @@ export default function ChecklistStaffPracticesPage() {
           staffHealth: { ca: 'staffHealthCorrectiveAction', obs: 'staffHealthObservation' }
         }
         
-        if (fieldMapping[field as string] && value === 'comply') {
-          updated[fieldMapping[field as string].ca] = ''
-          updated[fieldMapping[field as string].obs] = ''
+        const mapping = fieldMapping[field as string]
+        if (mapping && value === 'comply') {
+          ;(updated as any)[mapping.ca] = ''
+          ;(updated as any)[mapping.obs] = ''
         }
         
         return updated
