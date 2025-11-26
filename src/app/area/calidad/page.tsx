@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -51,6 +51,14 @@ const registroAnalisis: CalidadCard[] = [
     href: '/area/calidad/checklist-envtemp',
     description: 'Checklist de monitoreo de temperatura ambiental.',
     storageKey: 'checklist-envtemp-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Staff Good Practices Control',
+    icon: Users,
+    href: '/area/calidad/checklist-staff-practices',
+    description: 'Control de buenas prácticas del personal.',
+    storageKey: 'checklist-staff-practices-draft',
     colorType: 'normal'
   },
   {

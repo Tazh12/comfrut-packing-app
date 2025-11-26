@@ -7,6 +7,7 @@ import { useToast } from '@/context/ToastContext'
 import { ArrowLeft } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
+import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffPractices'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -135,6 +136,19 @@ export default function HistorialPage() {
           )
         }
         data = filtered
+      } else if (selected === 'Staff Good Practices Control') {
+        // Use the special fetch function for staff practices
+        const records = await fetchChecklistStaffPracticesData(fromDate || undefined, toDate || undefined)
+        // Filter by orden if provided (check in date_string, monitor_name, or staff member names)
+        let filtered = records
+        if (orden) {
+          filtered = records.filter((r: any) => 
+            r.date_string?.includes(orden) || 
+            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.staff_members?.some((m: any) => m.name?.toLowerCase().includes(orden.toLowerCase()))
+          )
+        }
+        data = filtered
       }
       
       setResults(data)
@@ -183,6 +197,63 @@ export default function HistorialPage() {
         
         const fileName = `temp_checklist_${record.date_string || 'data'}_${record.shift || ''}`
         exportRecord(flatRecord, fileName, format)
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+        
+      } else if (selected === 'Staff Good Practices Control') {
+        // Export Staff Practices Checklist data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Shift',
+          'Monitor Name',
+          'Name',
+          'Area',
+          'Staff Appearance',
+          'Complete Uniform',
+          'Accessories Absence',
+          'Work Tools Usage',
+          'Cut Clean Nails',
+          'No Makeup',
+          'Staff Behavior',
+          'Staff Health'
+        ]
+        
+        // Create rows - one per staff member
+        const rows: any[][] = [headers] // First row is headers
+        
+        if (record.staff_members && record.staff_members.length > 0) {
+          record.staff_members.forEach((member: any) => {
+            const row = [
+              record.date_string || record.fecha || '',
+              record.shift || '',
+              record.monitor_name || '',
+              member.name || '',
+              member.area || '',
+              member.staffAppearance || '',
+              member.completeUniform || '',
+              member.accessoriesAbsence || '',
+              member.workToolsUsage || '',
+              member.cutCleanNotPolishedNails || '',
+              member.noMakeupOn || '',
+              member.staffBehavior || '',
+              member.staffHealth || ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no staff members, still add one row with basic info
+          rows.push([
+            record.date_string || record.fecha || '',
+            record.shift || '',
+            record.monitor_name || '',
+            '', '', '', '', '', '', '', '', '', ''
+          ])
+        }
+        
+        const fileName = `staff_practices_${record.date_string || 'data'}_${record.shift || ''}`
+        exportToFile(rows, fileName, format, 'Staff Practices')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
         
       } else if (selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') {
@@ -248,8 +319,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control') {
-          // For Temp checklist, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control') {
+          // For Temp and Staff Practices checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -321,6 +392,7 @@ export default function HistorialPage() {
             <option value="Checklist Mix Producto">Checklist Mix Producto</option>
             <option value="Ensayos Microbiológicos Lab PT">Ensayos Microbiológicos Lab PT</option>
             <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
+            <option value="Staff Good Practices Control">Staff Good Practices Control</option>
           </select>
         </div>
         <div>
@@ -435,7 +507,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -447,6 +519,13 @@ export default function HistorialPage() {
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Lecturas</th>
+                  </>
+                )}
+                {selected === 'Staff Good Practices Control' && (
+                  <>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Personal</th>
                   </>
                 )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
@@ -461,7 +540,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -476,6 +555,15 @@ export default function HistorialPage() {
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.readings?.length || 0} lectura(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Staff Good Practices Control' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.shift || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.staff_members?.length || 0} miembro(s)
                       </td>
                     </>
                   )}

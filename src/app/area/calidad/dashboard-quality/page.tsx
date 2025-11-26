@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
 import { fetchChecklistMetalDetectorData } from '@/lib/supabase/checklistMetalDetector'
+import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffPractices'
 import { supabase } from '@/lib/supabase'
 import {
   LineChart,
@@ -728,6 +729,145 @@ export default function DashboardQualityPage() {
           dateRange: chartDataArray.length > 0 ? `${chartDataArray[0].date} - ${chartDataArray[chartDataArray.length - 1].date}` : '-'
         })
         
+      } else if (selectedChecklist === 'Staff Good Practices Control') {
+        const records = await fetchChecklistStaffPracticesData(startDate, endDate)
+        setData(records)
+
+        // Parameter field names mapping
+        const parameterFields = [
+          'staffAppearance',
+          'completeUniform',
+          'accessoriesAbsence',
+          'workToolsUsage',
+          'cutCleanNotPolishedNails',
+          'noMakeupOn',
+          'staffBehavior',
+          'staffHealth'
+        ] as const
+
+        const parameterNames: Record<string, string> = {
+          staffAppearance: 'Staff Appearance',
+          completeUniform: 'Complete Uniform',
+          accessoriesAbsence: 'Accessories Absence',
+          workToolsUsage: 'Work Tools Usage',
+          cutCleanNotPolishedNails: 'Cut Clean Nails',
+          noMakeupOn: 'No Makeup',
+          staffBehavior: 'Staff Behavior',
+          staffHealth: 'Staff Health'
+        }
+
+        // Process data for charts - group by date, count parameters
+        const dateMap = new Map<string, any>()
+        records.forEach((record: any) => {
+          const date = record.date_string
+          if (!dateMap.has(date)) {
+            dateMap.set(date, { 
+              date, 
+              count: 0, 
+              totalStaff: 0,
+              totalParameters: 0,
+              compliantParameters: 0,
+              nonCompliantParameters: 0
+            })
+          }
+          const dayData = dateMap.get(date)!
+          dayData.count++
+          dayData.totalStaff += record.staff_members?.length || 0
+          
+          // Count parameters (not staff members)
+          record.staff_members?.forEach((member: any) => {
+            parameterFields.forEach(field => {
+              dayData.totalParameters++
+              if (member[field] === 'comply') {
+                dayData.compliantParameters++
+              } else if (member[field] === 'not_comply') {
+                dayData.nonCompliantParameters++
+              }
+            })
+          })
+        })
+
+        const chartDataArray = Array.from(dateMap.values()).map(d => ({
+          date: d.date,
+          registros: d.count,
+          totalStaff: d.totalStaff,
+          compliant: d.compliantParameters,
+          nonCompliant: d.nonCompliantParameters
+        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+        
+        // Calculate daily stats
+        const dailyStatsArray = chartDataArray.map(d => {
+          const totalParams = d.compliant + d.nonCompliant
+          return {
+            date: d.date,
+            totalRecords: d.registros,
+            totalStaff: d.totalStaff,
+            compliant: d.compliant,
+            nonCompliant: d.nonCompliant,
+            totalParameters: totalParams,
+            complianceRate: totalParams > 0 ? ((d.compliant / totalParams) * 100).toFixed(1) : '0.0'
+          }
+        })
+        
+        setDailyStats(dailyStatsArray)
+        
+        // Calculate overall summary stats
+        let totalStaff = 0
+        let totalParameters = 0
+        let compliantParameters = 0
+        const parameterCounts: Record<string, { compliant: number, nonCompliant: number }> = {}
+
+        // Initialize parameter counts
+        parameterFields.forEach(field => {
+          parameterCounts[field] = { compliant: 0, nonCompliant: 0 }
+        })
+
+        records.forEach((record: any) => {
+          totalStaff += record.staff_members?.length || 0
+          record.staff_members?.forEach((member: any) => {
+            parameterFields.forEach(field => {
+              totalParameters++
+              if (member[field] === 'comply') {
+                compliantParameters++
+                parameterCounts[field].compliant++
+              } else if (member[field] === 'not_comply') {
+                parameterCounts[field].nonCompliant++
+              }
+            })
+          })
+        })
+
+        const nonCompliantParameters = totalParameters - compliantParameters
+        const complianceRate = totalParameters > 0 
+          ? ((compliantParameters / totalParameters) * 100).toFixed(1) 
+          : '0.0'
+
+        // Find most non-compliant parameter
+        let mostNonCompliantParam = { name: 'N/A', count: 0, percentage: '0.0' }
+        parameterFields.forEach(field => {
+          const count = parameterCounts[field].nonCompliant
+          const total = parameterCounts[field].compliant + count
+          if (total > 0 && count > mostNonCompliantParam.count) {
+            const percentage = ((count / total) * 100).toFixed(1)
+            mostNonCompliantParam = {
+              name: parameterNames[field],
+              count,
+              percentage
+            }
+          }
+        })
+        
+        setSummaryStats({
+          totalRecords: records.length,
+          totalStaff,
+          totalParameters,
+          compliantParameters,
+          nonCompliantParameters,
+          complianceRate,
+          mostNonCompliantParameter: mostNonCompliantParam
+        })
       }
       
     } catch (error) {
@@ -805,6 +945,7 @@ export default function DashboardQualityPage() {
                   Process Environmental Temperature Control
                 </option>
                 <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
+                <option value="Staff Good Practices Control">Staff Good Practices Control</option>
                 <option value="Checklist Monoproducto">Checklist Monoproducto</option>
                 <option value="Checklist Mix Producto">Checklist Mix Producto</option>
               </select>
@@ -981,6 +1122,30 @@ export default function DashboardQualityPage() {
                   <div className="bg-white p-6 rounded-lg shadow">
                     <h3 className="text-sm font-medium text-gray-500 mb-1">Dentro del Rango</h3>
                     <p className="text-2xl font-bold text-green-600">{summaryStats.withinRange || 0}</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Staff Good Practices Control' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Personal</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalStaff || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-blue-600">{summaryStats.complianceRate || '0.0'}%</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Parámetro con Más No Cumplimiento</h3>
+                    <p className="text-lg font-bold text-red-600">
+                      {summaryStats.mostNonCompliantParameter?.name || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {summaryStats.mostNonCompliantParameter?.count || 0} casos ({summaryStats.mostNonCompliantParameter?.percentage || '0.0'}%)
+                    </p>
                   </div>
                 </>
               ) : selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto' ? (
@@ -1210,6 +1375,68 @@ export default function DashboardQualityPage() {
               </>
             )}
 
+            {selectedChecklist === 'Staff Good Practices Control' && (
+              <>
+                {/* Staff Compliance Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Cumplimiento por Fecha</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="compliant" fill="#10b981" name="Cumplimiento" />
+                      <Bar dataKey="nonCompliant" fill="#ef4444" name="No Cumplimiento" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Staff Members per Day Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Personal Evaluado por Fecha</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="totalStaff" fill="#3b82f6" name="Total Personal" />
+                      <Bar dataKey="registros" fill="#8b5cf6" name="Registros" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+
             {(selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto') && (
               <>
                 {/* Registros por Fecha Chart */}
@@ -1344,6 +1571,96 @@ export default function DashboardQualityPage() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {selectedChecklist === 'Staff Good Practices Control' && dailyStats.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Daily Statistics Table */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas Diarias</h2>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fecha
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registros
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total Personal
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Parámetros Cumplidos
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Parámetros No Cumplidos
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Tasa (%)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {dailyStats.map((stat: any) => (
+                          <tr key={stat.date} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {stat.date}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalRecords}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalStaff}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {stat.compliant}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                {stat.nonCompliant}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                              {stat.complianceRate}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Compliance Rate Pie Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Distribución de Cumplimiento</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Cumplimiento', value: summaryStats.compliantParameters || 0 },
+                          { name: 'No Cumplimiento', value: summaryStats.nonCompliantParameters || 0 }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        <Cell fill="#10b981" />
+                        <Cell fill="#ef4444" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             )}
