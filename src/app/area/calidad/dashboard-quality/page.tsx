@@ -71,7 +71,17 @@ type MetalDetectorDailyStats = {
   complianceRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats
+type StaffPracticesDailyStats = {
+  date: string
+  totalRecords: number
+  totalStaff: number
+  compliant: number
+  nonCompliant: number
+  totalParameters: number
+  complianceRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -798,7 +808,7 @@ export default function DashboardQualityPage() {
         setChartData(chartDataArray)
         
         // Calculate daily stats
-        const dailyStatsArray = chartDataArray.map(d => {
+        const dailyStatsArray: DailyStats[] = chartDataArray.map(d => {
           const totalParams = d.compliant + d.nonCompliant
           return {
             date: d.date,
@@ -808,7 +818,7 @@ export default function DashboardQualityPage() {
             nonCompliant: d.nonCompliant,
             totalParameters: totalParams,
             complianceRate: totalParams > 0 ? ((d.compliant / totalParams) * 100).toFixed(1) : '0.0'
-          }
+          } as StaffPracticesDailyStats
         })
         
         setDailyStats(dailyStatsArray)
@@ -1605,32 +1615,37 @@ export default function DashboardQualityPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat: any) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalRecords}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalStaff}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {stat.compliant}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                {stat.nonCompliant}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                              {stat.complianceRate}%
-                            </td>
-                          </tr>
-                        ))}
+                        {dailyStats.map((stat) => {
+                          if ('totalRecords' in stat) {
+                            return (
+                              <tr key={stat.date} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {stat.date}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.totalRecords}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                  {stat.totalStaff}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {stat.compliant}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    {stat.nonCompliant}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                  {stat.complianceRate}%
+                                </td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        })}
                       </tbody>
                     </table>
                   </div>
