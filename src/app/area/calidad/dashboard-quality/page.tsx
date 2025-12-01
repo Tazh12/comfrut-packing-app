@@ -92,7 +92,17 @@ type ForeignMaterialDailyStats = {
   findingsRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats
+type PreOperationalReviewDailyStats = {
+  date: string
+  totalRecords: number
+  totalItems: number
+  compliantItems: number
+  nonCompliantItems: number
+  recordsWithNonCompliance: number
+  complianceRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -1170,7 +1180,7 @@ export default function DashboardQualityPage() {
           nonCompliantItems: d.nonCompliantItems,
           recordsWithNonCompliance: d.recordsWithNonCompliance,
           complianceRate: d.complianceRate
-        }))
+        } as PreOperationalReviewDailyStats))
 
         setDailyStats(dailyStatsArray)
 
