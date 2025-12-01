@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -39,6 +39,22 @@ const registroOperativo: CalidadCard[] = [
     href: '/area/calidad/checklist_producto_mix',
     description: 'Gestión de checklist para mezcla de productos.',
     storageKey: 'checklist-producto-mix-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Foreign Material Findings Record',
+    icon: AlertTriangle,
+    href: '/area/calidad/checklist-foreign-material',
+    description: 'Record de hallazgos de materia extraña.',
+    storageKey: 'checklist-foreign-material-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Pre-Operational Review Processing Areas',
+    icon: ClipboardCheck,
+    href: '/area/calidad/checklist-pre-operational-review',
+    description: 'Áreas de procesamiento de revisión preoperacional.',
+    storageKey: 'checklist-pre-operational-review-draft',
     colorType: 'normal'
   }
 ]

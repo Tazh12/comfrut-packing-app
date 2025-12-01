@@ -71,3 +71,5 @@ const { data, error } = await supabase.storage.createBucket('checklist-staff-pra
 - After creating the bucket, existing PDFs should be accessible immediately
 - New PDFs will be uploaded correctly once the bucket exists
 
+
+

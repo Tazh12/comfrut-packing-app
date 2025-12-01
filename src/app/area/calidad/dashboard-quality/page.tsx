@@ -7,6 +7,8 @@ import { useToast } from '@/context/ToastContext'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
 import { fetchChecklistMetalDetectorData } from '@/lib/supabase/checklistMetalDetector'
 import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffPractices'
+import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForeignMaterial'
+import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { supabase } from '@/lib/supabase'
 import {
   LineChart,
@@ -878,6 +880,335 @@ export default function DashboardQualityPage() {
           complianceRate,
           mostNonCompliantParameter: mostNonCompliantParam
         })
+      } else if (selectedChecklist === 'Foreign Material Findings Record') {
+        const records = await fetchChecklistForeignMaterialData(startDate, endDate)
+        setData(records)
+
+        // Filter records based on selected filters
+        let filteredRecords = records
+        if (selectedBrand) {
+          filteredRecords = filteredRecords.filter((r: any) => 
+            r.brand?.toLowerCase() === selectedBrand.toLowerCase()
+          )
+        }
+        if (selectedProduct) {
+          filteredRecords = filteredRecords.filter((r: any) => 
+            r.product?.toLowerCase().includes(selectedProduct.toLowerCase())
+          )
+        }
+
+        // Extract available options for filters
+        const availableBrands = Array.from(new Set(records.map((r: any) => r.brand).filter(Boolean))).sort()
+        const availableProducts = Array.from(new Set(records.map((r: any) => r.product).filter(Boolean))).sort()
+        setAvailableBrands(availableBrands)
+        setAvailableProducts(availableProducts)
+
+        // Process data for charts - group by date
+        const dateMap = new Map<string, any>()
+        const elementTypeMap = new Map<string, number>()
+        const productCodeMap = new Map<string, number>()
+        const brandMap = new Map<string, { total: number, withFindings: number }>()
+        
+        let totalFindings = 0
+        let totalRecords = filteredRecords.length
+        let recordsWithFindings = 0
+        let recordsNoFindings = 0
+
+        filteredRecords.forEach((record: any) => {
+          const date = record.date_string
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              withFindings: 0,
+              noFindings: 0,
+              totalFindings: 0
+            })
+          }
+          const dayData = dateMap.get(date)!
+          dayData.totalRecords++
+          
+          if (record.no_findings) {
+            recordsNoFindings++
+            dayData.noFindings++
+          } else {
+            recordsWithFindings++
+            dayData.withFindings++
+            const findingsCount = record.findings?.length || 0
+            totalFindings += findingsCount
+            dayData.totalFindings += findingsCount
+            
+            // Count element types
+            record.findings?.forEach((finding: any) => {
+              const elementType = finding.elementType === 'other' 
+                ? finding.otherElementType || 'Other'
+                : finding.elementType
+              elementTypeMap.set(elementType, (elementTypeMap.get(elementType) || 0) + 1)
+              
+              // Track product codes for traceability
+              if (finding.productCode) {
+                productCodeMap.set(finding.productCode, (productCodeMap.get(finding.productCode) || 0) + 1)
+              }
+            })
+          }
+          
+          // Brand stats
+          if (record.brand) {
+            if (!brandMap.has(record.brand)) {
+              brandMap.set(record.brand, { total: 0, withFindings: 0 })
+            }
+            const brandData = brandMap.get(record.brand)!
+            brandData.total++
+            if (!record.no_findings && record.findings?.length > 0) {
+              brandData.withFindings++
+            }
+          }
+        })
+
+        const chartDataArray = Array.from(dateMap.values())
+          .map(d => ({
+            date: d.date,
+            totalRecords: d.totalRecords,
+            withFindings: d.withFindings,
+            noFindings: d.noFindings,
+            totalFindings: d.totalFindings
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+
+        // Daily stats
+        const dailyStatsArray: DailyStats[] = chartDataArray.map(d => ({
+          date: d.date,
+          totalRecords: d.totalRecords,
+          withFindings: d.withFindings,
+          noFindings: d.noFindings,
+          totalFindings: d.totalFindings,
+          findingsRate: d.totalRecords > 0 
+            ? ((d.withFindings / d.totalRecords) * 100).toFixed(1)
+            : '0.0'
+        }))
+
+        setDailyStats(dailyStatsArray)
+
+        // Element type distribution (top 10)
+        const elementTypeArray = Array.from(elementTypeMap.entries())
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+
+        // Product codes with findings (for traceability)
+        const productCodeArray = Array.from(productCodeMap.entries())
+          .map(([code, count]) => ({ code, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+
+        // Brand findings summary
+        const brandFindingsArray = Array.from(brandMap.entries())
+          .map(([brand, data]) => ({
+            brand,
+            total: data.total,
+            withFindings: data.withFindings,
+            findingsRate: data.total > 0 
+              ? ((data.withFindings / data.total) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.withFindings - a.withFindings)
+
+        setSummaryStats({
+          totalRecords,
+          recordsWithFindings,
+          recordsNoFindings,
+          totalFindings,
+          findingsRate: totalRecords > 0 
+            ? ((recordsWithFindings / totalRecords) * 100).toFixed(1)
+            : '0.0',
+          elementTypes: elementTypeArray,
+          productCodes: productCodeArray,
+          brandFindings: brandFindingsArray,
+          topElementType: elementTypeArray[0] || { name: 'N/A', count: 0 },
+          topProductCode: productCodeArray[0] || { code: 'N/A', count: 0 }
+        })
+      } else if (selectedChecklist === 'Pre-Operational Review Processing Areas') {
+        const records = await fetchChecklistPreOperationalReviewData(startDate, endDate)
+        setData(records)
+
+        // Filter records based on selected filters
+        let filteredRecords = records
+        if (selectedBrand) {
+          filteredRecords = filteredRecords.filter((r: any) => 
+            r.brand?.toLowerCase() === selectedBrand.toLowerCase()
+          )
+        }
+        if (selectedProduct) {
+          filteredRecords = filteredRecords.filter((r: any) => 
+            r.product?.toLowerCase().includes(selectedProduct.toLowerCase())
+          )
+        }
+
+        // Extract available options for filters
+        const availableBrands = Array.from(new Set(records.map((r: any) => r.brand).filter(Boolean))).sort()
+        const availableProducts = Array.from(new Set(records.map((r: any) => r.product).filter(Boolean))).sort()
+        setAvailableBrands(availableBrands)
+        setAvailableProducts(availableProducts)
+
+        // Process data for charts - group by date
+        const dateMap = new Map<string, any>()
+        const itemComplianceMap = new Map<string, { comply: number, notComply: number, total: number }>()
+        const brandComplianceMap = new Map<string, { total: number, compliant: number, nonCompliant: number }>()
+        
+        let totalRecords = filteredRecords.length
+        let totalItemsChecked = 0
+        let totalCompliantItems = 0
+        let totalNonCompliantItems = 0
+        let recordsWithNonCompliance = 0
+
+        filteredRecords.forEach((record: any) => {
+          const date = record.date_string
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              totalItems: 0,
+              compliantItems: 0,
+              nonCompliantItems: 0,
+              recordsWithNonCompliance: 0
+            })
+          }
+          const dayData = dateMap.get(date)!
+          dayData.totalRecords++
+          
+          if (record.items && record.items.length > 0) {
+            let hasNonCompliance = false
+            record.items.forEach((item: any) => {
+              totalItemsChecked++
+              dayData.totalItems++
+              
+              // Track item-level compliance
+              const itemName = item.name || item.id
+              if (!itemComplianceMap.has(itemName)) {
+                itemComplianceMap.set(itemName, { comply: 0, notComply: 0, total: 0 })
+              }
+              const itemData = itemComplianceMap.get(itemName)!
+              itemData.total++
+              
+              if (item.comply === true) {
+                totalCompliantItems++
+                dayData.compliantItems++
+                itemData.comply++
+              } else if (item.comply === false) {
+                totalNonCompliantItems++
+                dayData.nonCompliantItems++
+                itemData.notComply++
+                hasNonCompliance = true
+              }
+            })
+            
+            if (hasNonCompliance) {
+              recordsWithNonCompliance++
+              dayData.recordsWithNonCompliance++
+            }
+          }
+          
+          // Brand stats
+          if (record.brand) {
+            if (!brandComplianceMap.has(record.brand)) {
+              brandComplianceMap.set(record.brand, { total: 0, compliant: 0, nonCompliant: 0 })
+            }
+            const brandData = brandComplianceMap.get(record.brand)!
+            brandData.total++
+            
+            // Calculate compliance for this record
+            if (record.items && record.items.length > 0) {
+              const compliantCount = record.items.filter((item: any) => item.comply === true).length
+              const nonCompliantCount = record.items.filter((item: any) => item.comply === false).length
+              
+              if (nonCompliantCount === 0 && compliantCount > 0) {
+                brandData.compliant++
+              } else if (nonCompliantCount > 0) {
+                brandData.nonCompliant++
+              }
+            }
+          }
+        })
+
+        const chartDataArray = Array.from(dateMap.values())
+          .map(d => ({
+            date: d.date,
+            totalRecords: d.totalRecords,
+            totalItems: d.totalItems,
+            compliantItems: d.compliantItems,
+            nonCompliantItems: d.nonCompliantItems,
+            recordsWithNonCompliance: d.recordsWithNonCompliance,
+            complianceRate: d.totalItems > 0 
+              ? ((d.compliantItems / d.totalItems) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+
+        // Daily stats
+        const dailyStatsArray: DailyStats[] = chartDataArray.map(d => ({
+          date: d.date,
+          totalRecords: d.totalRecords,
+          totalItems: d.totalItems,
+          compliantItems: d.compliantItems,
+          nonCompliantItems: d.nonCompliantItems,
+          recordsWithNonCompliance: d.recordsWithNonCompliance,
+          complianceRate: d.complianceRate
+        }))
+
+        setDailyStats(dailyStatsArray)
+
+        // Item compliance distribution (top 10 most non-compliant)
+        const itemComplianceArray = Array.from(itemComplianceMap.entries())
+          .map(([name, data]) => ({
+            name: name.length > 50 ? name.substring(0, 50) + '...' : name,
+            fullName: name,
+            comply: data.comply,
+            notComply: data.notComply,
+            total: data.total,
+            complianceRate: data.total > 0 
+              ? ((data.comply / data.total) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.notComply - a.notComply)
+          .slice(0, 10)
+
+        // Brand compliance summary
+        const brandComplianceArray = Array.from(brandComplianceMap.entries())
+          .map(([brand, data]) => ({
+            brand,
+            total: data.total,
+            compliant: data.compliant,
+            nonCompliant: data.nonCompliant,
+            complianceRate: data.total > 0 
+              ? ((data.compliant / data.total) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.nonCompliant - a.nonCompliant)
+
+        const overallComplianceRate = totalItemsChecked > 0 
+          ? ((totalCompliantItems / totalItemsChecked) * 100).toFixed(1)
+          : '0.0'
+
+        setSummaryStats({
+          totalRecords,
+          totalItemsChecked,
+          totalCompliantItems,
+          totalNonCompliantItems,
+          recordsWithNonCompliance,
+          complianceRate: overallComplianceRate,
+          itemCompliance: itemComplianceArray,
+          brandCompliance: brandComplianceArray,
+          topNonCompliantItem: itemComplianceArray[0] || { name: 'N/A', notComply: 0 },
+          topNonCompliantBrand: brandComplianceArray[0] || { brand: 'N/A', nonCompliant: 0 }
+        })
       }
       
     } catch (error) {
@@ -956,6 +1287,8 @@ export default function DashboardQualityPage() {
                 </option>
                 <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
                 <option value="Staff Good Practices Control">Staff Good Practices Control</option>
+                <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
+                <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
                 <option value="Checklist Monoproducto">Checklist Monoproducto</option>
                 <option value="Checklist Mix Producto">Checklist Mix Producto</option>
               </select>
@@ -1044,7 +1377,9 @@ export default function DashboardQualityPage() {
                   selectedChecklist === 'Process Environmental Temperature Control' ||
                   (selectedChecklist === 'Metal Detector (PCC #1)' && availableBrands.length === 0) ||
                   (selectedChecklist === 'Checklist Monoproducto' && availableBrands.length === 0) ||
-                  (selectedChecklist === 'Checklist Mix Producto' && availableBrands.length === 0)
+                  (selectedChecklist === 'Checklist Mix Producto' && availableBrands.length === 0) ||
+                  (selectedChecklist === 'Foreign Material Findings Record' && availableBrands.length === 0) ||
+                  (selectedChecklist === 'Pre-Operational Review Processing Areas' && availableBrands.length === 0)
                 }
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -1069,7 +1404,9 @@ export default function DashboardQualityPage() {
                   selectedChecklist === 'Process Environmental Temperature Control' ||
                   (selectedChecklist === 'Metal Detector (PCC #1)' && availableProducts.length === 0) ||
                   (selectedChecklist === 'Checklist Monoproducto' && availableProducts.length === 0) ||
-                  (selectedChecklist === 'Checklist Mix Producto' && availableProducts.length === 0)
+                  (selectedChecklist === 'Checklist Mix Producto' && availableProducts.length === 0) ||
+                  (selectedChecklist === 'Foreign Material Findings Record' && availableProducts.length === 0) ||
+                  (selectedChecklist === 'Pre-Operational Review Processing Areas' && availableProducts.length === 0)
                 }
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -1155,6 +1492,56 @@ export default function DashboardQualityPage() {
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       {summaryStats.mostNonCompliantParameter?.count || 0} casos ({summaryStats.mostNonCompliantParameter?.percentage || '0.0'}%)
+                    </p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Foreign Material Findings Record' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-600">
+                    <h3 className="text-sm font-medium text-red-700 mb-1">⚠️ Registros con Hallazgos</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.recordsWithFindings || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.findingsRate || '0.0'}% del total
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Registros Sin Hallazgos</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.recordsNoFindings || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-700">
+                    <h3 className="text-sm font-medium text-red-800 mb-1">🔍 Total de Hallazgos</h3>
+                    <p className="text-2xl font-bold text-red-700">{summaryStats.totalFindings || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.topElementType?.name || 'N/A'} más común
+                    </p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Pre-Operational Review Processing Areas' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Elementos Verificados</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalItemsChecked || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Elementos que Cumplen</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.totalCompliantItems || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.complianceRate || '0.0'}% del total
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-red-700 mb-1">⚠️ Elementos que No Cumplen</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.totalNonCompliantItems || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.recordsWithNonCompliance || 0} registro(s) con no cumplimiento
                     </p>
                   </div>
                 </>
@@ -1444,6 +1831,393 @@ export default function DashboardQualityPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+              </>
+            )}
+
+            {selectedChecklist === 'Foreign Material Findings Record' && (
+              <>
+                {/* Findings Trend Chart - Highlighting Bad Things */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Tendencia de Hallazgos / Findings Trend
+                    <span className="text-sm font-normal text-red-600 ml-2">⚠️ Hallazgos son críticos</span>
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos (Crítico)" />
+                      <Bar dataKey="noFindings" fill="#10b981" name="Sin Hallazgos" />
+                      <Bar dataKey="totalFindings" fill="#dc2626" name="Total Hallazgos" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Element Type Distribution */}
+                {summaryStats.elementTypes && summaryStats.elementTypes.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Distribución de Tipos de Elementos / Element Type Distribution
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.elementTypes} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis 
+                          dataKey="name" 
+                          type="category" 
+                          stroke="#6b7280"
+                          width={150}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="count" fill="#ef4444" name="Cantidad de Hallazgos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Product Codes for Traceability */}
+                {summaryStats.productCodes && summaryStats.productCodes.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow border-2 border-blue-300">
+                    <h2 className="text-xl font-bold text-blue-900 mb-2">
+                      🔍 Códigos de Producto con Hallazgos / Product Codes with Findings
+                    </h2>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Trazabilidad de ingredientes - Ingredient Traceability
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-blue-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">
+                              Código de Producto
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">
+                              Cantidad de Hallazgos
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">
+                              Estado
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {summaryStats.productCodes.map((item: any, index: number) => (
+                            <tr key={index} className="hover:bg-red-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono font-semibold text-gray-900">
+                                {item.code}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                  {item.count} hallazgo(s)
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-200 text-red-900">
+                                  ⚠️ Crítico
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Brand Findings Summary */}
+                {summaryStats.brandFindings && summaryStats.brandFindings.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Hallazgos por Marca / Findings by Brand
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.brandFindings}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="brand"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos" />
+                        <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </>
+            )}
+
+            {selectedChecklist === 'Pre-Operational Review Processing Areas' && (
+              <>
+                {/* Compliance Rate Over Time Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Tasa de Cumplimiento por Fecha</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        stroke="#6b7280"
+                        label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                        domain={[0, 100]}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                        formatter={(value: number) => [`${value}%`, 'Tasa de Cumplimiento']}
+                      />
+                      <Legend />
+                      <ReferenceLine y={100} stroke="#10b981" strokeDasharray="5 5" label={{ value: 'Objetivo (100%)', position: 'right' }} />
+                      <Line
+                        type="monotone"
+                        dataKey="complianceRate"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Tasa de Cumplimiento (%)"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Compliance vs Non-Compliance Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Cumplimiento vs No Cumplimiento por Fecha</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="compliantItems" fill="#10b981" name="Elementos que Cumplen" />
+                      <Bar dataKey="nonCompliantItems" fill="#ef4444" name="Elementos que No Cumplen" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Records with Non-Compliance Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Registros con No Cumplimiento por Fecha</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="totalRecords" fill="#93c5fd" name="Total Registros" />
+                      <Bar dataKey="recordsWithNonCompliance" fill="#ef4444" name="Registros con No Cumplimiento" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Top Non-Compliant Items */}
+                {summaryStats.itemCompliance && summaryStats.itemCompliance.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow border-2 border-red-300">
+                    <h2 className="text-xl font-bold text-red-900 mb-2">
+                      ⚠️ Elementos con Mayor No Cumplimiento / Top Non-Compliant Items
+                    </h2>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Elementos que requieren mayor atención - Items requiring most attention
+                    </p>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.itemCompliance} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis 
+                          dataKey="name" 
+                          type="category" 
+                          stroke="#6b7280"
+                          width={200}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number, name: string) => {
+                            if (name === 'comply') return [`${value}`, 'Cumplen']
+                            if (name === 'notComply') return [`${value}`, 'No Cumplen']
+                            return [`${value}`, name]
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="comply" fill="#10b981" name="Cumplen" />
+                        <Bar dataKey="notComply" fill="#ef4444" name="No Cumplen" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Brand Compliance Summary */}
+                {summaryStats.brandCompliance && summaryStats.brandCompliance.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Cumplimiento por Marca / Compliance by Brand
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.brandCompliance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="brand"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="compliant" fill="#10b981" name="Registros que Cumplen" />
+                        <Bar dataKey="nonCompliant" fill="#ef4444" name="Registros con No Cumplimiento" />
+                        <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Daily Statistics Table */}
+                {dailyStats.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas Diarias</h2>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Fecha
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total Registros
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total Elementos
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Elementos que Cumplen
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Elementos que No Cumplen
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Tasa de Cumplimiento
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {dailyStats.map((stat: any) => (
+                            <tr key={stat.date} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {stat.date}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {stat.totalRecords || 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {stat.totalItems || 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {stat.compliantItems || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  {stat.nonCompliantItems || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                {stat.complianceRate || '0.0'}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

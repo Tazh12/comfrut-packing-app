@@ -8,6 +8,8 @@ import { ArrowLeft } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
 import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffPractices'
+import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForeignMaterial'
+import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -149,6 +151,54 @@ export default function HistorialPage() {
           )
         }
         data = filtered
+      } else if (selected === 'Foreign Material Findings Record') {
+        // Use the special fetch function for foreign material
+        const records = await fetchChecklistForeignMaterialData(fromDate || undefined, toDate || undefined)
+        // Filter by brand, product, or product code
+        let filtered = records
+        if (marca) {
+          filtered = filtered.filter((r: any) => 
+            r.brand?.toLowerCase().includes(marca.toLowerCase())
+          )
+        }
+        if (producto) {
+          filtered = filtered.filter((r: any) => 
+            r.product?.toLowerCase().includes(producto.toLowerCase())
+          )
+        }
+        if (orden) {
+          // Search in product codes from findings
+          filtered = filtered.filter((r: any) => 
+            r.date_string?.includes(orden) || 
+            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.findings?.some((f: any) => f.productCode?.toLowerCase().includes(orden.toLowerCase()))
+          )
+        }
+        data = filtered
+      } else if (selected === 'Pre-Operational Review Processing Areas') {
+        // Use the special fetch function for pre-operational review
+        const records = await fetchChecklistPreOperationalReviewData(fromDate || undefined, toDate || undefined)
+        // Filter by brand, product, or date
+        let filtered = records
+        if (marca) {
+          filtered = filtered.filter((r: any) => 
+            r.brand?.toLowerCase().includes(marca.toLowerCase())
+          )
+        }
+        if (producto) {
+          filtered = filtered.filter((r: any) => 
+            r.product?.toLowerCase().includes(producto.toLowerCase())
+          )
+        }
+        if (orden) {
+          // Search in date_string or brand/product
+          filtered = filtered.filter((r: any) => 
+            r.date_string?.includes(orden) || 
+            r.brand?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.product?.toLowerCase().includes(orden.toLowerCase())
+          )
+        }
+        data = filtered
       }
       
       setResults(data)
@@ -285,6 +335,129 @@ export default function HistorialPage() {
         const fileName = `labpt_${record.orden || record.orden_fabricacion || 'data'}_${record.fecha || ''}`
         exportRecord(record, fileName, format)
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Foreign Material Findings Record') {
+        // Export Foreign Material Findings Record data
+        const record = selectedRecord
+        
+        // Create base record with Section 1 data
+        const flatRecord: any = {
+          'Date / Fecha': record.date_string || '',
+          'Brand / Marca': record.brand || '',
+          'Product / Producto': record.product || '',
+          'Shift / Turno': record.shift || '',
+          'Monitor Name / Nombre del Monitor': record.monitor_name || '',
+          'No Findings / Sin Hallazgos': record.no_findings ? 'Yes / Sí' : 'No / No',
+          'Total Findings': record.no_findings ? 0 : (record.findings?.length || 0)
+        }
+        
+        // If there are findings, create rows - one per finding
+        if (!record.no_findings && record.findings && record.findings.length > 0) {
+          // Create headers for findings
+          const headers = [
+            'Date / Fecha',
+            'Brand / Marca',
+            'Product / Producto',
+            'Shift / Turno',
+            'Monitor Name / Nombre del Monitor',
+            'Finding #',
+            'Hour From / Hora Desde',
+            'Hour To / Hora Hasta',
+            'Finding Description / Descripción del Hallazgo',
+            'Pallet Number Ingredient / Número de Pallet de Ingrediente',
+            'Product Code / Código del Producto',
+            'Element Type / Tipo de Elemento',
+            'Other Element Type / Otro Tipo de Elemento',
+            'Total Amount / Cantidad Total'
+          ]
+          
+          // Create rows - one per finding
+          const rows: any[][] = [headers]
+          
+          record.findings.forEach((finding: any, index: number) => {
+            // Map element types to readable labels
+            const elementTypeLabels: Record<string, string> = {
+              hair: 'Hair / Pelos',
+              insects: 'Insects / Insectos',
+              vegetal_matter: 'Vegetal matter / Material vegetal',
+              paper: 'Paper / Papel',
+              hard_plastic: 'Hard Plastic / Plástico duro',
+              pit: 'Pit / Cuesco',
+              metal_piece: 'Metal piece / Pieza de metal',
+              product_mixed: 'Product mixed / Mezcla producto',
+              wood: 'Wood / Madera',
+              dirt: 'Dirt / Tierra',
+              stone: 'Stone / Piedra',
+              cardboard: 'Cardboard / Cartón',
+              tape: 'Tape / Fibra de cinta',
+              textile_fibres: 'Textile fibres / Fibra textil',
+              spiders: 'Spiders / Arañas',
+              feathers: 'Feathers / Plumas',
+              worms_larvae: 'Worms-larvae / Gusanos-larvas',
+              slug_snail: 'Babosas-caracol / Slug-snail',
+              soft_plastic: 'Soft plastic / Plástico blando',
+              other: 'Other / Otro'
+            }
+            
+            const elementTypeLabel = finding.elementType === 'other' 
+              ? finding.otherElementType || 'Other / Otro'
+              : elementTypeLabels[finding.elementType] || finding.elementType
+            
+            const row = [
+              record.date_string || '',
+              record.brand || '',
+              record.product || '',
+              record.shift || '',
+              record.monitor_name || '',
+              index + 1,
+              finding.hourFrom || '',
+              finding.hourTo || '',
+              finding.findingDescription || '',
+              finding.palletNumberIngredient || '',
+              finding.productCode || '',
+              elementTypeLabel,
+              finding.elementType === 'other' ? (finding.otherElementType || '') : '',
+              finding.totalAmount || ''
+            ]
+            rows.push(row)
+          })
+          
+          const fileName = `foreign_material_findings_${record.date_string || 'data'}_${record.shift?.replace(/\s+/g, '_') || ''}`
+          exportToFile(rows, fileName, format, 'Foreign Material Findings')
+        } else {
+          // No findings - export as single record
+          const fileName = `foreign_material_no_findings_${record.date_string || 'data'}_${record.shift?.replace(/\s+/g, '_') || ''}`
+          exportRecord(flatRecord, fileName, format)
+        }
+        
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Pre-Operational Review Processing Areas') {
+        // Export Pre-Operational Review data
+        const record = selectedRecord
+        const flatRecord: any = {
+          'Date': record.date_string || '',
+          'Hour': record.hour_string || '',
+          'Brand': record.brand || '',
+          'Product': record.product || '',
+          'Monitor Name': record.monitor_name || '',
+          'Total Items': record.items?.length || 0,
+        }
+        
+        // Add items as separate columns using actual item names as headers
+        if (record.items && record.items.length > 0) {
+          record.items.forEach((item: any) => {
+            const itemName = item.name || ''
+            // Use the full item name as the base for column headers
+            flatRecord[`${itemName} - Comply`] = item.comply === true ? 'Comply' : item.comply === false ? 'Not Comply' : 'N/A'
+            flatRecord[`${itemName} - Observation`] = item.observation || ''
+            flatRecord[`${itemName} - Corrective Action`] = item.correctiveAction || ''
+            flatRecord[`${itemName} - Corrective Action Status`] = item.correctiveActionComply === true ? 'Comply' : item.correctiveActionComply === false ? 'Not Comply' : 'N/A'
+            flatRecord[`${itemName} - Corrective Action Observation`] = item.correctiveActionObservation || ''
+          })
+        }
+        
+        const fileName = `pre_operational_review_${record.date_string || 'data'}_${record.hour_string?.replace(':', '') || ''}`
+        exportRecord(flatRecord, fileName, format)
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -319,8 +492,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control') {
-          // For Temp and Staff Practices checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas') {
+          // For Temp, Staff Practices, and Pre-Operational Review checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -340,25 +513,35 @@ export default function HistorialPage() {
 
         const orden = selectedRecord.orden_fabricacion || selectedRecord.orden
 
-        const pdfFile = fileList.find((file) =>
-          file.name.endsWith(`-${orden}.pdf`)
-        )
-        if (pdfFile) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('checklistcalidad')
-            .getPublicUrl(pdfFile.name)
-          setPdfUrl(publicUrl)
+        // For Foreign Material and Pre-Operational Review, use pdf_url directly if available
+        if ((selected === 'Foreign Material Findings Record' || selected === 'Pre-Operational Review Processing Areas') && selectedRecord.pdf_url) {
+          setPdfUrl(selectedRecord.pdf_url)
+          setLoadingFiles(false)
+          return
         }
 
-        const excelFile = fileList.find((file) =>
-          file.name.toLowerCase().includes(orden.toLowerCase()) &&
-          file.name.endsWith('.xlsx')
-        )
-        if (excelFile) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('checklistcalidad')
-            .getPublicUrl(excelFile.name)
-          setExcelUrl(publicUrl)
+        // For other checklists, search for PDF files
+        if (orden) {
+          const pdfFile = fileList.find((file) =>
+            file.name.endsWith(`-${orden}.pdf`)
+          )
+          if (pdfFile) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('checklistcalidad')
+              .getPublicUrl(pdfFile.name)
+            setPdfUrl(publicUrl)
+          }
+
+          const excelFile = fileList.find((file) =>
+            orden && file.name.toLowerCase().includes(orden.toLowerCase()) &&
+            file.name.endsWith('.xlsx')
+          )
+          if (excelFile) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('checklistcalidad')
+              .getPublicUrl(excelFile.name)
+            setExcelUrl(publicUrl)
+          }
         }
       } catch (error: any) {
         console.error('Error al buscar archivos:', error)
@@ -393,6 +576,8 @@ export default function HistorialPage() {
             <option value="Ensayos Microbiológicos Lab PT">Ensayos Microbiológicos Lab PT</option>
             <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
             <option value="Staff Good Practices Control">Staff Good Practices Control</option>
+            <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
+            <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
           </select>
         </div>
         <div>
@@ -448,7 +633,7 @@ export default function HistorialPage() {
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
           />
         </div>
-        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
+        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto' || selected === 'Pre-Operational Review Processing Areas') && (
           <div>
             <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">Marca/Cliente</label>
             <input
@@ -507,7 +692,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -528,6 +713,23 @@ export default function HistorialPage() {
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Personal</th>
                   </>
                 )}
+                  {selected === 'Foreign Material Findings Record' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Producto</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Hallazgos</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                    </>
+                  )}
+                  {selected === 'Pre-Operational Review Processing Areas' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Hora</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Producto</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Cumplimiento</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca/Cliente</th>
                 )}
@@ -540,7 +742,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -564,6 +766,51 @@ export default function HistorialPage() {
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.staff_members?.length || 0} miembro(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Foreign Material Findings Record' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.brand || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.product || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.shift || '-'}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {record.no_findings ? (
+                          <span className="text-green-600 font-semibold">Sin Hallazgos</span>
+                        ) : (
+                          <span className="text-red-600 font-semibold">
+                            {record.findings?.length || 0} hallazgo(s)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                    </>
+                  )}
+                  {selected === 'Pre-Operational Review Processing Areas' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.hour_string || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.brand || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.product || '-'}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {record.items && record.items.length > 0 ? (
+                          (() => {
+                            const totalItems = record.items.length
+                            const compliantItems = record.items.filter((item: any) => item.comply === true).length
+                            const nonCompliantItems = record.items.filter((item: any) => item.comply === false).length
+                            const complianceRate = totalItems > 0 ? ((compliantItems / totalItems) * 100).toFixed(1) : '0'
+                            return (
+                              <span className={`font-semibold ${
+                                complianceRate === '100' ? 'text-green-600' : 
+                                parseFloat(complianceRate) >= 80 ? 'text-yellow-600' : 
+                                'text-red-600'
+                              }`}>
+                                {complianceRate}% ({compliantItems}/{totalItems})
+                              </span>
+                            )
+                          })()
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                     </>
                   )}
