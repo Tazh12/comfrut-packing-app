@@ -2409,7 +2409,7 @@ export default function DashboardQualityPage() {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {dailyStats.map((stat) => {
-                          if ('totalRecords' in stat) {
+                          if ('totalStaff' in stat) {
                             return (
                               <tr key={stat.date} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
