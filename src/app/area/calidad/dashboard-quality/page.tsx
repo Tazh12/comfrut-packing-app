@@ -83,7 +83,16 @@ type StaffPracticesDailyStats = {
   complianceRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats
+type ForeignMaterialDailyStats = {
+  date: string
+  totalRecords: number
+  withFindings: number
+  noFindings: number
+  totalFindings: number
+  findingsRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -989,7 +998,7 @@ export default function DashboardQualityPage() {
           findingsRate: d.totalRecords > 0 
             ? ((d.withFindings / d.totalRecords) * 100).toFixed(1)
             : '0.0'
-        }))
+        } as ForeignMaterialDailyStats))
 
         setDailyStats(dailyStatsArray)
 
