@@ -1,71 +1,28 @@
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' }
-  ]
-})
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { 
+  PDFStyles, 
+  PDFHeader, 
+  PDFMetaInfo, 
+  PDFFooter, 
+  PDFSectionTitle,
+  PDFStatusBadge
+} from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
-  page: {
-    padding: 30,
-    fontFamily: 'Roboto',
-    backgroundColor: '#ffffff',
-    fontSize: 10
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-    color: '#005F9E'
-  },
-  subtitle: {
-    fontSize: 10,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#4B5563'
-  },
   section: {
     marginBottom: 20
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#111827',
-    backgroundColor: '#F3F4F6',
-    padding: 8,
-    borderRadius: 4
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-    paddingVertical: 3
-  },
-  infoLabel: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    width: '40%',
-    color: '#374151'
-  },
-  infoValue: {
-    fontSize: 9,
-    width: '60%',
-    color: '#111827'
-  },
   signatureBox: {
-    width: '45%',
-    marginBottom: 15,
+    marginTop: 10,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 4,
-    padding: 5,
-    minHeight: 80
+    padding: 10,
+    minHeight: 70,
+    backgroundColor: '#FAFAFA',
+    width: '48%'
   },
   signatureLabel: {
     fontSize: 8,
@@ -75,63 +32,43 @@ const styles = StyleSheet.create({
   },
   signatureImage: {
     width: '100%',
-    maxHeight: 60,
+    maxHeight: 50,
     objectFit: 'contain'
   },
   table: {
     marginTop: 10,
-    marginBottom: 15
+    marginBottom: 15,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 4
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    padding: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB'
+    backgroundColor: '#005F9E',
+    padding: 8,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4
   },
   tableHeaderText: {
     fontSize: 8,
     fontWeight: 'bold',
-    color: '#111827'
+    color: '#FFFFFF'
   },
   tableRow: {
     flexDirection: 'row',
     padding: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB'
+    borderBottomColor: '#E5E7EB',
+    minHeight: 28
+  },
+  tableRowEven: {
+    backgroundColor: '#F9FAFB'
   },
   tableCell: {
     fontSize: 8,
     color: '#111827',
     flex: 1
-  },
-  statusBadge: {
-    padding: 3,
-    borderRadius: 2,
-    width: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  statusWithinRange: {
-    backgroundColor: '#D1FAE5',
-    color: '#065F46'
-  },
-  statusOutOfRange: {
-    backgroundColor: '#FEE2E2',
-    color: '#991B1B'
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 30,
-    right: 30,
-    textAlign: 'center',
-    color: '#9CA3AF',
-    fontSize: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 10
   },
   graphContainer: {
     marginTop: 15,
@@ -599,41 +536,54 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
     verificationDate: ''
   }
 
+  const creationDate = new Date().toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
   return (
     <Document>
       {/* First Page: Section 1 and Section 2 with Graph */}
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Process Environmental Temperature Control</Text>
-        <Text style={styles.subtitle}>Code: CF/PC-ASC-009-RG001</Text>
+      <Page size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Process Environmental Temperature Control"
+          titleEs="Control de temperatura ambiental del proceso"
+          documentCode="CF/PC-ASC-009-RG001"
+          version="V.01"
+          date={data.section1.date}
+        />
 
-        {/* Section 1: Basic Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Section 1 – Basic Info</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date:</Text>
-            <Text style={styles.infoValue}>{data.section1.date}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Shift:</Text>
-            <Text style={styles.infoValue}>{data.section1.shift}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Monitor Name:</Text>
-            <Text style={styles.infoValue}>{data.section1.monitorName}</Text>
-          </View>
-          <View style={styles.signatureBox}>
-            <Text style={styles.signatureLabel}>Monitor Signature:</Text>
-            {data.section1.monitorSignature ? (
-              <Image src={data.section1.monitorSignature} style={styles.signatureImage} />
-            ) : (
-              <Text style={{ fontSize: 8, color: '#9CA3AF' }}>No signature provided</Text>
-            )}
-          </View>
+        {/* Meta Info Block */}
+        <PDFMetaInfo
+          leftColumn={[
+            { label: 'Date', value: data.section1.date },
+            { label: 'Shift', value: data.section1.shift }
+          ]}
+          rightColumn={[
+            { label: 'Monitor Name', value: data.section1.monitorName }
+          ]}
+        />
+
+        {/* Signature */}
+        <View style={styles.signatureBox}>
+          <Text style={styles.signatureLabel}>Monitor Signature</Text>
+          {data.section1.monitorSignature ? (
+            <Image src={data.section1.monitorSignature} style={styles.signatureImage} />
+          ) : (
+            <Text style={{ fontSize: 8, color: '#9CA3AF' }}>No signature provided</Text>
+          )}
         </View>
 
         {/* Section 2: Temperature Readings - Keep together with graph */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Section 2 – Dynamic Temperature Readings</Text>
+          <PDFSectionTitle 
+            titleEn="Section 2 – Dynamic Temperature Readings"
+            titleEs="Sección 2 – Lecturas dinámicas de temperatura"
+          />
           <View style={styles.table}>
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Time</Text>
@@ -643,33 +593,34 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
               <Text style={[styles.tableHeaderText, { flex: 2 }]}>Status</Text>
               <Text style={[styles.tableHeaderText, { flex: 2 }]}>Observation</Text>
             </View>
-            {data.section2.readings.map((reading, index) => (
-              <View key={index} style={styles.tableRow}>
-                <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.time}</Text>
-                <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.digitalThermometer}</Text>
-                <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.wallThermometer}</Text>
-                <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.averageTemp.toFixed(1)}</Text>
-                <View style={[styles.tableCell, { flex: 2, flexShrink: 0 }]}>
-                  <View style={[
-                    styles.statusBadge,
-                    reading.status === 'Within Range' ? styles.statusWithinRange : styles.statusOutOfRange
-                  ]}>
-                    <Text 
-                      style={[
-                        { fontSize: 7, textAlign: 'center' },
-                        reading.status === 'Within Range' ? { color: '#065F46' } : { color: '#991B1B' }
-                      ]}
-                      wrap={false}
-                    >
-                      {reading.status === 'Within Range' ? 'Within Range' : reading.status === 'Over Limit' ? 'Over Limit' : 'Under Limit'}
-                    </Text>
+            {data.section2.readings.map((reading, index) => {
+              const statusType = reading.status === 'Within Range' 
+                ? 'withinRange' 
+                : reading.status === 'Over Limit' 
+                ? 'overLimit' 
+                : 'underLimit'
+              
+              return (
+                <View key={index} style={[
+                  styles.tableRow,
+                  index % 2 === 0 ? styles.tableRowEven : {}
+                ]}>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.time}</Text>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.digitalThermometer}</Text>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.wallThermometer}</Text>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{reading.averageTemp.toFixed(1)}</Text>
+                  <View style={[styles.tableCell, { flex: 2, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }]}>
+                    <PDFStatusBadge 
+                      status={statusType}
+                      customText={reading.status}
+                    />
                   </View>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>
+                    {reading.observation || '-'}
+                  </Text>
                 </View>
-                <Text style={[styles.tableCell, { flex: 2 }]}>
-                  {reading.observation || '-'}
-                </Text>
-              </View>
-            ))}
+              )
+            })}
           </View>
 
           {/* Temperature Graph - Keep together with Section 2 */}
@@ -678,29 +629,35 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
           )}
         </View>
 
-        <Text style={styles.footer}>
-          This document is part of Comfrut's quality management system.
-        </Text>
+        <PDFFooter pageNumber={1} totalPages={2} creationTimestamp={creationDate} />
       </Page>
 
       {/* Second Page: Section 3 */}
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Process Environmental Temperature Control</Text>
-        <Text style={styles.subtitle}>Code: CF/PC-ASC-009-RG001</Text>
+      <Page size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Process Environmental Temperature Control"
+          titleEs="Control de temperatura ambiental del proceso"
+          documentCode="CF/PC-ASC-009-RG001"
+          version="V.01"
+          date={data.section1.date}
+        />
 
         {/* Section 3: Final Verification */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Section 3 – Final Verification</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Checker Name:</Text>
-            <Text style={styles.infoValue}>{section3Data.checkerName || ''}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Verification Date:</Text>
-            <Text style={styles.infoValue}>{section3Data.verificationDate || ''}</Text>
-          </View>
+          <PDFSectionTitle 
+            titleEn="Section 3 – Final Verification"
+            titleEs="Sección 3 – Verificación final"
+          />
+          <PDFMetaInfo
+            leftColumn={[
+              { label: 'Checker Name', value: section3Data.checkerName || '-' },
+              { label: 'Verification Date', value: section3Data.verificationDate || '-' }
+            ]}
+            rightColumn={[]}
+          />
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureLabel}>Checker Signature:</Text>
+            <Text style={styles.signatureLabel}>Checker Signature</Text>
             {section3Data.checkerSignature ? (
               <Image src={section3Data.checkerSignature} style={styles.signatureImage} />
             ) : (
@@ -709,9 +666,7 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
           </View>
         </View>
 
-        <Text style={styles.footer}>
-          This document is part of Comfrut's quality management system.
-        </Text>
+        <PDFFooter pageNumber={2} totalPages={2} creationTimestamp={creationDate} />
       </Page>
     </Document>
   )

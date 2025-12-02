@@ -9,7 +9,6 @@ import {
   StyleSheet,
   PDFDownloadLink,
   Image,
-  Font,
   pdf,
   PDFViewer
 } from '@react-pdf/renderer'
@@ -17,99 +16,41 @@ import { ChecklistItem, PhotoUpload } from '@/context/ChecklistContext'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ChecklistRecord } from '@/lib/checklist'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' }
-  ]
-})
-
-const logoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAABaCAYAAAD3fJq9AAABHmlDQ1BJQ0MgUHJvZmlsZQAAeJx9kT1Iw0AcxV/TKhZRK1KioCgUFPYICiqFChVQsgoPgpC4qXPohNH0ELFy1cHEQfHh1dXAVB8AfFx1c3NS0EQ/Il3S0UQFQ9PTEni8VFiKCbYc5833/f2HUIFqRprjYArpmhGlsKC4jyRFEkDHPwQr0jU98R1fYWBkfe34++7l4l1fMf+gFqZ5jgOcIbpk2dCz4nHGsMKz3i+e8UTzzCLOZFvE58YVIZrHd4nHLM4yxzrHMkJYpvEldRFXOseK4lWpKRih0U2qrFPFXuRJd0Rz9xgVNxlO+ZWRgkscAIlBFBik3cgKQjhS0iIYlBWKmclEXr/IDv9X9sxk0IlLFMDGkEEGCpKVPn/g9u7O7zZ6t0hMYzz+XW9gD7czqK9gYz7eI2CwOgA1fYfC+tgZj0AdB2Cbj5xnFYE9R8ATr7BJABKZghqQkWTcCAHcdAxrfYXce7/17TrGf4HwvnL3hHy0SgAAAAlwSFlzAAAuIwAALiMBeKU/dgAAAAd0SU1FB+cGChAKIG1U5vQ="
+import { 
+  PDFStyles, 
+  PDFHeader, 
+  PDFMetaInfo, 
+  PDFFooter, 
+  PDFStatusBadge
+} from '@/lib/pdf-layout'
 
 // Estilos
 const styles = StyleSheet.create({
-  page: {
-    padding: 30,
-    fontSize: 9,
-    fontFamily: 'Roboto',
-    backgroundColor: '#ffffff'
-  },
-  header: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingBottom: 20
-  },
-  logo: {
-    width: 120,
-    marginRight: 40
-  },
-  documentInfo: {
-    position: 'absolute',
-    top: 10,
-    right: 30,
-    fontSize: 8,
-    color: '#6B7280'
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 15,
-    color: '#005F9E'
-  },
-  subtitle: {
-    fontSize: 10,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#4B5563'
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    flexWrap: 'wrap',
-    backgroundColor: '#F3F4F6',
-    padding: 10,
-    borderRadius: 4
-  },
-  infoGroup: {
-    marginBottom: 8,
-    minWidth: '45%'
-  },
-  infoLabel: {
-    fontWeight: 'bold',
-    marginRight: 5,
-    color: '#374151'
-  },
-  infoValue: {
-    color: '#111827'
-  },
   table: {
     width: '100%',
     marginBottom: 20,
-    fontSize: 7
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 4
   },
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#005F9E',
-    padding: 6,
-    fontSize: 7,
-    color: '#ffffff',
+    padding: 8,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4
+  },
+  tableHeaderText: {
+    fontSize: 8,
     fontWeight: 'bold',
-    alignItems: 'center'
+    color: '#FFFFFF'
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     minHeight: 28,
-    padding: 4,
+    padding: 6,
     alignItems: 'flex-start'
   },
   tableRowEven: {
@@ -118,11 +59,13 @@ const styles = StyleSheet.create({
   colNum: {
     width: '6%',
     paddingHorizontal: 2,
-    textAlign: 'center'
+    textAlign: 'center',
+    fontSize: 9
   },
   colItem: {
     width: '34%',
-    paddingHorizontal: 4
+    paddingHorizontal: 4,
+    fontSize: 9
   },
   colStatus: {
     width: '12%',
@@ -132,28 +75,14 @@ const styles = StyleSheet.create({
   colComment: {
     width: '24%',
     paddingHorizontal: 4,
-    flexWrap: 'wrap'
+    flexWrap: 'wrap',
+    fontSize: 9
   },
   colAction: {
     width: '24%',
     paddingHorizontal: 4,
-    flexWrap: 'wrap'
-  },
-  statusText: {
-    textAlign: 'center',
-    color: '#111827',
-    fontSize: 7,
-    width: '100%'
-  },
-  statusCumple: {
-    color: '#059669' // Verde
-  },
-  statusNoCumple: {
-    color: '#DC2626' // Rojo
-  },
-  photosPage: {
-    padding: 30,
-    backgroundColor: '#ffffff'
+    flexWrap: 'wrap',
+    fontSize: 9
   },
   photoSection: {
     marginBottom: 25
@@ -165,7 +94,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   photoTitle: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: 'bold',
     color: '#005F9E',
     marginBottom: 4
@@ -183,30 +112,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff'
   },
   photo: {
-    width: '100%',
-    height: 180,
-    objectFit: 'contain'
-  },
-  photoCaption: {
-    fontSize: 9,
-    color: '#4B5563',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic'
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 30,
-    right: 30,
-    textAlign: 'center',
-    color: '#9CA3AF',
-    fontSize: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 10
-  },
-  image: {
     width: '100%',
     height: 180,
     objectFit: 'contain'
@@ -300,93 +205,50 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
     }
   }
 
-  // Función para obtener el estilo del estado
-  const getStatusStyle = (status: string | undefined) => {
-    switch (status) {
-      case 'cumple':
-        return styles.statusCumple
-      case 'no_cumple':
-        return styles.statusNoCumple
-      default:
-        return {}
-    }
-  }
+  const creationDate = new Date().toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        {/* Información del documento */}
-        <View style={styles.header}>
-          <Image
-            src={logoBase64}
-            style={styles.logo}
-          />
-          <Text style={styles.documentInfo}>V.03</Text>
-        </View>
+      <Page size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Checklist Packing Machine"
+          titleEs="Checklist envasadora"
+          documentCode="CD/PC-PG-PRO-001-RG001"
+          version="V.03"
+          date={formattedDate}
+        />
 
-        {/* Título y subtítulo */}
-        <Text style={styles.title}>
-          Checklist packing machine / Checklist envasadora
-        </Text>
-        <Text style={styles.subtitle}>
-          CD/PC-PG-PRO-001-RG001
-        </Text>
-
-        {/* Información del personal y detalles */}
-        <View style={styles.infoContainer}>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Fecha:</Text>
-              <Text style={styles.infoValue}>{formattedDate}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Jefe de Línea:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.lineManager}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Operador:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.operator}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Orden de Fabricación:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.ordenFabricacion}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Marca:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.brand}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>Material:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.material}</Text>
-            </Text>
-          </View>
-          <View style={styles.infoGroup}>
-            <Text>
-              <Text style={styles.infoLabel}>SKU:</Text>
-              <Text style={styles.infoValue}>{safeMetadata.sku}</Text>
-            </Text>
-          </View>
-        </View>
+        {/* Meta Info Block */}
+        <PDFMetaInfo
+          leftColumn={[
+            { label: 'Fecha', value: formattedDate },
+            { label: 'Jefe de Línea', value: safeMetadata.lineManager },
+            { label: 'Operador', value: safeMetadata.operator },
+            { label: 'Orden de Fabricación', value: safeMetadata.ordenFabricacion }
+          ]}
+          rightColumn={[
+            { label: 'Marca', value: safeMetadata.brand },
+            { label: 'Material', value: safeMetadata.material },
+            { label: 'SKU', value: safeMetadata.sku }
+          ]}
+        />
 
         {/* Tabla de checklist */}
         <View style={styles.table}>
           {/* Encabezado de la tabla */}
           <View style={styles.tableHeader}>
-            <Text style={styles.colNum}>#</Text>
-            <Text style={styles.colItem}>Item</Text>
-            <Text style={styles.colStatus}>Estado</Text>
-            <Text style={styles.colComment}>Comentario</Text>
-            <Text style={styles.colAction}>Acción correctiva</Text>
+            <Text style={[styles.tableHeaderText, styles.colNum]}>#</Text>
+            <Text style={[styles.tableHeaderText, styles.colItem]}>Item</Text>
+            <Text style={[styles.tableHeaderText, styles.colStatus]}>Estado</Text>
+            <Text style={[styles.tableHeaderText, styles.colComment]}>Comentario</Text>
+            <Text style={[styles.tableHeaderText, styles.colAction]}>Acción correctiva</Text>
           </View>
 
           {/* Filas de la tabla */}
@@ -400,9 +262,16 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
             >
               <Text style={styles.colNum}>{item.id}</Text>
               <Text style={styles.colItem}>{item.nombre}</Text>
-              <Text style={[styles.statusText, getStatusStyle(item.status)]}>
-                {getStatusText(item.status)}
-              </Text>
+              <View style={styles.colStatus}>
+                {item.status ? (
+                  <PDFStatusBadge 
+                    status={item.status === 'cumple' ? 'comply' : 'notComply'}
+                    customText={getStatusText(item.status)}
+                  />
+                ) : (
+                  <Text style={{ fontSize: 8, color: '#9CA3AF' }}>-</Text>
+                )}
+              </View>
               <Text style={styles.colComment}>{item.comment || ''}</Text>
               <Text style={styles.colAction}>{item.correctiveAction || ''}</Text>
             </View>
@@ -410,17 +279,24 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         </View>
 
         {/* Pie de página */}
-        <Text style={styles.footer}>
-          Este documento es parte del sistema de gestión de calidad de Comfrut
-        </Text>
+        <PDFFooter creationTimestamp={creationDate} />
       </Page>
 
       {/* Segunda página: Fotos */}
-      <Page size="A4" style={styles.photosPage}>
+      <Page size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Checklist Packing Machine"
+          titleEs="Checklist envasadora"
+          documentCode="CD/PC-PG-PRO-001-RG001"
+          version="V.03"
+          date={formattedDate}
+        />
+
         {/* Foto 1: Codificación de bolsa */}
         <View style={styles.photoSection}>
           <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Foto 1</Text>
+            <Text style={styles.photoTitle}>Photo 1</Text>
             <Text style={styles.photoSubtitle}>Vista general del equipo</Text>
           </View>
           <View style={styles.photoFrame}>
@@ -433,7 +309,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         {/* Foto 2: Codificación de caja */}
         <View style={styles.photoSection}>
           <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Foto 2</Text>
+            <Text style={styles.photoTitle}>Photo 2</Text>
             <Text style={styles.photoSubtitle}>Detalle específico</Text>
           </View>
           <View style={styles.photoFrame}>
@@ -446,7 +322,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         {/* Foto 3: Etiqueta adicional */}
         <View style={styles.photoSection}>
           <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Foto 3</Text>
+            <Text style={styles.photoTitle}>Photo 3</Text>
             <Text style={styles.photoSubtitle}>Detalle adicional</Text>
           </View>
           <View style={styles.photoFrame}>
@@ -457,9 +333,7 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         </View>
 
         {/* Pie de página */}
-        <Text style={styles.footer}>
-          Registro fotográfico del proceso de packaging - Página 2/2
-        </Text>
+        <PDFFooter pageNumber={2} totalPages={2} creationTimestamp={creationDate} />
       </Page>
     </Document>
   );

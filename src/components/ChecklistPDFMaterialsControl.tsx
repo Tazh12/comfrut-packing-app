@@ -1,71 +1,28 @@
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' }
-  ]
-})
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { 
+  PDFStyles, 
+  PDFHeader, 
+  PDFMetaInfo, 
+  PDFFooter, 
+  PDFSectionTitle,
+  PDFStatusBadge
+} from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
-  page: {
-    padding: 30,
-    fontFamily: 'Roboto',
-    backgroundColor: '#ffffff',
-    fontSize: 10
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-    color: '#005F9E'
-  },
-  subtitle: {
-    fontSize: 10,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#4B5563'
-  },
   section: {
     marginBottom: 20
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#111827',
-    backgroundColor: '#F3F4F6',
-    padding: 8,
-    borderRadius: 4
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-    paddingVertical: 3
-  },
-  infoLabel: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    width: '40%',
-    color: '#374151'
-  },
-  infoValue: {
-    fontSize: 9,
-    width: '60%',
-    color: '#111827'
-  },
   signatureBox: {
-    width: '45%',
-    marginBottom: 15,
+    marginTop: 10,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 4,
-    padding: 5,
-    minHeight: 80
+    padding: 10,
+    minHeight: 70,
+    backgroundColor: '#FAFAFA',
+    width: '48%'
   },
   signatureLabel: {
     fontSize: 8,
@@ -75,7 +32,7 @@ const styles = StyleSheet.create({
   },
   signatureImage: {
     width: '100%',
-    maxHeight: 60,
+    maxHeight: 50,
     objectFit: 'contain'
   },
   personnelContainer: {
@@ -253,11 +210,10 @@ const PersonnelMaterialSection: React.FC<{
         
         <View style={styles.materialRow}>
           <Text style={styles.materialLabel}>Material Status:</Text>
-          <View style={[styles.statusBadge, isGoodStatus ? styles.statusGood : styles.statusBad]}>
-            <Text style={{ fontSize: 7, textAlign: 'center', color: isGoodStatus ? '#065F46' : '#991B1B' }}>
-              {personnel.materialStatus}
-            </Text>
-          </View>
+          <PDFStatusBadge 
+            status={isGoodStatus ? 'comply' : 'notComply'}
+            customText={personnel.materialStatus}
+          />
         </View>
         
         {/* Observation if exists */}
@@ -287,11 +243,10 @@ const PersonnelMaterialSection: React.FC<{
         
         <View style={styles.materialRow}>
           <Text style={styles.materialLabel}>Material Status Received:</Text>
-          <View style={[styles.statusBadge, isGoodStatusReceived ? styles.statusGood : styles.statusBad]}>
-            <Text style={{ fontSize: 7, textAlign: 'center', color: isGoodStatusReceived ? '#065F46' : '#991B1B' }}>
-              {personnel.materialStatusReceived}
-            </Text>
-          </View>
+          <PDFStatusBadge 
+            status={isGoodStatusReceived ? 'comply' : 'notComply'}
+            customText={personnel.materialStatusReceived}
+          />
         </View>
         
         {/* Observation Received if exists */}
@@ -318,34 +273,40 @@ export const ChecklistMaterialsControlPDFDocument: React.FC<ChecklistMaterialsCo
     const endIndex = Math.min(startIndex + personnelPerPage, data.section2.personnelMaterials.length)
     const pagePersonnel = data.section2.personnelMaterials.slice(startIndex, endIndex)
 
+    const creationDate = new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
     pages.push(
-      <Page key={pageIndex} size="A4" style={styles.page}>
-        <Text style={styles.title}>Internal control of materials used in production areas</Text>
-        <Text style={styles.subtitle}>Control interno de materiales usados en áreas productivas</Text>
-        <Text style={styles.subtitle}>Code: CF/PC-ASC-004-RG008</Text>
+      <Page key={pageIndex} size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Internal Control of Materials Used in Production Areas"
+          titleEs="Control interno de materiales usados en áreas productivas"
+          documentCode="CF/PC-ASC-004-RG008"
+          version="V.01"
+          date={data.section1.date}
+        />
 
         {/* Section 1: Basic Info - Only show on first page */}
         {pageIndex === 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Section 1 – Basic Info</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Date:</Text>
-              <Text style={styles.infoValue}>{data.section1.date}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Productive Area:</Text>
-              <Text style={styles.infoValue}>{data.section1.productiveArea}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Line Manager Name:</Text>
-              <Text style={styles.infoValue}>{data.section1.lineManagerName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Monitor Name:</Text>
-              <Text style={styles.infoValue}>{data.section1.monitorName}</Text>
-            </View>
+            <PDFMetaInfo
+              leftColumn={[
+                { label: 'Date', value: data.section1.date },
+                { label: 'Productive Area', value: data.section1.productiveArea }
+              ]}
+              rightColumn={[
+                { label: 'Line Manager Name', value: data.section1.lineManagerName },
+                { label: 'Monitor Name', value: data.section1.monitorName }
+              ]}
+            />
             <View style={styles.signatureBox}>
-              <Text style={styles.signatureLabel}>Monitor Signature:</Text>
+              <Text style={styles.signatureLabel}>Monitor Signature</Text>
               {data.section1.monitorSignature ? (
                 <Image src={data.section1.monitorSignature} style={styles.signatureImage} />
               ) : (
@@ -358,7 +319,10 @@ export const ChecklistMaterialsControlPDFDocument: React.FC<ChecklistMaterialsCo
         {/* Section 2: Personnel Materials */}
         <View style={styles.section}>
           {pageIndex === 0 && (
-            <Text style={styles.sectionTitle}>Section 2 – Personnel Materials</Text>
+            <PDFSectionTitle 
+              titleEn="Section 2 – Personnel Materials"
+              titleEs="Sección 2 – Materiales del personal"
+            />
           )}
           {pagePersonnel.map((personnel, idx) => (
             <PersonnelMaterialSection
@@ -369,10 +333,11 @@ export const ChecklistMaterialsControlPDFDocument: React.FC<ChecklistMaterialsCo
           ))}
         </View>
 
-        <Text style={styles.footer}>
-          This document is part of Comfrut's quality management system.
-          {totalPages > 1 && ` Page ${pageIndex + 1} of ${totalPages}`}
-        </Text>
+        <PDFFooter 
+          pageNumber={pageIndex + 1} 
+          totalPages={totalPages} 
+          creationTimestamp={creationDate} 
+        />
       </Page>
     )
   }

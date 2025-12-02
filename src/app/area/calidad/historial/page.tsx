@@ -70,8 +70,16 @@ export default function HistorialPage() {
         }
         
         const { data: result, error } = await query
-        if (error) throw error
-        data = result || []
+        if (error) {
+          // If it's a "relation does not exist" error, treat as no data
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            data = []
+          } else {
+            throw error
+          }
+        } else {
+          data = result || []
+        }
         
       } else if (selected === 'Ensayos Microbiológicos Lab PT') {
         let query = supabase.from('resultados_microbiologicos_labpt').select('*')
@@ -97,8 +105,16 @@ export default function HistorialPage() {
         }
         
         const { data: result, error } = await query
-        if (error) throw error
-        data = result || []
+        if (error) {
+          // If it's a "relation does not exist" error, treat as no data
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            data = []
+          } else {
+            throw error
+          }
+        } else {
+          data = result || []
+        }
         
       } else if (selected === 'Checklist Mix Producto') {
         let query = supabase.from('checklist_calidad_mix').select('*')
@@ -124,114 +140,153 @@ export default function HistorialPage() {
         }
         
         const { data: result, error } = await query
-        if (error) throw error
-        data = result || []
+        if (error) {
+          // If it's a "relation does not exist" error, treat as no data
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            data = []
+          } else {
+            throw error
+          }
+        } else {
+          data = result || []
+        }
         
       } else if (selected === 'Process Environmental Temperature Control') {
         // Use the special fetch function for envtemp
-        const records = await fetchChecklistEnvTempData(fromDate || undefined, toDate || undefined)
-        // Filter by orden if provided (check in date_string or other fields)
-        let filtered = records
-        if (orden) {
-          filtered = records.filter((r: any) => 
-            r.date_string?.includes(orden) || 
-            r.monitor_name?.toLowerCase().includes(orden.toLowerCase())
-          )
+        try {
+          const records = await fetchChecklistEnvTempData(fromDate || undefined, toDate || undefined)
+          // Filter by orden if provided (check in date_string or other fields)
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase())
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
         }
-        data = filtered
       } else if (selected === 'Staff Good Practices Control') {
         // Use the special fetch function for staff practices
-        const records = await fetchChecklistStaffPracticesData(fromDate || undefined, toDate || undefined)
-        // Filter by orden if provided (check in date_string, monitor_name, or staff member names)
-        let filtered = records
-        if (orden) {
-          filtered = records.filter((r: any) => 
-            r.date_string?.includes(orden) || 
-            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.staff_members?.some((m: any) => m.name?.toLowerCase().includes(orden.toLowerCase()))
-          )
+        try {
+          const records = await fetchChecklistStaffPracticesData(fromDate || undefined, toDate || undefined)
+          // Filter by orden if provided (check in date_string, monitor_name, or staff member names)
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.staff_members?.some((m: any) => m.name?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
         }
-        data = filtered
       } else if (selected === 'Foreign Material Findings Record') {
         // Use the special fetch function for foreign material
-        const records = await fetchChecklistForeignMaterialData(fromDate || undefined, toDate || undefined)
-        // Filter by brand, product, or product code
-        let filtered = records
-        if (marca) {
-          filtered = filtered.filter((r: any) => 
-            r.brand?.toLowerCase().includes(marca.toLowerCase())
-          )
+        try {
+          const records = await fetchChecklistForeignMaterialData(fromDate || undefined, toDate || undefined)
+          // Filter by brand, product, or product code
+          let filtered = records || []
+          if (marca) {
+            filtered = filtered.filter((r: any) => 
+              r.brand?.toLowerCase().includes(marca.toLowerCase())
+            )
+          }
+          if (producto) {
+            filtered = filtered.filter((r: any) => 
+              r.product?.toLowerCase().includes(producto.toLowerCase())
+            )
+          }
+          if (orden) {
+            // Search in product codes from findings
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.findings?.some((f: any) => f.productCode?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
         }
-        if (producto) {
-          filtered = filtered.filter((r: any) => 
-            r.product?.toLowerCase().includes(producto.toLowerCase())
-          )
-        }
-        if (orden) {
-          // Search in product codes from findings
-          filtered = filtered.filter((r: any) => 
-            r.date_string?.includes(orden) || 
-            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.findings?.some((f: any) => f.productCode?.toLowerCase().includes(orden.toLowerCase()))
-          )
-        }
-        data = filtered
       } else if (selected === 'Pre-Operational Review Processing Areas') {
         // Use the special fetch function for pre-operational review
-        const records = await fetchChecklistPreOperationalReviewData(fromDate || undefined, toDate || undefined)
-        // Filter by brand, product, or date
-        let filtered = records
-        if (marca) {
-          filtered = filtered.filter((r: any) => 
-            r.brand?.toLowerCase().includes(marca.toLowerCase())
-          )
+        try {
+          const records = await fetchChecklistPreOperationalReviewData(fromDate || undefined, toDate || undefined)
+          // Filter by brand, product, or date
+          let filtered = records || []
+          if (marca) {
+            filtered = filtered.filter((r: any) => 
+              r.brand?.toLowerCase().includes(marca.toLowerCase())
+            )
+          }
+          if (producto) {
+            filtered = filtered.filter((r: any) => 
+              r.product?.toLowerCase().includes(producto.toLowerCase())
+            )
+          }
+          if (orden) {
+            // Search in date_string or brand/product
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.brand?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.product?.toLowerCase().includes(orden.toLowerCase())
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
         }
-        if (producto) {
-          filtered = filtered.filter((r: any) => 
-            r.product?.toLowerCase().includes(producto.toLowerCase())
-          )
-        }
-        if (orden) {
-          // Search in date_string or brand/product
-          filtered = filtered.filter((r: any) => 
-            r.date_string?.includes(orden) || 
-            r.brand?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.product?.toLowerCase().includes(orden.toLowerCase())
-          )
-        }
-        data = filtered
       } else if (selected === 'Internal control of materials used in production areas') {
         // Use the special fetch function for materials control
-        const records = await fetchChecklistMaterialsControlData(fromDate || undefined, toDate || undefined)
-        // Filter by productive area, line manager, monitor name, or personnel names
-        let filtered = records
-        if (marca) {
-          filtered = filtered.filter((r: any) => 
-            r.productive_area?.toLowerCase().includes(marca.toLowerCase())
-          )
+        try {
+          const records = await fetchChecklistMaterialsControlData(fromDate || undefined, toDate || undefined)
+          // Filter by productive area, line manager, monitor name, or personnel names
+          let filtered = records || []
+          if (marca) {
+            filtered = filtered.filter((r: any) => 
+              r.productive_area?.toLowerCase().includes(marca.toLowerCase())
+            )
+          }
+          if (producto) {
+            filtered = filtered.filter((r: any) => 
+              r.line_manager_name?.toLowerCase().includes(producto.toLowerCase())
+            )
+          }
+          if (orden) {
+            // Search in date_string, productive_area, line_manager_name, monitor_name, or personnel names
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.productive_area?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.line_manager_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.personnel_materials?.some((p: any) => p.personName?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
         }
-        if (producto) {
-          filtered = filtered.filter((r: any) => 
-            r.line_manager_name?.toLowerCase().includes(producto.toLowerCase())
-          )
-        }
-        if (orden) {
-          // Search in date_string, productive_area, line_manager_name, monitor_name, or personnel names
-          filtered = filtered.filter((r: any) => 
-            r.date_string?.includes(orden) || 
-            r.productive_area?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.line_manager_name?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
-            r.personnel_materials?.some((p: any) => p.personName?.toLowerCase().includes(orden.toLowerCase()))
-          )
-        }
-        data = filtered
       }
       
       setResults(data)
     } catch (error: any) {
       console.error('Error searching:', error)
-      showToast('Error al buscar registros', 'error')
+      // Only show error toast for actual errors, not for empty results
+      // Empty results are handled by the UI showing "No se encontraron registros"
+      if (error.code !== '42P01' && !error.message?.includes('does not exist')) {
+        showToast('Error al buscar registros. Por favor, intente nuevamente.', 'error')
+      }
+      // Set empty results so the UI shows the "no data" message instead of an error
+      setResults([])
     } finally {
       setLoading(false)
     }

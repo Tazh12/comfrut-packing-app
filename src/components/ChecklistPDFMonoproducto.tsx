@@ -6,38 +6,25 @@ import {
   View,
   StyleSheet,
   Image,
-  Font,
   PDFDownloadLink
 } from '@react-pdf/renderer'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' }
-  ]
-})
+import { 
+  PDFStyles, 
+  PDFHeader, 
+  PDFMetaInfo, 
+  PDFFooter
+} from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
-  page: { padding: 30, fontSize: 9, fontFamily: 'Roboto', backgroundColor: '#ffffff' },
-  header: { flexDirection: 'row', marginBottom: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingBottom: 20 },
-  logo: { width: 120, marginRight: 40 },
-  documentInfo: { position: 'absolute', top: 10, right: 30, fontSize: 8, color: '#6B7280' },
-  title: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, color: '#005F9E' },
-  subtitle: { fontSize: 10, textAlign: 'center', marginBottom: 20, color: '#4B5563' },
-  infoContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20, backgroundColor: '#F3F4F6', padding: 10, borderRadius: 4 },
-  infoGroup: { width: '45%', marginBottom: 8 },
-  infoLabel: { fontWeight: 'bold', marginRight: 4, color: '#374151' },
-  infoValue: { color: '#111827' },
-  table: { width: '100%', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 4 },
-  tableHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 6 },
+  table: { width: '100%', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 4, marginBottom: 15 },
+  tableHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#005F9E', padding: 8, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', padding: 6, alignItems: 'center' },
-  tableRowEven: { backgroundColor: '#FDFDFD' },
-  colItemHeader: { width: '20%', fontSize: 8, fontWeight: 'bold' },
-  colPallet: { width: '20%', fontSize: 8, textAlign: 'center' }
+  tableRowEven: { backgroundColor: '#F9FAFB' },
+  colItemHeader: { width: '20%', fontSize: 8, fontWeight: 'bold', color: '#FFFFFF' },
+  colPallet: { width: '20%', fontSize: 8, textAlign: 'center', color: '#FFFFFF' },
+  colPalletValue: { width: '20%', fontSize: 8, textAlign: 'center', color: '#111827' }
 })
 
 interface ChecklistPDFMonoproductoProps {
@@ -53,7 +40,6 @@ interface ChecklistPDFMonoproductoProps {
   }
 }
 
-const logoBase64 = "data:image/png;base64,iVB..." // reuse your base64
 
 // Ajustar formato de fecha para evitar desfase de zona horaria
 const formatDate = (date: string): string => {
@@ -94,32 +80,44 @@ export const ChecklistPDFMonoproductoDocument = ({ pallets, metadata }: Checklis
     { length: Math.ceil(pallets.length / 3) },
     (_, i) => pallets.slice(i * 3, i * 3 + 3)
   )
+  const creationDate = new Date().toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
   return (
     <Document>
       {palletGroups.map((group, pageIndex) => (
-        <Page key={pageIndex} size="A4" style={styles.page}>
-          {/* Header y título */}
-          <View style={styles.header}>
-            <Image src={logoBase64} style={styles.logo} />
-            <Text style={styles.documentInfo}>V.01</Text>
-          </View>
-          <Text style={styles.title}>
-            Quality control of freezing fruit process / Control de calidad del proceso de congelado de frutas
-          </Text>
-          <Text style={styles.subtitle}>CF/PC-PG-ASC-006-RG001</Text>
+        <Page key={pageIndex} size="A4" style={PDFStyles.page}>
+          {/* Header Bar */}
+          <PDFHeader
+            titleEn="Quality Control of Freezing Fruit Process"
+            titleEs="Control de calidad del proceso de congelado de frutas"
+            documentCode="CF/PC-PG-ASC-006-RG001"
+            version="V.01"
+            date={metadata.date}
+          />
+
           {/* Metadata solo en primera página */}
           {pageIndex === 0 && (
-            <View style={styles.infoContainer}>
-              {headerEntries.map(([label, val], i) => (
-                <View style={styles.infoGroup} key={i}>
-                  <Text>
-                    <Text style={styles.infoLabel}>{label}:</Text>
-                    <Text style={styles.infoValue}>{val}</Text>
-                  </Text>
-                </View>
-              ))}
-            </View>
+            <PDFMetaInfo
+              leftColumn={[
+                { label: 'Fecha', value: formattedDate },
+                { label: 'Orden de fabricación', value: metadata.ordenFabricacion },
+                { label: 'Jefe de línea', value: metadata.lineManager }
+              ]}
+              rightColumn={[
+                { label: 'Control de calidad', value: metadata.controlQuality },
+                { label: 'Cliente', value: metadata.cliente },
+                { label: 'Producto', value: metadata.producto },
+                { label: 'SKU', value: metadata.sku }
+              ]}
+            />
           )}
+
           {/* Tabla de pallets para este grupo */}
           <View style={styles.table}>
             <View style={styles.tableHeader}>
@@ -135,15 +133,21 @@ export const ChecklistPDFMonoproductoDocument = ({ pallets, metadata }: Checklis
                 key={field}
                 style={[styles.tableRow, ri % 2 === 0 ? styles.tableRowEven : {}]}
               >
-                <Text style={styles.colItemHeader}>{field}</Text>
+                <Text style={[styles.colItemHeader, { color: '#111827', fontWeight: 'bold' }]}>{field}</Text>
                 {group.map((p, ci) => (
-                  <Text style={styles.colPallet} key={ci}>
+                  <Text style={styles.colPalletValue} key={ci}>
                     {p.values[field] || ''}
                   </Text>
                 ))}
               </View>
             ))}
           </View>
+
+          <PDFFooter 
+            pageNumber={pageIndex + 1} 
+            totalPages={palletGroups.length} 
+            creationTimestamp={creationDate} 
+          />
         </Page>
       ))}
     </Document>

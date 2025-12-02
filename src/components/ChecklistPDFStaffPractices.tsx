@@ -1,71 +1,28 @@
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' }
-  ]
-})
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { 
+  PDFStyles, 
+  PDFHeader, 
+  PDFMetaInfo, 
+  PDFFooter, 
+  PDFSectionTitle,
+  PDFStatusBadge
+} from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
-  page: {
-    padding: 30,
-    fontFamily: 'Roboto',
-    backgroundColor: '#ffffff',
-    fontSize: 10
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-    color: '#005F9E'
-  },
-  subtitle: {
-    fontSize: 10,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#4B5563'
-  },
   section: {
     marginBottom: 20
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#111827',
-    backgroundColor: '#F3F4F6',
-    padding: 8,
-    borderRadius: 4
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-    paddingVertical: 3
-  },
-  infoLabel: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    width: '40%',
-    color: '#374151'
-  },
-  infoValue: {
-    fontSize: 9,
-    width: '60%',
-    color: '#111827'
-  },
   signatureBox: {
-    width: '45%',
-    marginBottom: 15,
+    marginTop: 10,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 4,
-    padding: 5,
-    minHeight: 80
+    padding: 10,
+    minHeight: 70,
+    backgroundColor: '#FAFAFA',
+    width: '48%'
   },
   signatureLabel: {
     fontSize: 8,
@@ -75,7 +32,7 @@ const styles = StyleSheet.create({
   },
   signatureImage: {
     width: '100%',
-    maxHeight: 60,
+    maxHeight: 50,
     objectFit: 'contain'
   },
   staffMemberContainer: {
@@ -208,11 +165,7 @@ const ComplianceFieldRow: React.FC<{
   return (
     <View style={styles.complianceRow}>
       <Text style={styles.complianceLabel}>{label}:</Text>
-      <View style={[styles.statusBadge, isComply ? styles.statusComply : styles.statusNotComply]}>
-        <Text style={{ fontSize: 7, textAlign: 'center', color: isComply ? '#065F46' : '#991B1B' }}>
-          {isComply ? 'Comply' : 'Not Comply'}
-        </Text>
-      </View>
+      <PDFStatusBadge status={isComply ? 'comply' : 'notComply'} />
       {!isComply && (
         <>
           <Text style={styles.complianceAction}>
@@ -312,30 +265,39 @@ export const ChecklistStaffPracticesPDFDocument: React.FC<ChecklistStaffPractice
     const endIndex = Math.min(startIndex + staffMembersPerPage, data.section2.staffMembers.length)
     const pageMembers = data.section2.staffMembers.slice(startIndex, endIndex)
 
+    const creationDate = new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
     pages.push(
-      <Page key={pageIndex} size="A4" style={styles.page}>
-        <Text style={styles.title}>Staff Good Practices Control</Text>
-        <Text style={styles.subtitle}>Control de buenas prácticas del personal</Text>
-        <Text style={styles.subtitle}>Code: CF/PC-ASC-004-RG003</Text>
+      <Page key={pageIndex} size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader
+          titleEn="Staff Good Practices Control"
+          titleEs="Control de buenas prácticas del personal"
+          documentCode="CF/PC-ASC-004-RG003"
+          version="V.01"
+          date={data.section1.date}
+        />
 
         {/* Section 1: Basic Info - Only show on first page */}
         {pageIndex === 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Section 1 – Basic Info</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Date:</Text>
-              <Text style={styles.infoValue}>{data.section1.date}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Shift:</Text>
-              <Text style={styles.infoValue}>{data.section1.shift}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Monitor Name:</Text>
-              <Text style={styles.infoValue}>{data.section1.monitorName}</Text>
-            </View>
+            <PDFMetaInfo
+              leftColumn={[
+                { label: 'Date', value: data.section1.date },
+                { label: 'Shift', value: data.section1.shift }
+              ]}
+              rightColumn={[
+                { label: 'Monitor Name', value: data.section1.monitorName }
+              ]}
+            />
             <View style={styles.signatureBox}>
-              <Text style={styles.signatureLabel}>Monitor Signature:</Text>
+              <Text style={styles.signatureLabel}>Monitor Signature</Text>
               {data.section1.monitorSignature ? (
                 <Image src={data.section1.monitorSignature} style={styles.signatureImage} />
               ) : (
@@ -348,7 +310,10 @@ export const ChecklistStaffPracticesPDFDocument: React.FC<ChecklistStaffPractice
         {/* Section 2: Staff Members */}
         <View style={styles.section}>
           {pageIndex === 0 && (
-            <Text style={styles.sectionTitle}>Section 2 – Staff Members</Text>
+            <PDFSectionTitle 
+              titleEn="Section 2 – Staff Members"
+              titleEs="Sección 2 – Miembros del personal"
+            />
           )}
           {pageMembers.map((member, idx) => (
             <StaffMemberSection
@@ -359,10 +324,11 @@ export const ChecklistStaffPracticesPDFDocument: React.FC<ChecklistStaffPractice
           ))}
         </View>
 
-        <Text style={styles.footer}>
-          This document is part of Comfrut's quality management system.
-          {totalPages > 1 && ` Page ${pageIndex + 1} of ${totalPages}`}
-        </Text>
+        <PDFFooter 
+          pageNumber={pageIndex + 1} 
+          totalPages={totalPages} 
+          creationTimestamp={creationDate} 
+        />
       </Page>
     )
   }
