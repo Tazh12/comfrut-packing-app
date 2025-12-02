@@ -348,6 +348,7 @@ export default function ChecklistMaterialsControlPage() {
           quantity: 0,
           materialStatus: '',
           observation: '',
+          returnMotive: '',
           quantityReceived: null,
           materialStatusReceived: '',
           observationReceived: ''
@@ -372,6 +373,7 @@ export default function ChecklistMaterialsControlPage() {
         quantity: 0,
         materialStatus: '',
         observation: '',
+        returnMotive: '',
         quantityReceived: null,
         materialStatusReceived: '',
         observationReceived: ''
