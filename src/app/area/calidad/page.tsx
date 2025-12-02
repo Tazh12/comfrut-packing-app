@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -75,6 +75,14 @@ const registroAnalisis: CalidadCard[] = [
     href: '/area/calidad/checklist-staff-practices',
     description: 'Control de buenas prácticas del personal.',
     storageKey: 'checklist-staff-practices-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Internal control of materials used in production areas',
+    icon: Package,
+    href: '/area/calidad/checklist-materials-control',
+    description: 'Control interno de materiales usados en áreas productivas.',
+    storageKey: 'checklist-materials-control-draft',
     colorType: 'normal'
   },
   {

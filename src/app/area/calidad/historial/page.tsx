@@ -10,6 +10,7 @@ import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
 import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffPractices'
 import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForeignMaterial'
 import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
+import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -196,6 +197,32 @@ export default function HistorialPage() {
             r.date_string?.includes(orden) || 
             r.brand?.toLowerCase().includes(orden.toLowerCase()) ||
             r.product?.toLowerCase().includes(orden.toLowerCase())
+          )
+        }
+        data = filtered
+      } else if (selected === 'Internal control of materials used in production areas') {
+        // Use the special fetch function for materials control
+        const records = await fetchChecklistMaterialsControlData(fromDate || undefined, toDate || undefined)
+        // Filter by productive area, line manager, monitor name, or personnel names
+        let filtered = records
+        if (marca) {
+          filtered = filtered.filter((r: any) => 
+            r.productive_area?.toLowerCase().includes(marca.toLowerCase())
+          )
+        }
+        if (producto) {
+          filtered = filtered.filter((r: any) => 
+            r.line_manager_name?.toLowerCase().includes(producto.toLowerCase())
+          )
+        }
+        if (orden) {
+          // Search in date_string, productive_area, line_manager_name, monitor_name, or personnel names
+          filtered = filtered.filter((r: any) => 
+            r.date_string?.includes(orden) || 
+            r.productive_area?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.line_manager_name?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+            r.personnel_materials?.some((p: any) => p.personName?.toLowerCase().includes(orden.toLowerCase()))
           )
         }
         data = filtered
@@ -458,6 +485,63 @@ export default function HistorialPage() {
         const fileName = `pre_operational_review_${record.date_string || 'data'}_${record.hour_string?.replace(':', '') || ''}`
         exportRecord(flatRecord, fileName, format)
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Internal control of materials used in production areas') {
+        // Export Materials Control data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Productive Area',
+          'Line Manager Name',
+          'Monitor Name',
+          'Person Name',
+          'Material',
+          'Quantity Handed Out',
+          'Material Status Handed Out',
+          'Observation Handed Out',
+          'Return Motive',
+          'Quantity Received',
+          'Material Status Received',
+          'Observation Received'
+        ]
+        
+        // Create rows - one per personnel material
+        const rows: any[][] = [headers]
+        
+        if (record.personnel_materials && record.personnel_materials.length > 0) {
+          record.personnel_materials.forEach((personnel: any) => {
+            const row = [
+              record.date_string || '',
+              record.productive_area || '',
+              record.line_manager_name || '',
+              record.monitor_name || '',
+              personnel.personName || '',
+              personnel.material || '',
+              personnel.quantity || 0,
+              personnel.materialStatus || '',
+              personnel.observation || '',
+              personnel.returnMotive || '',
+              personnel.quantityReceived || 0,
+              personnel.materialStatusReceived || '',
+              personnel.observationReceived || ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no personnel materials, still add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.productive_area || '',
+            record.line_manager_name || '',
+            record.monitor_name || '',
+            '', '', '', '', '', '', '', ''
+          ])
+        }
+        
+        const fileName = `materials_control_${record.date_string || 'data'}`
+        exportToFile(rows, fileName, format, 'Materials Control')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -492,8 +576,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas') {
-          // For Temp, Staff Practices, and Pre-Operational Review checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Ensayos Microbiológicos Lab PT') {
+          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, and Lab PT checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -578,6 +662,7 @@ export default function HistorialPage() {
             <option value="Staff Good Practices Control">Staff Good Practices Control</option>
             <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
             <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
+            <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
           </select>
         </div>
         <div>
@@ -623,25 +708,29 @@ export default function HistorialPage() {
           />
         </div>
         <div>
-          <label htmlFor="producto" className="block text-sm font-medium text-gray-700 mb-1">Producto</label>
-          <input
-            type="text"
-            id="producto"
-            value={producto}
-            onChange={(e) => setProducto(e.target.value)}
-            placeholder="Producto"
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          />
+            <label htmlFor="producto" className="block text-sm font-medium text-gray-700 mb-1">
+              {selected === 'Internal control of materials used in production areas' ? 'Jefe de Línea' : 'Producto'}
+            </label>
+            <input
+              type="text"
+              id="producto"
+              value={producto}
+              onChange={(e) => setProducto(e.target.value)}
+              placeholder={selected === 'Internal control of materials used in production areas' ? 'Jefe de Línea' : 'Producto'}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            />
         </div>
-        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto' || selected === 'Pre-Operational Review Processing Areas') && (
+        {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas') && (
           <div>
-            <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">Marca/Cliente</label>
+            <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">
+              {selected === 'Internal control of materials used in production areas' ? 'Área Productiva' : 'Marca/Cliente'}
+            </label>
             <input
               type="text"
               id="marca"
               value={marca}
               onChange={(e) => setMarca(e.target.value)}
-              placeholder="Marca/Cliente"
+              placeholder={selected === 'Internal control of materials used in production areas' ? 'Área Productiva' : 'Marca/Cliente'}
               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
             />
           </div>
@@ -692,7 +781,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -730,6 +819,14 @@ export default function HistorialPage() {
                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Cumplimiento</th>
                     </>
                   )}
+                  {selected === 'Internal control of materials used in production areas' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Área Productiva</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Jefe de Línea</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Personal</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca/Cliente</th>
                 )}
@@ -742,7 +839,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -811,6 +908,16 @@ export default function HistorialPage() {
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Internal control of materials used in production areas' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.productive_area || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.line_manager_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.personnel_materials?.length || 0} persona(s)
                       </td>
                     </>
                   )}
