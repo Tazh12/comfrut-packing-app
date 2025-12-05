@@ -263,7 +263,7 @@ export const ChecklistFootbathControlPDFDocument: React.FC<ChecklistFootbathCont
             <Text style={[styles.tableHeaderText, { width: '40%' }]}>Corrective Action / Acción Correctiva</Text>
           </View>
           {data.section2.measurements.map((measurement, index) => (
-            <View key={index} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+            <View key={index} style={[styles.tableRow, index % 2 === 0 ? styles.tableRowEven : {}]}>
               <Text style={[styles.tableCell, { width: '10%' }]}>{index + 1}</Text>
               <Text style={[styles.tableCell, { width: '15%' }]}>{measurement.hour}</Text>
               <Text style={[styles.tableCell, { width: '20%' }]}>{measurement.filter}</Text>
