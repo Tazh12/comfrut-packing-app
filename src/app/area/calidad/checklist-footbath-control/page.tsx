@@ -528,7 +528,10 @@ export default function ChecklistFootbathControlPage() {
         shift,
         monitor_name: monitorName,
         monitor_signature: monitorSignature,
-        measurements: formData.section2.measurements,
+        measurements: formData.section2.measurements.map(m => ({
+          ...m,
+          correctiveAction: m.correctiveAction || ''
+        })),
         pdf_url: uploadedPdfUrl
       }
 
