@@ -11,6 +11,7 @@ import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffP
 import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForeignMaterial'
 import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
+import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -268,6 +269,25 @@ export default function HistorialPage() {
               r.line_manager_name?.toLowerCase().includes(orden.toLowerCase()) ||
               r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
               r.personnel_materials?.some((p: any) => p.personName?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
+        }
+      } else if (selected === 'Footbath Control') {
+        // Use the special fetch function for footbath control
+        try {
+          const records = await fetchChecklistFootbathControlData(fromDate || undefined, toDate || undefined)
+          // Filter by shift, monitor name, or filter names
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.shift?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.measurements?.some((m: any) => m.filter?.toLowerCase().includes(orden.toLowerCase()))
             )
           }
           data = filtered
@@ -597,6 +617,50 @@ export default function HistorialPage() {
         const fileName = `materials_control_${record.date_string || 'data'}`
         exportToFile(rows, fileName, format, 'Materials Control')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Footbath Control') {
+        // Export Footbath Control data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Shift',
+          'Monitor Name',
+          'Hour',
+          'Filter',
+          'PPM Value',
+          'Corrective Action'
+        ]
+        
+        // Create rows - one per measurement
+        const rows: any[][] = [headers]
+        
+        if (record.measurements && record.measurements.length > 0) {
+          record.measurements.forEach((measurement: any) => {
+            const row = [
+              record.date_string || '',
+              record.shift || '',
+              record.monitor_name || '',
+              measurement.hour || '',
+              measurement.filter || '',
+              measurement.measurePpmValue || '',
+              measurement.correctiveAction || ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no measurements, still add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.shift || '',
+            record.monitor_name || '',
+            '', '', '', ''
+          ])
+        }
+        
+        const fileName = `footbath_control_${record.date_string || 'data'}`
+        exportToFile(rows, fileName, format, 'Footbath Control')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -631,8 +695,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Ensayos Microbiológicos Lab PT') {
-          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, and Lab PT checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Ensayos Microbiológicos Lab PT') {
+          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, and Lab PT checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -718,6 +782,7 @@ export default function HistorialPage() {
             <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
             <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
             <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
+            <option value="Footbath Control">Footbath Control</option>
           </select>
         </div>
         <div>
@@ -836,7 +901,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -882,6 +947,13 @@ export default function HistorialPage() {
                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Personal</th>
                     </>
                   )}
+                  {selected === 'Footbath Control' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Mediciones</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca/Cliente</th>
                 )}
@@ -894,7 +966,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -973,6 +1045,15 @@ export default function HistorialPage() {
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.personnel_materials?.length || 0} persona(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Footbath Control' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.shift || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.measurements?.length || 0} medición(es)
                       </td>
                     </>
                   )}

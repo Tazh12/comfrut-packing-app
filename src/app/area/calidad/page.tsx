@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -83,6 +83,22 @@ const registroAnalisis: CalidadCard[] = [
     href: '/area/calidad/checklist-materials-control',
     description: 'Control interno de materiales usados en áreas productivas.',
     storageKey: 'checklist-materials-control-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Process area staff glasses and auditory protector control',
+    icon: Eye,
+    href: '/area/calidad/checklist-staff-glasses-auditory',
+    description: 'Control de lentes y/o protector auditivo del personal que ingresa a areas de proceso.',
+    storageKey: 'checklist-staff-glasses-auditory-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Footbath Control',
+    icon: Droplet,
+    href: '/area/calidad/checklist-footbath-control',
+    description: 'Control de pediluvios y concentración de sanitizante.',
+    storageKey: 'checklist-footbath-control-draft',
     colorType: 'normal'
   },
   {

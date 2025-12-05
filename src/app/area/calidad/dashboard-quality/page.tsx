@@ -10,6 +10,7 @@ import { fetchChecklistStaffPracticesData } from '@/lib/supabase/checklistStaffP
 import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForeignMaterial'
 import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
+import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
 import { supabase } from '@/lib/supabase'
 import {
   LineChart,
@@ -103,7 +104,17 @@ type PreOperationalReviewDailyStats = {
   complianceRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats
+type FootbathControlDailyStats = {
+  date: string
+  totalRecords: number
+  totalMeasurements: number
+  compliantMeasurements: number
+  nonCompliantMeasurements: number
+  avgPpmValue: number
+  complianceRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -1414,8 +1425,104 @@ export default function DashboardQualityPage() {
           topMaterial: materialComplianceArray[0] || { name: 'N/A', bad: 0 },
           topArea: areaComplianceArray[0] || { area: 'N/A', bad: 0 }
         })
+      } else if (selectedChecklist === 'Footbath Control') {
+        const records = await fetchChecklistFootbathControlData(startDate, endDate)
+        setData(records)
+
+        // Process data for charts - group by date
+        const dateMap = new Map<string, any>()
+        
+        let totalRecords = records.length
+        let totalMeasurements = 0
+        let compliantMeasurements = 0
+        let nonCompliantMeasurements = 0
+        let totalPpmValue = 0
+
+        records.forEach((record: any) => {
+          const date = record.date_string
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              totalMeasurements: 0,
+              compliantMeasurements: 0,
+              nonCompliantMeasurements: 0,
+              totalPpmValue: 0
+            })
+          }
+          const dayData = dateMap.get(date)!
+          dayData.totalRecords++
+          
+          if (record.measurements && record.measurements.length > 0) {
+            record.measurements.forEach((measurement: any) => {
+              totalMeasurements++
+              dayData.totalMeasurements++
+              
+              const ppmValue = parseFloat(measurement.measurePpmValue) || 0
+              totalPpmValue += ppmValue
+              dayData.totalPpmValue += ppmValue
+              
+              // Check compliance (PPM >= 200)
+              if (ppmValue >= 200) {
+                compliantMeasurements++
+                dayData.compliantMeasurements++
+              } else {
+                nonCompliantMeasurements++
+                dayData.nonCompliantMeasurements++
+              }
+            })
+          }
+        })
+
+        const chartDataArray = Array.from(dateMap.values())
+          .map(d => ({
+            date: d.date,
+            totalRecords: d.totalRecords,
+            totalMeasurements: d.totalMeasurements,
+            compliantMeasurements: d.compliantMeasurements,
+            nonCompliantMeasurements: d.nonCompliantMeasurements,
+            avgPpmValue: d.totalMeasurements > 0 
+              ? (d.totalPpmValue / d.totalMeasurements).toFixed(1)
+              : '0.0',
+            complianceRate: d.totalMeasurements > 0
+              ? ((d.compliantMeasurements / d.totalMeasurements) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+
+        // Daily stats
+        const dailyStatsArray: DailyStats[] = chartDataArray.map(d => ({
+          date: d.date,
+          totalRecords: d.totalRecords,
+          totalMeasurements: d.totalMeasurements,
+          compliantMeasurements: d.compliantMeasurements,
+          nonCompliantMeasurements: d.nonCompliantMeasurements,
+          avgPpmValue: parseFloat(d.avgPpmValue),
+          complianceRate: d.complianceRate
+        } as FootbathControlDailyStats))
+
+        setDailyStats(dailyStatsArray)
+
+        const avgPpmValue = totalMeasurements > 0 
+          ? (totalPpmValue / totalMeasurements).toFixed(1)
+          : '0.0'
+        const overallComplianceRate = totalMeasurements > 0
+          ? ((compliantMeasurements / totalMeasurements) * 100).toFixed(1)
+          : '0.0'
+
+        setSummaryStats({
+          totalRecords,
+          totalMeasurements,
+          compliantMeasurements,
+          nonCompliantMeasurements,
+          avgPpmValue,
+          complianceRate: overallComplianceRate
+        })
       }
-      
     } catch (error) {
       console.error('Error loading data:', error)
       showToast('Error al cargar los datos', 'error')
@@ -1495,6 +1602,7 @@ export default function DashboardQualityPage() {
                 <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
                 <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
                 <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
+                <option value="Footbath Control">Footbath Control</option>
                 <option value="Checklist Monoproducto">Checklist Monoproducto</option>
                 <option value="Checklist Mix Producto">Checklist Mix Producto</option>
               </select>
@@ -1780,6 +1888,32 @@ export default function DashboardQualityPage() {
                     <p className="text-xs text-gray-600 mt-1">
                       {summaryStats.complianceRate || '0.0'}% tasa de cumplimiento
                     </p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Footbath Control' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Mediciones</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalMeasurements || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Mediciones Cumplen (PPM ≥ 200)</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.compliantMeasurements || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.complianceRate || '0.0'}% del total
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-red-700 mb-1">⚠️ Mediciones No Cumplen (PPM &lt; 200)</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.nonCompliantMeasurements || 0}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-600">
+                    <h3 className="text-sm font-medium text-blue-700 mb-1">PPM Promedio</h3>
+                    <p className="text-2xl font-bold text-blue-600">{summaryStats.avgPpmValue || '0.0'}</p>
                   </div>
                 </>
               ) : selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto' ? (
