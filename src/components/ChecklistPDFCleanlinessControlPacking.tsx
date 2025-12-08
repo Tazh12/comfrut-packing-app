@@ -380,7 +380,7 @@ export const ChecklistCleanlinessControlPackingPDFDocument: React.FC<ChecklistCl
         </View>
 
         {/* Footer */}
-        <PDFFooter creationDate={creationDate} />
+        <PDFFooter creationTimestamp={creationDate} />
       </Page>
     </Document>
   )
