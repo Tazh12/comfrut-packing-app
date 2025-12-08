@@ -341,13 +341,13 @@ export const ChecklistCleanlinessControlPackingPDFDocument: React.FC<ChecklistCl
             {/* Row 3: Retest RLU (only for CAUTION or REJECTS) */}
             {(data.section3.bioluminescenceResults.some((result) => {
               const status = getRLUStatus(result.rlu)
-              return (status.status === 'caution' || status.status === 'reject')
+              return (status === 'caution' || status === 'reject')
             })) && (
               <View style={styles.bioluminescenceRow}>
                 {Array.from({ length: 5 }).map((_, i) => {
                   const result = data.section3.bioluminescenceResults[i] || { partName: '', rlu: '' }
                   const status = getRLUStatus(result.rlu)
-                  const needsRetest = status.status === 'caution' || status.status === 'reject'
+                  const needsRetest = status === 'caution' || status === 'reject'
                   
                   if (!needsRetest) {
                     return <View key={i} style={styles.rluCell}></View>
