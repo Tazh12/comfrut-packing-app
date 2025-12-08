@@ -11,6 +11,7 @@ import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForei
 import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
 import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
+import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeighingSealing'
 import { supabase } from '@/lib/supabase'
 import {
   LineChart,
@@ -1522,6 +1523,353 @@ export default function DashboardQualityPage() {
           avgPpmValue,
           complianceRate: overallComplianceRate
         })
+      } else if (selectedChecklist === 'Check weighing and sealing of packaged products') {
+        const records = await fetchChecklistWeighingSealingData(startDate, endDate)
+        setData(records)
+
+        // Process data for comprehensive analysis
+        const dateMap = new Map<string, any>()
+        const shiftMap = new Map<string, any>()
+        const brandMap = new Map<string, any>()
+        const productMap = new Map<string, any>()
+        const processRoomMap = new Map<string, any>()
+        const monitorMap = new Map<string, any>()
+        
+        let totalRecords = records.length
+        let totalBagEntries = 0
+        let totalSealedChecks = 0
+        let compliantSealed = 0
+        let nonCompliantSealed = 0
+        let compliantOrigin = 0
+        let nonCompliantOrigin = 0
+        let totalWeight = 0
+        let weightCount = 0
+        const allWeights: number[] = []
+
+        records.forEach((record: any) => {
+          const date = record.date_string
+          const shift = record.shift || 'Unknown'
+          const brand = record.brand || 'Unknown'
+          const product = record.product || 'Unknown'
+          const processRoom = record.process_room || 'Unknown'
+          const monitor = record.monitor_name || 'Unknown'
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              totalBagEntries: 0,
+              totalSealedChecks: 0,
+              compliantSealed: 0,
+              nonCompliantSealed: 0,
+              compliantOrigin: 0,
+              nonCompliantOrigin: 0,
+              totalWeight: 0,
+              weightCount: 0
+            })
+          }
+          
+          // Shift stats
+          if (!shiftMap.has(shift)) {
+            shiftMap.set(shift, {
+              shift,
+              totalRecords: 0,
+              totalBagEntries: 0,
+              compliantSealed: 0,
+              nonCompliantSealed: 0,
+              compliantOrigin: 0,
+              nonCompliantOrigin: 0
+            })
+          }
+          
+          // Brand stats
+          if (!brandMap.has(brand)) {
+            brandMap.set(brand, {
+              brand,
+              totalRecords: 0,
+              totalBagEntries: 0,
+              compliantSealed: 0,
+              nonCompliantSealed: 0,
+              compliantOrigin: 0,
+              nonCompliantOrigin: 0
+            })
+          }
+          
+          // Product stats
+          if (!productMap.has(product)) {
+            productMap.set(product, {
+              product,
+              brand: record.brand || '',
+              totalRecords: 0,
+              totalBagEntries: 0,
+              compliantSealed: 0,
+              nonCompliantSealed: 0,
+              compliantOrigin: 0,
+              nonCompliantOrigin: 0
+            })
+          }
+          
+          // Process room stats
+          if (!processRoomMap.has(processRoom)) {
+            processRoomMap.set(processRoom, {
+              processRoom,
+              totalRecords: 0,
+              totalBagEntries: 0,
+              compliantSealed: 0,
+              nonCompliantSealed: 0,
+              compliantOrigin: 0,
+              nonCompliantOrigin: 0
+            })
+          }
+          
+          // Monitor stats
+          if (!monitorMap.has(monitor)) {
+            monitorMap.set(monitor, {
+              monitor,
+              totalRecords: 0,
+              totalBagEntries: 0
+            })
+          }
+          
+          const dayData = dateMap.get(date)!
+          const shiftData = shiftMap.get(shift)!
+          const brandData = brandMap.get(brand)!
+          const productData = productMap.get(product)!
+          const processRoomData = processRoomMap.get(processRoom)!
+          const monitorData = monitorMap.get(monitor)!
+          
+          dayData.totalRecords++
+          shiftData.totalRecords++
+          brandData.totalRecords++
+          productData.totalRecords++
+          processRoomData.totalRecords++
+          monitorData.totalRecords++
+          
+          if (record.bag_entries && record.bag_entries.length > 0) {
+            record.bag_entries.forEach((entry: any) => {
+              totalBagEntries++
+              dayData.totalBagEntries++
+              shiftData.totalBagEntries++
+              brandData.totalBagEntries++
+              productData.totalBagEntries++
+              processRoomData.totalBagEntries++
+              monitorData.totalBagEntries++
+              
+              // Process weights
+              entry.weights?.forEach((weightStr: string) => {
+                if (weightStr && weightStr.trim()) {
+                  const weight = parseFloat(weightStr)
+                  if (!isNaN(weight)) {
+                    allWeights.push(weight)
+                    totalWeight += weight
+                    weightCount++
+                    dayData.totalWeight += weight
+                    dayData.weightCount++
+                  }
+                }
+              })
+              
+              // Count sealed status (10 checks per entry)
+              entry.sealed?.forEach((status: string) => {
+                totalSealedChecks++
+                dayData.totalSealedChecks++
+                if (status === 'Comply') {
+                  compliantSealed++
+                  dayData.compliantSealed++
+                  shiftData.compliantSealed++
+                  brandData.compliantSealed++
+                  productData.compliantSealed++
+                  processRoomData.compliantSealed++
+                } else if (status === 'not comply') {
+                  nonCompliantSealed++
+                  dayData.nonCompliantSealed++
+                  shiftData.nonCompliantSealed++
+                  brandData.nonCompliantSealed++
+                  productData.nonCompliantSealed++
+                  processRoomData.nonCompliantSealed++
+                }
+              })
+              
+              // Count declaration of origin
+              if (entry.declarationOfOrigin === 'Comply') {
+                compliantOrigin++
+                dayData.compliantOrigin++
+                shiftData.compliantOrigin++
+                brandData.compliantOrigin++
+                productData.compliantOrigin++
+                processRoomData.compliantOrigin++
+              } else if (entry.declarationOfOrigin === 'not comply') {
+                nonCompliantOrigin++
+                dayData.nonCompliantOrigin++
+                shiftData.nonCompliantOrigin++
+                brandData.nonCompliantOrigin++
+                productData.nonCompliantOrigin++
+                processRoomData.nonCompliantOrigin++
+              }
+            })
+          }
+        })
+
+        // Calculate weight statistics
+        const avgWeight = weightCount > 0 ? (totalWeight / weightCount).toFixed(2) : '0.00'
+        const minWeight = allWeights.length > 0 ? Math.min(...allWeights).toFixed(2) : '0.00'
+        const maxWeight = allWeights.length > 0 ? Math.max(...allWeights).toFixed(2) : '0.00'
+        const sortedWeights = [...allWeights].sort((a, b) => a - b)
+        const medianWeight = sortedWeights.length > 0
+          ? (sortedWeights.length % 2 === 0
+              ? (sortedWeights[sortedWeights.length / 2 - 1] + sortedWeights[sortedWeights.length / 2]) / 2
+              : sortedWeights[Math.floor(sortedWeights.length / 2)]).toFixed(2)
+          : '0.00'
+
+        // Process chart data
+        const chartDataArray = Array.from(dateMap.values())
+          .map(d => ({
+            date: d.date,
+            totalRecords: d.totalRecords,
+            totalBagEntries: d.totalBagEntries,
+            totalSealedChecks: d.totalSealedChecks,
+            compliantSealed: d.compliantSealed,
+            nonCompliantSealed: d.nonCompliantSealed,
+            compliantOrigin: d.compliantOrigin,
+            nonCompliantOrigin: d.nonCompliantOrigin,
+            avgWeight: d.weightCount > 0 ? (d.totalWeight / d.weightCount).toFixed(2) : '0.00',
+            sealedComplianceRate: (d.compliantSealed + d.nonCompliantSealed) > 0
+              ? ((d.compliantSealed / (d.compliantSealed + d.nonCompliantSealed)) * 100).toFixed(1)
+              : '0.0',
+            originComplianceRate: (d.compliantOrigin + d.nonCompliantOrigin) > 0
+              ? ((d.compliantOrigin / (d.compliantOrigin + d.nonCompliantOrigin)) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+
+        // Process shift comparison data
+        const shiftComparison = Array.from(shiftMap.values())
+          .map(s => ({
+            shift: s.shift,
+            totalRecords: s.totalRecords,
+            totalBagEntries: s.totalBagEntries,
+            compliantSealed: s.compliantSealed,
+            nonCompliantSealed: s.nonCompliantSealed,
+            compliantOrigin: s.compliantOrigin,
+            nonCompliantOrigin: s.nonCompliantOrigin,
+            sealedComplianceRate: (s.compliantSealed + s.nonCompliantSealed) > 0
+              ? ((s.compliantSealed / (s.compliantSealed + s.nonCompliantSealed)) * 100).toFixed(1)
+              : '0.0',
+            originComplianceRate: (s.compliantOrigin + s.nonCompliantOrigin) > 0
+              ? ((s.compliantOrigin / (s.compliantOrigin + s.nonCompliantOrigin)) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => {
+            const order = ['Morning', 'Afternoon', 'Night']
+            return (order.indexOf(a.shift) - order.indexOf(b.shift)) || a.shift.localeCompare(b.shift)
+          })
+
+        // Process brand comparison data
+        const brandComparison = Array.from(brandMap.values())
+          .map(b => ({
+            brand: b.brand,
+            totalRecords: b.totalRecords,
+            totalBagEntries: b.totalBagEntries,
+            compliantSealed: b.compliantSealed,
+            nonCompliantSealed: b.nonCompliantSealed,
+            compliantOrigin: b.compliantOrigin,
+            nonCompliantOrigin: b.nonCompliantOrigin,
+            sealedComplianceRate: (b.compliantSealed + b.nonCompliantSealed) > 0
+              ? ((b.compliantSealed / (b.compliantSealed + b.nonCompliantSealed)) * 100).toFixed(1)
+              : '0.0',
+            originComplianceRate: (b.compliantOrigin + b.nonCompliantOrigin) > 0
+              ? ((b.compliantOrigin / (b.compliantOrigin + b.nonCompliantOrigin)) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.totalBagEntries - a.totalBagEntries)
+          .slice(0, 10) // Top 10 brands
+
+        // Process product comparison data
+        const productComparison = Array.from(productMap.values())
+          .map(p => ({
+            product: p.product,
+            brand: p.brand,
+            totalRecords: p.totalRecords,
+            totalBagEntries: p.totalBagEntries,
+            compliantSealed: p.compliantSealed,
+            nonCompliantSealed: p.nonCompliantSealed,
+            compliantOrigin: p.compliantOrigin,
+            nonCompliantOrigin: p.nonCompliantOrigin,
+            sealedComplianceRate: (p.compliantSealed + p.nonCompliantSealed) > 0
+              ? ((p.compliantSealed / (p.compliantSealed + p.nonCompliantSealed)) * 100).toFixed(1)
+              : '0.0',
+            originComplianceRate: (p.compliantOrigin + p.nonCompliantOrigin) > 0
+              ? ((p.compliantOrigin / (p.compliantOrigin + p.nonCompliantOrigin)) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.totalBagEntries - a.totalBagEntries)
+          .slice(0, 10) // Top 10 products
+
+        // Process process room comparison data
+        const processRoomComparison = Array.from(processRoomMap.values())
+          .map(pr => ({
+            processRoom: pr.processRoom,
+            totalRecords: pr.totalRecords,
+            totalBagEntries: pr.totalBagEntries,
+            compliantSealed: pr.compliantSealed,
+            nonCompliantSealed: pr.nonCompliantSealed,
+            compliantOrigin: pr.compliantOrigin,
+            nonCompliantOrigin: pr.nonCompliantOrigin,
+            sealedComplianceRate: (pr.compliantSealed + pr.nonCompliantSealed) > 0
+              ? ((pr.compliantSealed / (pr.compliantSealed + pr.nonCompliantSealed)) * 100).toFixed(1)
+              : '0.0',
+            originComplianceRate: (pr.compliantOrigin + pr.nonCompliantOrigin) > 0
+              ? ((pr.compliantOrigin / (pr.compliantOrigin + pr.nonCompliantOrigin)) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.totalBagEntries - a.totalBagEntries)
+
+        // Daily stats
+        const dailyStatsArray: any[] = chartDataArray.map(d => ({
+          date: d.date,
+          totalRecords: d.totalRecords,
+          totalBagEntries: d.totalBagEntries,
+          compliantSealed: d.compliantSealed,
+          nonCompliantSealed: d.nonCompliantSealed,
+          compliantOrigin: d.compliantOrigin,
+          nonCompliantOrigin: d.nonCompliantOrigin,
+          sealedComplianceRate: d.sealedComplianceRate,
+          originComplianceRate: d.originComplianceRate,
+          avgWeight: d.avgWeight
+        }))
+
+        setDailyStats(dailyStatsArray as DailyStats[])
+
+        const overallSealedComplianceRate = (compliantSealed + nonCompliantSealed) > 0
+          ? ((compliantSealed / (compliantSealed + nonCompliantSealed)) * 100).toFixed(1)
+          : '0.0'
+        const overallOriginComplianceRate = (compliantOrigin + nonCompliantOrigin) > 0
+          ? ((compliantOrigin / (compliantOrigin + nonCompliantOrigin)) * 100).toFixed(1)
+          : '0.0'
+
+        setSummaryStats({
+          totalRecords,
+          totalBagEntries,
+          totalSealedChecks,
+          compliantSealed,
+          nonCompliantSealed,
+          compliantOrigin,
+          nonCompliantOrigin,
+          sealedComplianceRate: overallSealedComplianceRate,
+          originComplianceRate: overallOriginComplianceRate,
+          avgWeight,
+          minWeight,
+          maxWeight,
+          medianWeight,
+          totalWeights: weightCount,
+          shiftComparison,
+          brandComparison,
+          productComparison,
+          processRoomComparison
+        })
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -1603,6 +1951,7 @@ export default function DashboardQualityPage() {
                 <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
                 <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
                 <option value="Footbath Control">Footbath Control</option>
+                <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
                 <option value="Checklist Monoproducto">Checklist Monoproducto</option>
                 <option value="Checklist Mix Producto">Checklist Mix Producto</option>
               </select>
@@ -1914,6 +2263,59 @@ export default function DashboardQualityPage() {
                   <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-600">
                     <h3 className="text-sm font-medium text-blue-700 mb-1">PPM Promedio</h3>
                     <p className="text-2xl font-bold text-blue-600">{summaryStats.avgPpmValue || '0.0'}</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Check weighing and sealing of packaged products' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Checklists completados</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Entradas de Bolsas</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalBagEntries || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.totalSealedChecks || 0} verificaciones de sellado</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Sellado - Tasa de Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.sealedComplianceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.compliantSealed || 0} cumplen / {summaryStats.nonCompliantSealed || 0} no cumplen
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-emerald-600">
+                    <h3 className="text-sm font-medium text-emerald-700 mb-1">✅ Origen - Tasa de Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-emerald-600">{summaryStats.originComplianceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.compliantOrigin || 0} cumplen / {summaryStats.nonCompliantOrigin || 0} no cumplen
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-purple-700 mb-1">⚖️ Peso Promedio</h3>
+                    <p className="text-2xl font-bold text-purple-600">{summaryStats.avgWeight || '0.00'}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Min: {summaryStats.minWeight || '0.00'} | Max: {summaryStats.maxWeight || '0.00'}
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-amber-500">
+                    <h3 className="text-sm font-medium text-amber-700 mb-1">📊 Peso Mediano</h3>
+                    <p className="text-2xl font-bold text-amber-600">{summaryStats.medianWeight || '0.00'}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.totalWeights || 0} mediciones totales</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-red-700 mb-1">⚠️ No Cumplimiento Sellado</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.nonCompliantSealed || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {((summaryStats.nonCompliantSealed || 0) / (summaryStats.totalSealedChecks || 1) * 100).toFixed(1)}% del total
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-orange-700 mb-1">⚠️ No Cumplimiento Origen</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.nonCompliantOrigin || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {((summaryStats.nonCompliantOrigin || 0) / (summaryStats.totalBagEntries || 1) * 100).toFixed(1)}% de entradas
+                    </p>
                   </div>
                 </>
               ) : selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto' ? (
@@ -2838,6 +3240,345 @@ export default function DashboardQualityPage() {
               </>
             )}
 
+            {selectedChecklist === 'Check weighing and sealing of packaged products' && (
+              <>
+                {/* Compliance Trends Over Time */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Tendencias de Cumplimiento / Compliance Trends Over Time
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        stroke="#6b7280"
+                        label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                        domain={[0, 100]}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                        formatter={(value: number) => [`${value}%`, '']}
+                      />
+                      <Legend />
+                      <ReferenceLine y={95} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Objetivo (95%)', position: 'right' }} />
+                      <Line
+                        type="monotone"
+                        dataKey="sealedComplianceRate"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Sellado / Sealed"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="originComplianceRate"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Origen / Origin"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Compliance Comparison - Sealed vs Origin */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Comparación de Cumplimiento: Sellado vs Origen / Compliance Comparison: Sealed vs Origin
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        stroke="#6b7280"
+                        label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                        domain={[0, 100]}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                        formatter={(value: number) => [`${value}%`, '']}
+                      />
+                      <Legend />
+                      <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
+                      <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Shift Performance Comparison */}
+                {summaryStats.shiftComparison && summaryStats.shiftComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Rendimiento por Turno / Performance by Shift
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.shiftComparison}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="shift"
+                          stroke="#6b7280"
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis
+                          stroke="#6b7280"
+                          label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number) => [`${value}%`, '']}
+                        />
+                        <Legend />
+                        <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
+                        <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Brand Performance */}
+                {summaryStats.brandComparison && summaryStats.brandComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Rendimiento por Marca (Top 10) / Performance by Brand (Top 10)
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.brandComparison}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="brand"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <YAxis
+                          stroke="#6b7280"
+                          label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number) => [`${value}%`, '']}
+                        />
+                        <Legend />
+                        <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
+                        <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Product Performance */}
+                {summaryStats.productComparison && summaryStats.productComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Rendimiento por Producto (Top 10) / Performance by Product (Top 10)
+                    </h2>
+                    <ResponsiveContainer width="100%" height={500}>
+                      <BarChart data={summaryStats.productComparison} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          type="number"
+                          stroke="#6b7280"
+                          label={{ value: 'Tasa de Cumplimiento (%)', position: 'insideBottom', offset: -5 }}
+                          domain={[0, 100]}
+                        />
+                        <YAxis
+                          dataKey="product"
+                          type="category"
+                          stroke="#6b7280"
+                          width={200}
+                          tick={{ fontSize: 9 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number) => [`${value}%`, '']}
+                        />
+                        <Legend />
+                        <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
+                        <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Process Room Performance */}
+                {summaryStats.processRoomComparison && summaryStats.processRoomComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Rendimiento por Sala de Proceso / Performance by Process Room
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.processRoomComparison}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="processRoom"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <YAxis
+                          stroke="#6b7280"
+                          label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number) => [`${value}%`, '']}
+                        />
+                        <Legend />
+                        <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
+                        <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Weight Statistics Over Time */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Estadísticas de Peso por Fecha / Weight Statistics Over Time
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        stroke="#6b7280"
+                        label={{ value: 'Peso Promedio', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="avgWeight"
+                        stroke="#8b5cf6"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Peso Promedio / Average Weight"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Compliance Breakdown Pie Charts */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Distribución de Cumplimiento - Sellado / Sealed Compliance Distribution
+                    </h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Cumplen / Comply', value: summaryStats.compliantSealed || 0 },
+                            { name: 'No Cumplen / Not Comply', value: summaryStats.nonCompliantSealed || 0 }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          <Cell fill="#10b981" />
+                          <Cell fill="#ef4444" />
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Distribución de Cumplimiento - Origen / Origin Compliance Distribution
+                    </h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Cumplen / Comply', value: summaryStats.compliantOrigin || 0 },
+                            { name: 'No Cumplen / Not Comply', value: summaryStats.nonCompliantOrigin || 0 }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          <Cell fill="#3b82f6" />
+                          <Cell fill="#f59e0b" />
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Daily Statistics Tables */}
             {selectedChecklist === 'Metal Detector (PCC #1)' && dailyStats.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -3034,6 +3775,112 @@ export default function DashboardQualityPage() {
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {selectedChecklist === 'Check weighing and sealing of packaged products' && dailyStats.length > 0 && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">
+                  Estadísticas Diarias / Daily Statistics
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha / Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Registros / Records
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Entradas / Entries
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Sellado Cumple / Sealed Comply
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Sellado No Cumple / Sealed Not Comply
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Origen Cumple / Origin Comply
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Origen No Cumple / Origin Not Comply
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tasa Sellado / Sealed Rate
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tasa Origen / Origin Rate
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Peso Promedio / Avg Weight
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {dailyStats.map((stat: any) => (
+                        <tr key={stat.date} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {stat.date}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {stat.totalRecords || 0}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {stat.totalBagEntries || 0}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {stat.compliantSealed || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              {stat.nonCompliantSealed || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {stat.compliantOrigin || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                              {stat.nonCompliantOrigin || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              parseFloat(stat.sealedComplianceRate || '0') >= 95 
+                                ? 'bg-green-100 text-green-800' 
+                                : parseFloat(stat.sealedComplianceRate || '0') >= 80
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {stat.sealedComplianceRate || '0.0'}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              parseFloat(stat.originComplianceRate || '0') >= 95 
+                                ? 'bg-green-100 text-green-800' 
+                                : parseFloat(stat.originComplianceRate || '0') >= 80
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {stat.originComplianceRate || '0.0'}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
+                            {stat.avgWeight || '0.00'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

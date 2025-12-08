@@ -12,6 +12,7 @@ import { fetchChecklistForeignMaterialData } from '@/lib/supabase/checklistForei
 import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklistPreOperationalReview'
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
 import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
+import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeighingSealing'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -288,6 +289,36 @@ export default function HistorialPage() {
               r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
               r.shift?.toLowerCase().includes(orden.toLowerCase()) ||
               r.measurements?.some((m: any) => m.filter?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
+        }
+      } else if (selected === 'Check weighing and sealing of packaged products') {
+        // Use the special fetch function for weighing sealing
+        try {
+          const records = await fetchChecklistWeighingSealingData(fromDate || undefined, toDate || undefined)
+          // Filter by shift, monitor name, brand, product, or bag codes
+          let filtered = records || []
+          if (marca) {
+            filtered = filtered.filter((r: any) => 
+              r.brand?.toLowerCase().includes(marca.toLowerCase())
+            )
+          }
+          if (producto) {
+            filtered = filtered.filter((r: any) => 
+              r.product?.toLowerCase().includes(producto.toLowerCase())
+            )
+          }
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.shift?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.process_room?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.bag_entries?.some((e: any) => e.bagCode?.toLowerCase().includes(orden.toLowerCase()))
             )
           }
           data = filtered
@@ -661,6 +692,71 @@ export default function HistorialPage() {
         const fileName = `footbath_control_${record.date_string || 'data'}`
         exportToFile(rows, fileName, format, 'Footbath Control')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Check weighing and sealing of packaged products') {
+        // Export Weighing Sealing data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Shift',
+          'Process Room',
+          'Brand',
+          'Product',
+          'Monitor Name',
+          'Bag Entry #',
+          'Time',
+          'Bag Code',
+          'Weight 1', 'Weight 2', 'Weight 3', 'Weight 4', 'Weight 5',
+          'Weight 6', 'Weight 7', 'Weight 8', 'Weight 9', 'Weight 10',
+          'Sealed 1', 'Sealed 2', 'Sealed 3', 'Sealed 4', 'Sealed 5',
+          'Sealed 6', 'Sealed 7', 'Sealed 8', 'Sealed 9', 'Sealed 10',
+          'Other Codification',
+          'Declaration of Origin',
+          'Comments / Observaciones'
+        ]
+        
+        // Create rows - one per bag entry
+        const rows: any[][] = [headers]
+        
+        if (record.bag_entries && record.bag_entries.length > 0) {
+          record.bag_entries.forEach((entry: any, index: number) => {
+            const row = [
+              record.date_string || '',
+              record.shift || '',
+              record.process_room || '',
+              record.brand || '',
+              record.product || '',
+              record.monitor_name || '',
+              index + 1,
+              entry.time || '',
+              entry.bagCode || '',
+              ...(entry.weights || Array(10).fill('')),
+              ...(entry.sealed || Array(10).fill('')),
+              entry.otherCodification || '',
+              entry.declarationOfOrigin || '',
+              // Add comments only to the first row (to avoid duplication)
+              index === 0 ? (record.comments || '') : ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no bag entries, still add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.shift || '',
+            record.process_room || '',
+            record.brand || '',
+            record.product || '',
+            record.monitor_name || '',
+            '', '', '', ...Array(20).fill(''), '', '',
+            record.comments || '' // comments
+          ])
+        }
+        
+        const fileName = `weighing_sealing_${record.date_string || 'data'}`
+        exportToFile(rows, fileName, format, 'Weighing Sealing')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -695,8 +791,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Ensayos Microbiológicos Lab PT') {
-          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, and Lab PT checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Check weighing and sealing of packaged products' || selected === 'Ensayos Microbiológicos Lab PT') {
+          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, Weighing Sealing, and Lab PT checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -783,6 +879,7 @@ export default function HistorialPage() {
             <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
             <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
             <option value="Footbath Control">Footbath Control</option>
+            <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
           </select>
         </div>
         <div>
@@ -954,6 +1051,13 @@ export default function HistorialPage() {
                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Mediciones</th>
                     </>
                   )}
+                  {selected === 'Check weighing and sealing of packaged products' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Turno</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Entradas</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca/Cliente</th>
                 )}
@@ -1054,6 +1158,15 @@ export default function HistorialPage() {
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.measurements?.length || 0} medición(es)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Check weighing and sealing of packaged products' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.shift || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.bag_entries?.length || 0} entrada(s)
                       </td>
                     </>
                   )}

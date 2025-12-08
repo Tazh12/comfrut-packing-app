@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
 import { 
   Package, 
   Truck, 
@@ -62,36 +63,20 @@ export default function DashboardPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { theme, setTheme } = useTheme()
-  const [email, setEmail] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(true)
+  const { user, loading: authLoading } = useAuth()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isThemeSubmenuOpen, setIsThemeSubmenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  // Redirect to login if not authenticated (middleware should handle this, but this is a safety check)
   useEffect(() => {
-    (async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error checking session:', error)
-          showToast('Error al verificar la sesión', 'error')
-          return
-        }
+    if (!authLoading && !user) {
+      router.replace('/login')
+    }
+  }, [user, authLoading, router])
 
-        if (!session) {
-          return router.replace('/login')
-        }
-
-        setEmail(session.user.email || '')
-      } catch (error) {
-        console.error('Unexpected error:', error)
-        showToast('Error inesperado al verificar la sesión', 'error')
-      } finally {
-        setIsLoading(false)
-      }
-    })()
-  }, [router, showToast])
+  // Get email from user
+  const email = user?.email || ''
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -168,7 +153,7 @@ export default function DashboardPage() {
     showToast('Perfil - Próximamente', 'info')
   }
 
-  if (isLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--page-bg)' }}>
         <div className="text-center">

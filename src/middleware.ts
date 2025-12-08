@@ -5,19 +5,22 @@ import type { NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req: request, res })
-  const { data: { session } } = await supabase.auth.getSession()
+  
+  // Use getUser() instead of getSession() to avoid network requests
+  // getUser() reads from cookies without making an API call
+  const { data: { user } } = await supabase.auth.getUser()
 
   const isAuthPage = request.nextUrl.pathname === '/login'
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') ||
                           request.nextUrl.pathname.startsWith('/area')
 
   // Redirigir a dashboard si está autenticado y trata de acceder a /login
-  if (isAuthPage && session) {
+  if (isAuthPage && user) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   // Redirigir a login si no está autenticado y trata de acceder a una ruta protegida
-  if (isProtectedRoute && !session) {
+  if (isProtectedRoute && !user) {
     const redirectUrl = new URL('/login', request.url)
     redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
     return NextResponse.redirect(redirectUrl)

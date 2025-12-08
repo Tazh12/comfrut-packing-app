@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
 import { FileText, ArrowLeft, History } from 'lucide-react'
 import Link from 'next/link'
 
@@ -25,35 +24,16 @@ const documentos: Documento[] = [
 
 export default function DocumentacionPage() {
   const router = useRouter()
-  const { showToast } = useToast()
-  const [isLoading, setIsLoading] = useState(true)
+  const { user, loading: authLoading } = useAuth()
 
+  // Redirect to login if not authenticated (middleware should handle this, but this is a safety check)
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error checking session:', error)
-          showToast('Error al verificar la sesión', 'error')
-          return
-        }
-
-        if (!session) {
-          return router.replace('/login')
-        }
-      } catch (error) {
-        console.error('Unexpected error:', error)
-        showToast('Error inesperado al verificar la sesión', 'error')
-      } finally {
-        setIsLoading(false)
-      }
+    if (!authLoading && !user) {
+      router.replace('/login')
     }
+  }, [user, authLoading, router])
 
-    checkSession()
-  }, [router, showToast])
-
-  if (isLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--page-bg)' }}>
         <div className="text-center">

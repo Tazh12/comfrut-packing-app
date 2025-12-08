@@ -12,7 +12,7 @@ export interface IncompleteChecklist {
 const CHECKLIST_MAP: Record<string, Omit<IncompleteChecklist, 'storageKey'>> = {
   'checklist-envtemp-draft': {
     id: 'envtemp',
-    name: 'Process Environmental Temperature Control',
+    name: 'Control Temperatura de Proceso',
     path: '/area/calidad/checklist-envtemp',
     area: 'calidad'
   },
@@ -38,6 +38,48 @@ const CHECKLIST_MAP: Record<string, Omit<IncompleteChecklist, 'storageKey'>> = {
     id: 'metal-detector',
     name: 'Metal Detector (PCC #1)',
     path: '/area/calidad/checklist-metal-detector',
+    area: 'calidad'
+  },
+  'checklist-foreign-material-draft': {
+    id: 'foreign-material',
+    name: 'Foreign Material Findings Record',
+    path: '/area/calidad/checklist-foreign-material',
+    area: 'calidad'
+  },
+  'checklist-pre-operational-review-draft': {
+    id: 'pre-operational-review',
+    name: 'Pre-Operational Review Processing Areas',
+    path: '/area/calidad/checklist-pre-operational-review',
+    area: 'calidad'
+  },
+  'checklist-staff-practices-draft': {
+    id: 'staff-practices',
+    name: 'Staff Good Practices Control',
+    path: '/area/calidad/checklist-staff-practices',
+    area: 'calidad'
+  },
+  'checklist-materials-control-draft': {
+    id: 'materials-control',
+    name: 'Internal control of materials used in production areas',
+    path: '/area/calidad/checklist-materials-control',
+    area: 'calidad'
+  },
+  'checklist-staff-glasses-auditory-draft': {
+    id: 'staff-glasses-auditory',
+    name: 'Process area staff glasses and auditory protector control',
+    path: '/area/calidad/checklist-staff-glasses-auditory',
+    area: 'calidad'
+  },
+  'checklist-footbath-control-draft': {
+    id: 'footbath-control',
+    name: 'Footbath Control',
+    path: '/area/calidad/checklist-footbath-control',
+    area: 'calidad'
+  },
+  'checklist-weighing-sealing-draft': {
+    id: 'weighing-sealing',
+    name: 'Check weighing and sealing of packaged products',
+    path: '/area/calidad/checklist-weighing-sealing',
     area: 'calidad'
   },
   'checklist-solicitud-mtto-draft': {

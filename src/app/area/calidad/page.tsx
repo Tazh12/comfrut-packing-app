@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -99,6 +99,22 @@ const registroAnalisis: CalidadCard[] = [
     href: '/area/calidad/checklist-footbath-control',
     description: 'Control de pediluvios y concentración de sanitizante.',
     storageKey: 'checklist-footbath-control-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Check weighing and sealing of packaged products',
+    icon: Scale,
+    href: '/area/calidad/checklist-weighing-sealing',
+    description: 'Chequeo de pesaje y sellado de los productos envasados.',
+    storageKey: 'checklist-weighing-sealing-draft',
+    colorType: 'normal'
+  },
+  {
+    title: 'Cleanliness Control Packing',
+    icon: Sparkles,
+    href: '/area/calidad/checklist-cleanliness-control-packing',
+    description: 'Control de limpieza de empaque.',
+    storageKey: 'checklist-cleanliness-control-packing-draft',
     colorType: 'normal'
   },
   {
