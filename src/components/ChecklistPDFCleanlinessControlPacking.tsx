@@ -241,7 +241,7 @@ export const ChecklistCleanlinessControlPackingPDFDocument: React.FC<ChecklistCl
 
         {/* Section 1: Basic Info */}
         <View style={styles.section}>
-          <PDFSectionTitle title="Section 1 – Basic Info" />
+          <PDFSectionTitle titleEn="Section 1 – Basic Info" />
           
           <View style={styles.signatureBox}>
             <Text style={styles.signatureLabel}>Monitor Signature / Firma del Monitor</Text>
@@ -256,7 +256,7 @@ export const ChecklistCleanlinessControlPackingPDFDocument: React.FC<ChecklistCl
 
         {/* Section 2: Areas and Parts Inspected */}
         <View style={styles.section}>
-          <PDFSectionTitle title="Section 2 – Areas and Parts Inspected" />
+          <PDFSectionTitle titleEn="Section 2 – Areas and Parts Inspected" />
           
           {data.section2.areas.map((area, areaIndex) => (
             <View key={areaIndex} style={styles.areaSection}>
@@ -298,7 +298,7 @@ export const ChecklistCleanlinessControlPackingPDFDocument: React.FC<ChecklistCl
 
         {/* Section 3: Critical Limits Result of Bioluminescence */}
         <View style={styles.section}>
-          <PDFSectionTitle title="Section 3 – Critical Limits Result of Bioluminescence" />
+          <PDFSectionTitle titleEn="Section 3 – Critical Limits Result of Bioluminescence" />
           
           <View style={styles.bioluminescenceTable}>
             <View style={styles.bioluminescenceHeader}>
