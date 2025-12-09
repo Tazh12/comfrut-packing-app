@@ -43,15 +43,22 @@ CREATE TABLE IF NOT EXISTS public.checklist_cleanliness_control_packing (
     [
       {
         "partName": "Part 1",
-        "rlu": "15"
+        "rlu": "15",
+        "retestRlu": "" // Optional: required if rlu is CAUTION (20-60) or REJECTS (>60)
       },
       {
         "partName": "Part 2",
-        "rlu": "25"
+        "rlu": "25",
+        "retestRlu": "18" // Retest value if initial test was CAUTION or REJECTS
       },
       ...
     ]
-    Maximum 5 entries (5 columns, 2 rows = 10 total, but we'll use 5 pairs)
+    Maximum 5 entries (5 columns)
+    Limits:
+    - ACCEPT: <20 (RLU) - 0 to 19
+    - CAUTION: 20-60 (RLU) - 20 to 60
+    - REJECTS: >60 (RLU) - 61 and above
+    If initial test is CAUTION or REJECTS, retestRlu is required
     */
     
     -- PDF and metadata

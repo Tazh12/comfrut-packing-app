@@ -12,6 +12,8 @@ import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklist
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
 import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
 import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeighingSealing'
+import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/checklistCleanlinessControlPacking'
+import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
 import { supabase } from '@/lib/supabase'
 import {
   LineChart,
@@ -115,7 +117,21 @@ type FootbathControlDailyStats = {
   complianceRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats
+type CleanlinessControlPackingDailyStats = {
+  date: string
+  totalRecords: number
+  totalAreas: number
+  totalParts: number
+  compliantParts: number
+  nonCompliantParts: number
+  totalBioluminescenceTests: number
+  acceptTests: number
+  cautionTests: number
+  rejectTests: number
+  complianceRate: string
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats | CleanlinessControlPackingDailyStats
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
@@ -1870,6 +1886,310 @@ export default function DashboardQualityPage() {
           productComparison,
           processRoomComparison
         })
+      } else if (selectedChecklist === 'Cleanliness Control Packing') {
+        const records = await fetchChecklistCleanlinessControlPackingData(startDate, endDate)
+        setData(records)
+
+        // Process data for comprehensive analysis
+        const dateMap = new Map<string, any>()
+        const monitorMap = new Map<string, any>()
+        const areaMap = new Map<string, any>()
+        
+        let totalRecords = records.length
+        let totalAreas = 0
+        let totalParts = 0
+        let compliantParts = 0
+        let nonCompliantParts = 0
+        let totalBioluminescenceTests = 0
+        let acceptTests = 0
+        let cautionTests = 0
+        let rejectTests = 0
+        let totalRetests = 0
+
+        records.forEach((record: any) => {
+          const date = record.date_string
+          const monitor = record.monitor_name || 'Unknown'
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              totalAreas: 0,
+              totalParts: 0,
+              compliantParts: 0,
+              nonCompliantParts: 0,
+              totalBioluminescenceTests: 0,
+              acceptTests: 0,
+              cautionTests: 0,
+              rejectTests: 0
+            })
+          }
+          
+          // Monitor stats
+          if (!monitorMap.has(monitor)) {
+            monitorMap.set(monitor, {
+              monitor,
+              totalRecords: 0,
+              totalAreas: 0,
+              totalParts: 0,
+              compliantParts: 0,
+              nonCompliantParts: 0
+            })
+          }
+          
+          // Count areas and parts
+          if (record.areas && Array.isArray(record.areas)) {
+            record.areas.forEach((area: any) => {
+              totalAreas++
+              const areaKey = area.areaName || 'Unknown'
+              
+              if (!areaMap.has(areaKey)) {
+                areaMap.set(areaKey, {
+                  areaName: areaKey,
+                  totalParts: 0,
+                  compliantParts: 0,
+                  nonCompliantParts: 0
+                })
+              }
+              
+              if (area.parts && Array.isArray(area.parts)) {
+                area.parts.forEach((part: any) => {
+                  totalParts++
+                  const areaStat = areaMap.get(areaKey)
+                  areaStat.totalParts++
+                  
+                  const dateStat = dateMap.get(date)
+                  dateStat.totalAreas++
+                  dateStat.totalParts++
+                  
+                  const monitorStat = monitorMap.get(monitor)
+                  monitorStat.totalAreas++
+                  monitorStat.totalParts++
+                  
+                  if (part.comply === true) {
+                    compliantParts++
+                    areaStat.compliantParts++
+                    dateStat.compliantParts++
+                    monitorStat.compliantParts++
+                  } else if (part.comply === false) {
+                    nonCompliantParts++
+                    areaStat.nonCompliantParts++
+                    dateStat.nonCompliantParts++
+                    monitorStat.nonCompliantParts++
+                  }
+                })
+              }
+            })
+          }
+          
+          // Count bioluminescence results
+          if (record.bioluminescence_results && Array.isArray(record.bioluminescence_results)) {
+            record.bioluminescence_results.forEach((result: any) => {
+              if (result.rlu && result.rlu.trim()) {
+                totalBioluminescenceTests++
+                const dateStat = dateMap.get(date)
+                dateStat.totalBioluminescenceTests++
+                
+                const rluNum = parseFloat(result.rlu)
+                if (!isNaN(rluNum)) {
+                  if (rluNum < 20) {
+                    acceptTests++
+                    dateStat.acceptTests++
+                  } else if (rluNum >= 20 && rluNum <= 60) {
+                    cautionTests++
+                    dateStat.cautionTests++
+                  } else {
+                    rejectTests++
+                    dateStat.rejectTests++
+                  }
+                  
+                  // Count retests
+                  if (result.retestRlu && result.retestRlu.trim()) {
+                    totalRetests++
+                  }
+                }
+              }
+            })
+          }
+          
+          // Update daily and monitor stats
+          const dateStat = dateMap.get(date)
+          dateStat.totalRecords++
+          
+          const monitorStat = monitorMap.get(monitor)
+          monitorStat.totalRecords++
+        })
+
+        // Process chart data
+        const chartDataArray = Array.from(dateMap.values())
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        
+        setChartData(chartDataArray)
+
+        // Daily stats
+        const dailyStatsArray = chartDataArray.map(d => ({
+          date: d.date,
+          totalRecords: d.totalRecords,
+          totalAreas: d.totalAreas,
+          totalParts: d.totalParts,
+          compliantParts: d.compliantParts,
+          nonCompliantParts: d.nonCompliantParts,
+          totalBioluminescenceTests: d.totalBioluminescenceTests,
+          acceptTests: d.acceptTests,
+          cautionTests: d.cautionTests,
+          rejectTests: d.rejectTests,
+          complianceRate: d.totalParts > 0
+            ? ((d.compliantParts / d.totalParts) * 100).toFixed(1)
+            : '0.0'
+        }))
+
+        setDailyStats(dailyStatsArray as CleanlinessControlPackingDailyStats[])
+
+        // Area comparison
+        const areaComparison = Array.from(areaMap.values())
+          .map(a => ({
+            areaName: a.areaName,
+            totalParts: a.totalParts,
+            compliantParts: a.compliantParts,
+            nonCompliantParts: a.nonCompliantParts,
+            complianceRate: a.totalParts > 0
+              ? ((a.compliantParts / a.totalParts) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.totalParts - a.totalParts)
+
+        // Monitor comparison
+        const monitorComparison = Array.from(monitorMap.values())
+          .map(m => ({
+            monitor: m.monitor,
+            totalRecords: m.totalRecords,
+            totalParts: m.totalParts,
+            compliantParts: m.compliantParts,
+            nonCompliantParts: m.nonCompliantParts,
+            complianceRate: m.totalParts > 0
+              ? ((m.compliantParts / m.totalParts) * 100).toFixed(1)
+              : '0.0'
+          }))
+          .sort((a, b) => b.totalRecords - a.totalRecords)
+
+        const overallComplianceRate = totalParts > 0
+          ? ((compliantParts / totalParts) * 100).toFixed(1)
+          : '0.0'
+        
+        const bioluminescenceAcceptRate = totalBioluminescenceTests > 0
+          ? ((acceptTests / totalBioluminescenceTests) * 100).toFixed(1)
+          : '0.0'
+
+        setSummaryStats({
+          totalRecords,
+          totalAreas,
+          totalParts,
+          compliantParts,
+          nonCompliantParts,
+          complianceRate: overallComplianceRate,
+          totalBioluminescenceTests,
+          acceptTests,
+          cautionTests,
+          rejectTests,
+          bioluminescenceAcceptRate,
+          totalRetests,
+          areaComparison,
+          monitorComparison
+        })
+      } else if (selectedChecklist === 'Process area staff glasses and auditory protector control') {
+        const records = await fetchChecklistStaffGlassesAuditoryData(startDate, endDate)
+        setData(records)
+
+        // Process data for analysis
+        const dateMap = new Map<string, any>()
+        const monitorMap = new Map<string, any>()
+        
+        let totalRecords = records.length
+        let totalPersons = 0
+        let totalFindings = 0
+        let noFindingsCount = 0
+
+        records.forEach((record: any) => {
+          const date = record.date_string
+          const monitor = record.monitor_name || 'Unknown'
+          
+          // Daily stats
+          if (!dateMap.has(date)) {
+            dateMap.set(date, {
+              date,
+              totalRecords: 0,
+              totalPersons: 0,
+              totalFindings: 0,
+              noFindingsCount: 0
+            })
+          }
+          
+          // Monitor stats
+          if (!monitorMap.has(monitor)) {
+            monitorMap.set(monitor, {
+              monitor,
+              totalRecords: 0,
+              totalPersons: 0,
+              totalFindings: 0,
+              noFindingsCount: 0
+            })
+          }
+          
+          const dateStat = dateMap.get(date)
+          const monitorStat = monitorMap.get(monitor)
+          
+          dateStat.totalRecords++
+          monitorStat.totalRecords++
+          
+          if (record.no_findings) {
+            noFindingsCount++
+            dateStat.noFindingsCount++
+            monitorStat.noFindingsCount++
+          } else {
+            if (record.persons && Array.isArray(record.persons)) {
+              const personsCount = record.persons.length
+              totalPersons += personsCount
+              totalFindings++
+              dateStat.totalPersons += personsCount
+              dateStat.totalFindings++
+              monitorStat.totalPersons += personsCount
+              monitorStat.totalFindings++
+            }
+          }
+        })
+
+        // Process chart data
+        const chartDataArray = Array.from(dateMap.values())
+          .map(d => ({
+            date: d.date,
+            totalRecords: d.totalRecords,
+            totalPersons: d.totalPersons,
+            totalFindings: d.totalFindings,
+            noFindingsCount: d.noFindingsCount
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+
+        // Process monitor comparison
+        const monitorComparison = Array.from(monitorMap.values())
+          .map(m => ({
+            monitor: m.monitor,
+            totalRecords: m.totalRecords,
+            totalPersons: m.totalPersons,
+            totalFindings: m.totalFindings,
+            noFindingsCount: m.noFindingsCount
+          }))
+          .sort((a, b) => b.totalRecords - a.totalRecords)
+
+        setSummaryStats({
+          totalRecords,
+          totalPersons,
+          totalFindings,
+          noFindingsCount,
+          monitorComparison
+        })
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -1952,6 +2272,8 @@ export default function DashboardQualityPage() {
                 <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
                 <option value="Footbath Control">Footbath Control</option>
                 <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
+                <option value="Cleanliness Control Packing">Cleanliness Control Packing</option>
+                <option value="Process area staff glasses and auditory protector control">Process area staff glasses and auditory protector control</option>
                 <option value="Checklist Monoproducto">Checklist Monoproducto</option>
                 <option value="Checklist Mix Producto">Checklist Mix Producto</option>
               </select>
@@ -2316,6 +2638,61 @@ export default function DashboardQualityPage() {
                     <p className="text-xs text-gray-600 mt-1">
                       {((summaryStats.nonCompliantOrigin || 0) / (summaryStats.totalBagEntries || 1) * 100).toFixed(1)}% de entradas
                     </p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Cleanliness Control Packing' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Checklists completados</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Áreas</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalAreas || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.totalParts || 0} partes inspeccionadas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Tasa de Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.complianceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.compliantParts || 0} cumplen / {summaryStats.nonCompliantParts || 0} no cumplen
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-purple-700 mb-1">🔬 Pruebas de Bioluminescence</h3>
+                    <p className="text-2xl font-bold text-purple-600">{summaryStats.totalBioluminescenceTests || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      ACCEPT: {summaryStats.acceptTests || 0} | CAUTION: {summaryStats.cautionTests || 0} | REJECTS: {summaryStats.rejectTests || 0}
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
+                    <h3 className="text-sm font-medium text-yellow-700 mb-1">🔄 Retests Realizados</h3>
+                    <p className="text-2xl font-bold text-yellow-600">{summaryStats.totalRetests || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Pruebas repetidas</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Process area staff glasses and auditory protector control' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Checklists completados</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Personas</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalPersons || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Personas inspeccionadas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-orange-700 mb-1">⚠️ Registros con Hallazgos</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.totalFindings || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Con hallazgos de no cumplimiento</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Sin Hallazgos</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.noFindingsCount || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Registros sin hallazgos</p>
                   </div>
                 </>
               ) : selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto' ? (
@@ -3882,6 +4259,366 @@ export default function DashboardQualityPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {selectedChecklist === 'Cleanliness Control Packing' && dailyStats.length > 0 && (
+              <div className="space-y-6">
+                {/* Compliance Over Time Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Cumplimiento por Fecha / Compliance by Date
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="compliantParts"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="Cumplen / Comply"
+                        dot={{ r: 4 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="nonCompliantParts"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        name="No Cumplen / Not Comply"
+                        dot={{ r: 4 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Bioluminescence Results Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Resultados de Bioluminescence por Fecha / Bioluminescence Results by Date
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="acceptTests" fill="#10b981" name="ACCEPT" />
+                      <Bar dataKey="cautionTests" fill="#f59e0b" name="CAUTION" />
+                      <Bar dataKey="rejectTests" fill="#ef4444" name="REJECTS" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Daily Statistics Table */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Estadísticas Diarias / Daily Statistics
+                  </h2>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fecha / Date
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registros / Records
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Áreas / Areas
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Partes / Parts
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Cumplen / Comply
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            No Cumplen / Not Comply
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Pruebas RLU / RLU Tests
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Tasa Cumplimiento / Compliance Rate
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {dailyStats.map((stat: any) => (
+                          <tr key={stat.date} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {stat.date}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalRecords || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalAreas || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalParts || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {stat.compliantParts || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                {stat.nonCompliantParts || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              ACCEPT: {stat.acceptTests || 0} | CAUTION: {stat.cautionTests || 0} | REJECTS: {stat.rejectTests || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                parseFloat(stat.complianceRate || '0') >= 95 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : parseFloat(stat.complianceRate || '0') >= 80
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {stat.complianceRate || '0.0'}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Area Comparison Table */}
+                {summaryStats.areaComparison && summaryStats.areaComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Cumplimiento por Área / Compliance by Area
+                    </h2>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Área / Area
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total Partes / Total Parts
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Cumplen / Comply
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              No Cumplen / Not Comply
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Tasa / Rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {summaryStats.areaComparison.map((area: any, index: number) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {area.areaName}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {area.totalParts || 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {area.compliantParts || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  {area.nonCompliantParts || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  parseFloat(area.complianceRate || '0') >= 95 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : parseFloat(area.complianceRate || '0') >= 80
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {area.complianceRate || '0.0'}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Monitor Comparison Table */}
+                {summaryStats.monitorComparison && summaryStats.monitorComparison.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Cumplimiento por Monitor / Compliance by Monitor
+                    </h2>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Monitor
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Registros / Records
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total Partes / Total Parts
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Cumplen / Comply
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              No Cumplen / Not Comply
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Tasa / Rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {summaryStats.monitorComparison.map((monitor: any, index: number) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {monitor.monitor}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {monitor.totalRecords || 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {monitor.totalParts || 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {monitor.compliantParts || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  {monitor.nonCompliantParts || 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  parseFloat(monitor.complianceRate || '0') >= 95 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : parseFloat(monitor.complianceRate || '0') >= 80
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {monitor.complianceRate || '0.0'}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Compliance Distribution Pie Chart */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">
+                    Distribución de Cumplimiento / Compliance Distribution
+                  </h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Cumplen / Comply', value: summaryStats.compliantParts || 0 },
+                          { name: 'No Cumplen / Not Comply', value: summaryStats.nonCompliantParts || 0 }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        <Cell fill="#10b981" />
+                        <Cell fill="#ef4444" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Bioluminescence Distribution Pie Chart */}
+                {summaryStats.totalBioluminescenceTests > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Distribución de Resultados de Bioluminescence / Bioluminescence Results Distribution
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'ACCEPT', value: summaryStats.acceptTests || 0 },
+                            { name: 'CAUTION', value: summaryStats.cautionTests || 0 },
+                            { name: 'REJECTS', value: summaryStats.rejectTests || 0 }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                          outerRadius={120}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          <Cell fill="#10b981" />
+                          <Cell fill="#f59e0b" />
+                          <Cell fill="#ef4444" />
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )}
 

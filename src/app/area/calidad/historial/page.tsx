@@ -13,6 +13,9 @@ import { fetchChecklistPreOperationalReviewData } from '@/lib/supabase/checklist
 import { fetchChecklistMaterialsControlData } from '@/lib/supabase/checklistMaterialsControl'
 import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootbathControl'
 import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeighingSealing'
+import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/checklistCleanlinessControlPacking'
+import { fetchChecklistMetalDetectorData } from '@/lib/supabase/checklistMetalDetector'
+import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 
 export default function HistorialPage() {
@@ -69,41 +72,6 @@ export default function HistorialPage() {
         }
         if (marca) {
           query = query.ilike('cliente', `%${marca}%`)
-        }
-        
-        const { data: result, error } = await query
-        if (error) {
-          // If it's a "relation does not exist" error, treat as no data
-          if (error.code === '42P01' || error.message?.includes('does not exist')) {
-            data = []
-          } else {
-            throw error
-          }
-        } else {
-          data = result || []
-        }
-        
-      } else if (selected === 'Ensayos Microbiológicos Lab PT') {
-        let query = supabase.from('resultados_microbiologicos_labpt').select('*')
-        
-        if (fromDate) {
-          if (!toDate) {
-            query = query.eq('fecha', fromDate)
-          } else {
-            query = query.gte('fecha', fromDate).lte('fecha', toDate)
-          }
-        } else if (toDate) {
-          query = query.lte('fecha', toDate)
-        }
-        
-        if (orden) {
-          query = query.ilike('orden', `%${orden}%`)
-        }
-        if (sku) {
-          query = query.ilike('sku', `%${sku}%`)
-        }
-        if (producto) {
-          query = query.ilike('producto', `%${producto}%`)
         }
         
         const { data: result, error } = await query
@@ -326,6 +294,74 @@ export default function HistorialPage() {
           // If fetch fails, treat as no data
           data = []
         }
+      } else if (selected === 'Cleanliness Control Packing') {
+        // Use the special fetch function for cleanliness control packing
+        try {
+          const records = await fetchChecklistCleanlinessControlPackingData(fromDate || undefined, toDate || undefined)
+          // Filter by monitor name or part names
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.areas?.some((area: any) => 
+                area.areaName?.toLowerCase().includes(orden.toLowerCase()) ||
+                area.parts?.some((part: any) => part.partName?.toLowerCase().includes(orden.toLowerCase()))
+              ) ||
+              r.bioluminescence_results?.some((result: any) => result.partName?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
+        }
+      } else if (selected === 'Metal Detector (PCC #1)') {
+        // Use the special fetch function for metal detector
+        try {
+          const records = await fetchChecklistMetalDetectorData(fromDate || undefined, toDate || undefined)
+          // Filter by orden, brand, product, or monitor name
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.orden?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.date_string?.includes(orden) ||
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase())
+            )
+          }
+          if (marca) {
+            filtered = filtered.filter((r: any) => 
+              r.brand?.toLowerCase().includes(marca.toLowerCase())
+            )
+          }
+          if (producto) {
+            filtered = filtered.filter((r: any) => 
+              r.product?.toLowerCase().includes(producto.toLowerCase())
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
+        }
+      } else if (selected === 'Process area staff glasses and auditory protector control') {
+        // Use the special fetch function for staff glasses auditory
+        try {
+          const records = await fetchChecklistStaffGlassesAuditoryData(fromDate || undefined, toDate || undefined)
+          // Filter by monitor name or person names
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.persons?.some((p: any) => p.name?.toLowerCase().includes(orden.toLowerCase()))
+            )
+          }
+          data = filtered
+        } catch (err) {
+          // If fetch fails, treat as no data
+          data = []
+        }
       }
       
       setResults(data)
@@ -460,13 +496,6 @@ export default function HistorialPage() {
           : `checklist_mix_${orden}`
         
         exportToFile(data, fileName, format, 'Checklist')
-        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
-        
-      } else if (selected === 'Ensayos Microbiológicos Lab PT') {
-        // Export Lab PT data
-        const record = selectedRecord
-        const fileName = `labpt_${record.orden || record.orden_fabricacion || 'data'}_${record.fecha || ''}`
-        exportRecord(record, fileName, format)
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       } else if (selected === 'Foreign Material Findings Record') {
         // Export Foreign Material Findings Record data
@@ -757,6 +786,201 @@ export default function HistorialPage() {
         const fileName = `weighing_sealing_${record.date_string || 'data'}`
         exportToFile(rows, fileName, format, 'Weighing Sealing')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Cleanliness Control Packing') {
+        // Export Cleanliness Control Packing data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Monitor Name',
+          'Area Name',
+          'Part Name',
+          'Comply',
+          'Observation',
+          'Corrective Action',
+          'Corrective Action Status',
+          'Bioluminescence Part',
+          'RLU',
+          'Retest RLU'
+        ]
+        
+        // Create rows - one per part across all areas
+        const rows: any[][] = [headers]
+        
+        if (record.areas && record.areas.length > 0) {
+          record.areas.forEach((area: any) => {
+            area.parts.forEach((part: any) => {
+              const row = [
+                record.date_string || '',
+                record.monitor_name || '',
+                area.areaName || '',
+                part.partName || '',
+                part.comply === true ? 'Comply' : part.comply === false ? 'Not Comply' : '',
+                part.observation || '',
+                part.correctiveAction || '',
+                part.correctiveActionComply === true ? 'Comply' : part.correctiveActionComply === false ? 'Not Comply' : '',
+                '', // Bioluminescence part will be added separately
+                '', // RLU
+                '' // Retest RLU
+              ]
+              rows.push(row)
+            })
+          })
+        }
+        
+        // Add bioluminescence results
+        if (record.bioluminescence_results && record.bioluminescence_results.length > 0) {
+          record.bioluminescence_results.forEach((result: any) => {
+            const row = [
+              record.date_string || '',
+              record.monitor_name || '',
+              '', // Area Name
+              '', // Part Name
+              '', // Comply
+              '', // Observation
+              '', // Corrective Action
+              '', // Corrective Action Status
+              result.partName || '',
+              result.rlu || '',
+              result.retestRlu || ''
+            ]
+            rows.push(row)
+          })
+        }
+        
+        // If no data, still add one row with basic info
+        if (rows.length === 1) {
+          rows.push([
+            record.date_string || '',
+            record.monitor_name || '',
+            '', '', '', '', '', '', '', '', ''
+          ])
+        }
+        
+        const fileName = `cleanliness_control_packing_${record.date_string || 'data'}`
+        exportToFile(rows, fileName, format, 'Cleanliness Control Packing')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Metal Detector (PCC #1)') {
+        // Export Metal Detector data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Orden',
+          'Brand',
+          'Product',
+          'Monitor Name',
+          'Reading #',
+          'Hour',
+          'BF',
+          'B.NF',
+          'B.S.S',
+          'Sensitivity',
+          'Noise Alarm',
+          'Rejecting Arm',
+          'Observation',
+          'Corrective Actions'
+        ]
+        
+        // Create rows - one per reading
+        const rows: any[][] = [headers]
+        
+        if (record.readings && record.readings.length > 0) {
+          record.readings.forEach((reading: any, index: number) => {
+            const row = [
+              record.date_string || '',
+              record.orden || '',
+              record.brand || '',
+              record.product || '',
+              record.monitor_name || '',
+              index + 1,
+              reading.hour || '',
+              reading.bf || '',
+              reading.bnf || '',
+              reading.bss || '',
+              reading.sensitivity || '',
+              reading.noiseAlarm || '',
+              reading.rejectingArm || '',
+              reading.observation || '',
+              reading.correctiveActions || ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no readings, still add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.orden || '',
+            record.brand || '',
+            record.product || '',
+            record.monitor_name || '',
+            '', '', '', '', '', '', '', '', '', ''
+          ])
+        }
+        
+        const fileName = `metal_detector_${record.date_string || 'data'}_${record.orden || ''}`
+        exportToFile(rows, fileName, format, 'Metal Detector')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Process area staff glasses and auditory protector control') {
+        // Export Staff Glasses Auditory data
+        const record = selectedRecord
+        
+        // Define headers
+        const headers = [
+          'Date',
+          'Monitor Name',
+          'No Findings',
+          'Person Name',
+          'Area',
+          'Glass Type',
+          'Condition In',
+          'Observation In',
+          'Condition Out',
+          'Observation Out'
+        ]
+        
+        // Create rows - one per person
+        const rows: any[][] = [headers]
+        
+        if (record.no_findings) {
+          // If no findings, just add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.monitor_name || '',
+            'Yes',
+            '', '', '', '', '', '', ''
+          ])
+        } else if (record.persons && record.persons.length > 0) {
+          record.persons.forEach((person: any) => {
+            const row = [
+              record.date_string || '',
+              record.monitor_name || '',
+              'No',
+              person.name || '',
+              person.area || '',
+              person.glassType || '',
+              person.conditionIn || '',
+              person.observationIn || '',
+              person.conditionOut || '',
+              person.observationOut || ''
+            ]
+            rows.push(row)
+          })
+        } else {
+          // If no persons data, still add one row with basic info
+          rows.push([
+            record.date_string || '',
+            record.monitor_name || '',
+            'No',
+            '', '', '', '', '', '', ''
+          ])
+        }
+        
+        const fileName = `staff_glasses_auditory_${record.date_string || 'data'}`
+        exportToFile(rows, fileName, format, 'Staff Glasses Auditory')
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -791,8 +1015,8 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Check weighing and sealing of packaged products' || selected === 'Ensayos Microbiológicos Lab PT') {
-          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, Weighing Sealing, and Lab PT checklists, use pdf_url directly from record
+        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Check weighing and sealing of packaged products' || selected === 'Cleanliness Control Packing' || selected === 'Metal Detector (PCC #1)' || selected === 'Process area staff glasses and auditory protector control') {
+          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, Weighing Sealing, Metal Detector, and Staff Glasses Auditory checklists, use pdf_url directly from record
           if (selectedRecord.pdf_url) {
             setPdfUrl(selectedRecord.pdf_url)
           }
@@ -812,8 +1036,8 @@ export default function HistorialPage() {
 
         const orden = selectedRecord.orden_fabricacion || selectedRecord.orden
 
-        // For Foreign Material and Pre-Operational Review, use pdf_url directly if available
-        if ((selected === 'Foreign Material Findings Record' || selected === 'Pre-Operational Review Processing Areas') && selectedRecord.pdf_url) {
+        // For Foreign Material, Pre-Operational Review, Metal Detector, and Staff Glasses Auditory, use pdf_url directly if available
+        if ((selected === 'Foreign Material Findings Record' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Metal Detector (PCC #1)' || selected === 'Process area staff glasses and auditory protector control') && selectedRecord.pdf_url) {
           setPdfUrl(selectedRecord.pdf_url)
           setLoadingFiles(false)
           return
@@ -872,14 +1096,16 @@ export default function HistorialPage() {
             <option value="">Seleccione un checklist</option>
             <option value="Checklist Monoproducto">Checklist Monoproducto</option>
             <option value="Checklist Mix Producto">Checklist Mix Producto</option>
-            <option value="Ensayos Microbiológicos Lab PT">Ensayos Microbiológicos Lab PT</option>
             <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
+            <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
             <option value="Staff Good Practices Control">Staff Good Practices Control</option>
             <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
             <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
             <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
             <option value="Footbath Control">Footbath Control</option>
             <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
+            <option value="Cleanliness Control Packing">Cleanliness Control Packing</option>
+            <option value="Process area staff glasses and auditory protector control">Process area staff glasses and auditory protector control</option>
           </select>
         </div>
         <div>
@@ -998,7 +1224,7 @@ export default function HistorialPage() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && (
                   <>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden de fabricación</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">SKU</th>
@@ -1058,6 +1284,29 @@ export default function HistorialPage() {
                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Entradas</th>
                     </>
                   )}
+                  {selected === 'Cleanliness Control Packing' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Áreas</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Bioluminescence</th>
+                    </>
+                  )}
+                  {selected === 'Metal Detector (PCC #1)' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Producto</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Orden</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Lecturas</th>
+                    </>
+                  )}
+                  {selected === 'Process area staff glasses and auditory protector control' && (
+                    <>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Monitor</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Hallazgos</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Personas</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Marca/Cliente</th>
                 )}
@@ -1070,7 +1319,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && (
                     <>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.orden_fabricacion || record.orden || '-'}
@@ -1167,6 +1416,43 @@ export default function HistorialPage() {
                       <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
                       <td className="px-4 py-2 text-sm text-gray-800">
                         {record.bag_entries?.length || 0} entrada(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Cleanliness Control Packing' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.areas?.length || 0} área(s)
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.bioluminescence_results?.length || 0} resultado(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Metal Detector (PCC #1)' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.brand || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.product || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.orden || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.readings?.length || 0} lectura(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Process area staff glasses and auditory protector control' && (
+                    <>
+                      <td className="px-4 py-2 text-sm text-gray-800">{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2 text-sm">
+                        {record.no_findings ? (
+                          <span className="text-green-600 font-semibold">Sin Hallazgos</span>
+                        ) : (
+                          <span className="text-orange-600 font-semibold">Con Hallazgos</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-800">
+                        {record.persons?.length || 0} persona(s)
                       </td>
                     </>
                   )}
