@@ -88,12 +88,6 @@ const CHECKLIST_MAP: Record<string, Omit<IncompleteChecklist, 'storageKey'>> = {
     path: '/area/calidad/checklist-cleanliness-control-packing',
     area: 'calidad'
   },
-  'checklist-staff-glasses-auditory-draft': {
-    id: 'staff-glasses-auditory',
-    name: 'Process area staff glasses and auditory protector control',
-    path: '/area/calidad/checklist-staff-glasses-auditory',
-    area: 'calidad'
-  },
   'checklist-solicitud-mtto-draft': {
     id: 'solicitud-mtto',
     name: 'Solicitud de Mantenimiento',
