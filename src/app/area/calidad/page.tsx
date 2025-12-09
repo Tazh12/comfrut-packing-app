@@ -1,8 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { useToast } from '@/context/ToastContext'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -13,101 +13,19 @@ interface CalidadCard {
   description: string
   storageKey?: string
   colorType?: 'normal' | 'critical' | 'dashboard'
+  category: 'pre-operational' | 'operational' | 'review'
 }
 
-// Registro operativo - Primera fila
-const registroOperativo: CalidadCard[] = [
-  {
-    title: 'Metal Detector (PCC #1)',
-    icon: Search,
-    href: '/area/calidad/checklist-metal-detector',
-    description: 'Checklist de control crítico de detector de metales.',
-    storageKey: 'checklist-metal-detector-draft',
-    colorType: 'critical'
-  },
-  {
-    title: 'Checklist Monoproducto',
-    icon: PackageCheck,
-    href: '/area/calidad/checklist-monoproducto',
-    description: 'Gestión de checklist para monoproducto.',
-    storageKey: 'checklist-monoproducto-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Checklist Mix Producto',
-    icon: FlaskConical,
-    href: '/area/calidad/checklist_producto_mix',
-    description: 'Gestión de checklist para mezcla de productos.',
-    storageKey: 'checklist-producto-mix-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Foreign Material Findings Record',
-    icon: AlertTriangle,
-    href: '/area/calidad/checklist-foreign-material',
-    description: 'Record de hallazgos de materia extraña.',
-    storageKey: 'checklist-foreign-material-draft',
-    colorType: 'normal'
-  },
+// PRE-OPERATIONAL checklists (ordered by workflow)
+const preOperationalChecklists: CalidadCard[] = [
   {
     title: 'Pre-Operational Review Processing Areas',
     icon: ClipboardCheck,
     href: '/area/calidad/checklist-pre-operational-review',
     description: 'Áreas de procesamiento de revisión preoperacional.',
     storageKey: 'checklist-pre-operational-review-draft',
-    colorType: 'normal'
-  }
-]
-
-// Registro + análisis - Segunda fila
-const registroAnalisis: CalidadCard[] = [
-  {
-    title: 'Control Temperatura de Proceso',
-    icon: Thermometer,
-    href: '/area/calidad/checklist-envtemp',
-    description: 'Checklist de monitoreo de temperatura ambiental.',
-    storageKey: 'checklist-envtemp-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Staff Good Practices Control',
-    icon: Users,
-    href: '/area/calidad/checklist-staff-practices',
-    description: 'Control de buenas prácticas del personal.',
-    storageKey: 'checklist-staff-practices-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Internal control of materials used in production areas',
-    icon: Package,
-    href: '/area/calidad/checklist-materials-control',
-    description: 'Control interno de materiales usados en áreas productivas.',
-    storageKey: 'checklist-materials-control-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Process area staff glasses and auditory protector control',
-    icon: Eye,
-    href: '/area/calidad/checklist-staff-glasses-auditory',
-    description: 'Control de lentes y/o protector auditivo del personal que ingresa a areas de proceso.',
-    storageKey: 'checklist-staff-glasses-auditory-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Footbath Control',
-    icon: Droplet,
-    href: '/area/calidad/checklist-footbath-control',
-    description: 'Control de pediluvios y concentración de sanitizante.',
-    storageKey: 'checklist-footbath-control-draft',
-    colorType: 'normal'
-  },
-  {
-    title: 'Check weighing and sealing of packaged products',
-    icon: Scale,
-    href: '/area/calidad/checklist-weighing-sealing',
-    description: 'Chequeo de pesaje y sellado de los productos envasados.',
-    storageKey: 'checklist-weighing-sealing-draft',
-    colorType: 'normal'
+    colorType: 'normal',
+    category: 'pre-operational'
   },
   {
     title: 'Cleanliness Control Packing',
@@ -115,23 +33,107 @@ const registroAnalisis: CalidadCard[] = [
     href: '/area/calidad/checklist-cleanliness-control-packing',
     description: 'Control de limpieza de empaque.',
     storageKey: 'checklist-cleanliness-control-packing-draft',
-    colorType: 'normal'
+    colorType: 'normal',
+    category: 'pre-operational'
   },
   {
-    title: 'Historial',
-    icon: History,
-    href: '/area/calidad/historial',
-    description: 'Revisa registros históricos de calidad.',
-    colorType: 'normal'
+    title: 'Footbath Control',
+    icon: Droplet,
+    href: '/area/calidad/checklist-footbath-control',
+    description: 'Control de pediluvios y concentración de sanitizante.',
+    storageKey: 'checklist-footbath-control-draft',
+    colorType: 'normal',
+    category: 'pre-operational'
   },
   {
-    title: 'Dashboard de Calidad',
-    icon: BarChart3,
-    href: '/area/calidad/dashboard-quality',
-    description: 'Visualiza y analiza datos de calidad.',
-    colorType: 'dashboard'
+    title: 'Staff Good Practices Control',
+    icon: Users,
+    href: '/area/calidad/checklist-staff-practices',
+    description: 'Control de buenas prácticas del personal.',
+    storageKey: 'checklist-staff-practices-draft',
+    colorType: 'normal',
+    category: 'pre-operational'
+  },
+  {
+    title: 'Process Area Staff Glasses and Auditory Protector Control',
+    icon: Eye,
+    href: '/area/calidad/checklist-staff-glasses-auditory',
+    description: 'Control de lentes y/o protector auditivo del personal que ingresa a áreas de proceso.',
+    storageKey: 'checklist-staff-glasses-auditory-draft',
+    colorType: 'normal',
+    category: 'pre-operational'
+  },
+  {
+    title: 'Internal Control of Materials Used in Production Areas',
+    icon: Package,
+    href: '/area/calidad/checklist-materials-control',
+    description: 'Control interno de materiales usados en áreas productivas.',
+    storageKey: 'checklist-materials-control-draft',
+    colorType: 'normal',
+    category: 'pre-operational'
   }
 ]
+
+// OPERATIONAL checklists (ordered by criticality/frequency)
+const operationalChecklists: CalidadCard[] = [
+  {
+    title: 'Metal Detector (PCC #1)',
+    icon: Search,
+    href: '/area/calidad/checklist-metal-detector',
+    description: 'Checklist de control crítico de detector de metales.',
+    storageKey: 'checklist-metal-detector-draft',
+    colorType: 'critical',
+    category: 'operational'
+  },
+  {
+    title: 'Monoproduct Checklist',
+    icon: PackageCheck,
+    href: '/area/calidad/checklist-monoproducto',
+    description: 'Gestión de checklist para monoproducto.',
+    storageKey: 'checklist-monoproducto-draft',
+    colorType: 'normal',
+    category: 'operational'
+  },
+  {
+    title: 'Mix Product Checklist',
+    icon: FlaskConical,
+    href: '/area/calidad/checklist_producto_mix',
+    description: 'Gestión de checklist para mezcla de productos.',
+    storageKey: 'checklist-producto-mix-draft',
+    colorType: 'normal',
+    category: 'operational'
+  },
+  {
+    title: 'Check Weighing and Sealing of Packaged Products',
+    icon: Scale,
+    href: '/area/calidad/checklist-weighing-sealing',
+    description: 'Chequeo de pesaje y sellado de los productos envasados.',
+    storageKey: 'checklist-weighing-sealing-draft',
+    colorType: 'normal',
+    category: 'operational'
+  },
+  {
+    title: 'Process Environmental Temperature Control',
+    icon: Thermometer,
+    href: '/area/calidad/checklist-envtemp',
+    description: 'Checklist de monitoreo de temperatura ambiental.',
+    storageKey: 'checklist-envtemp-draft',
+    colorType: 'normal',
+    category: 'operational'
+  },
+  {
+    title: 'Foreign Material Findings Record',
+    icon: AlertTriangle,
+    href: '/area/calidad/checklist-foreign-material',
+    description: 'Record de hallazgos de materia extraña.',
+    storageKey: 'checklist-foreign-material-draft',
+    colorType: 'normal',
+    category: 'operational'
+  }
+]
+
+// All checklists combined
+const allChecklists = [...preOperationalChecklists, ...operationalChecklists]
 
 // Componente de tarjeta reutilizable
 function CalidadCardComponent({ card }: { card: CalidadCard }) {
@@ -167,7 +169,7 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
   return (
     <Link
       href={card.href}
-      className="group relative p-8 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
+      className="group relative p-6 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
       style={{
         backgroundColor: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -189,7 +191,7 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
       <div className="flex flex-col items-center text-center">
         {/* Icon circle */}
         <div 
-          className="w-16 h-16 rounded-full flex items-center justify-center mb-3 transition-colors"
+          className="w-14 h-14 rounded-full flex items-center justify-center mb-2.5 transition-colors"
           style={{ backgroundColor: iconStyles.circleBg }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = iconStyles.hoverCircleBg
@@ -203,16 +205,16 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
           }}
         >
           <Icon 
-            className="h-8 w-8 transition-colors" 
+            className="h-7 w-7 transition-colors" 
             style={{ color: iconStyles.iconColor }}
           />
         </div>
         {/* Title */}
-        <h3 className="text-lg font-semibold mb-1.5" style={{ color: 'var(--title-text)' }}>
+        <h3 className="text-base font-semibold mb-1" style={{ color: 'var(--title-text)' }}>
           {card.title}
         </h3>
         {/* Description */}
-        <p className="text-sm" style={{ color: 'var(--muted-text)' }}>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--muted-text)' }}>
           {card.description}
         </p>
       </div>
@@ -220,15 +222,60 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
   )
 }
 
+// Accordion Section Component
+function AccordionSection({ 
+  title, 
+  isExpanded, 
+  onToggle, 
+  children 
+}: { 
+  title: string
+  isExpanded: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="mb-4 rounded-lg overflow-hidden" style={{ border: '1px solid var(--card-border)' }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 transition-colors"
+        style={{
+          backgroundColor: isExpanded ? 'var(--card-bg)' : 'var(--card-bg)',
+          color: 'var(--title-text)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.02))'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+        }}
+      >
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {isExpanded ? (
+          <ChevronUp className="h-5 w-5" style={{ color: 'var(--muted-text)' }} />
+        ) : (
+          <ChevronDown className="h-5 w-5" style={{ color: 'var(--muted-text)' }} />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="p-4" style={{ backgroundColor: 'var(--page-bg)' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CalidadPage() {
-  const { showToast } = useToast()
+  const [isPreOperationalExpanded, setIsPreOperationalExpanded] = useState(true) // Start expanded
+  const [isOperationalExpanded, setIsOperationalExpanded] = useState(true) // Start expanded
 
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--page-bg)' }}>
       {/* Container con ancho fijo y centrado */}
       <div className="max-w-[1150px] mx-auto">
-        {/* Encabezado */}
-        <div className="mb-8">
+        {/* Header */}
+        <div className="mb-6">
           <Link 
             href="/dashboard"
             className="inline-flex items-center transition-colors mb-4"
@@ -239,40 +286,86 @@ export default function CalidadPage() {
             <ArrowLeft className="h-5 w-5 mr-2" />
             <span>Volver</span>
           </Link>
-          <h1 className="text-2xl font-semibold mb-2" style={{ color: 'var(--title-text)' }}>Área de Calidad</h1>
-          <p className="text-sm" style={{ color: 'var(--muted-text)' }}>
-            Gestiona los checklists, controles críticos y análisis de calidad.
-          </p>
-        </div>
-
-        {/* Sección de registros */}
-        <div className="mb-6">
-          <h2 className="text-lg font-medium mb-6" style={{ color: 'var(--muted-text)' }}>
-            ¿Qué quieres hacer?
-          </h2>
-        </div>
-
-        {/* Primera fila: Registro operativo */}
-        <div className="mb-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {registroOperativo.map((card) => (
-              <CalidadCardComponent key={card.title} card={card} />
-            ))}
+          
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold mb-2" style={{ color: 'var(--title-text)' }}>
+                Área de Calidad
+              </h1>
+              <p className="text-sm" style={{ color: 'var(--muted-text)' }}>
+                Gestiona los checklists, controles críticos y análisis de calidad.
+              </p>
+            </div>
+            
+            {/* Header buttons */}
+            <div className="flex gap-2">
+              <Link
+                href="/area/calidad/historial"
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--card-bg)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--title-text)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                }}
+              >
+                <History className="h-4 w-4 mr-2" />
+                Historial
+              </Link>
+              <Link
+                href="/area/calidad/dashboard-quality"
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--card-bg)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--title-text)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                }}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Dashboard de Calidad
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Segunda fila: Registro + análisis */}
-        <div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {registroAnalisis.map((card) => (
-              <CalidadCardComponent key={card.title} card={card} />
-            ))}
-          </div>
-        </div>
+        {/* Accordion Sections */}
+        <div className="space-y-4">
+          {/* PRE-OPERATIONAL Section */}
+          <AccordionSection
+            title="PRE-OPERATIONAL"
+            isExpanded={isPreOperationalExpanded}
+            onToggle={() => setIsPreOperationalExpanded(!isPreOperationalExpanded)}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {preOperationalChecklists.map((card) => (
+                <CalidadCardComponent key={card.title} card={card} />
+              ))}
+            </div>
+          </AccordionSection>
 
-        {/* Espacio para contenido adicional */}
-        <div className="mt-12">
-          {/* Aquí se puede agregar más contenido específico del área */}
+          {/* OPERATIONAL Section */}
+          <AccordionSection
+            title="OPERATIONAL"
+            isExpanded={isOperationalExpanded}
+            onToggle={() => setIsOperationalExpanded(!isOperationalExpanded)}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {operationalChecklists.map((card) => (
+                <CalidadCardComponent key={card.title} card={card} />
+              ))}
+            </div>
+          </AccordionSection>
         </div>
       </div>
     </div>
