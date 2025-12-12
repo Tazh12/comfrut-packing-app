@@ -385,7 +385,7 @@ export default function ValidarTrabajoPage() {
         } catch (pdfError) {
           console.error('Error al generar PDF:', pdfError)
           // Don't fail the validation if PDF generation fails, just log it
-          showToast('Trabajo validado, pero hubo un error al generar el PDF', 'warning')
+          showToast('Trabajo validado, pero hubo un error al generar el PDF', 'error')
         }
       } else {
         // Reject and return to technician
