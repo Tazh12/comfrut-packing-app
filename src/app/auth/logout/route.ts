@@ -6,20 +6,20 @@ export async function POST(request: Request) {
   const response = NextResponse.json({ success: true })
   
   try {
-    // Pass cookies function directly - createRouteHandlerClient expects a function that returns a Promise
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // We still need to await cookies() for manual cookie clearing
+    // Get cookies first
     const cookieStore = await cookies()
     
-    // Sign out with global scope to clear all sessions
-    // This should automatically clear cookies managed by Supabase
-    const { error } = await supabase.auth.signOut({ scope: 'global' })
+    // Create Supabase client with cookies
+    const supabase = createRouteHandlerClient({ cookies })
     
-    if (error) {
-      // Log the error but don't fail the request
-      // Session might already be invalid, which is fine in production
-      console.warn('Logout warning (non-blocking):', error.message)
+    // Sign out with global scope to clear all sessions
+    try {
+      const { error } = await supabase.auth.signOut({ scope: 'global' })
+      if (error) {
+        console.warn('Logout warning (non-blocking):', error.message)
+      }
+    } catch (signOutError) {
+      console.warn('Sign out error (non-blocking):', signOutError)
     }
     
     // Manually clear all possible Supabase auth cookies
@@ -34,32 +34,33 @@ export async function POST(request: Request) {
       'supabase-auth-token',
       `${projectRef}-auth-token`,
       `sb-${projectRef}-auth-token`,
+      `sb-${projectRef}-auth-token-code-verifier`,
     ]
     
-    // Clear cookies by pattern
+    // Clear cookies by pattern - try multiple approaches
     cookiePatterns.forEach(name => {
+      // Delete the cookie
+      response.cookies.delete(name)
+      // Also set it to empty with expired date
       response.cookies.set(name, '', {
         expires: new Date(0),
         path: '/',
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        maxAge: 0,
       })
-      response.cookies.delete(name)
     })
     
     // Clear any cookies that match auth/token patterns
     cookieStore.getAll().forEach(cookie => {
       const name = cookie.name.toLowerCase()
       if (name.includes('auth') || name.includes('token') || name.includes('supabase') || name.includes('sb-')) {
+        // Delete the cookie
+        response.cookies.delete(cookie.name)
+        // Also set it to empty with expired date
         response.cookies.set(cookie.name, '', {
           expires: new Date(0),
           path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          maxAge: 0,
         })
-        response.cookies.delete(cookie.name)
       }
     })
   } catch (error) {

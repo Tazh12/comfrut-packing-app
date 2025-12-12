@@ -35,6 +35,17 @@ export default function LoginPage() {
     }
   }, [])
 
+  // Remove logout parameter from URL after page loads
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('logout') === 'true') {
+        url.searchParams.delete('logout')
+        window.history.replaceState({}, '', url.pathname + (url.search || ''))
+      }
+    }
+  }, [])
+
   // Auto-retry after cooldown expires
   useEffect(() => {
     if (cooldownSeconds === 0 && autoRetryEnabled && retryAttemptRef.current && !loading) {

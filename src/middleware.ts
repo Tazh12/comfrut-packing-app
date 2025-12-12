@@ -13,9 +13,13 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname === '/login'
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') ||
                           request.nextUrl.pathname.startsWith('/area')
+  
+  // Check if this is a logout redirect - don't redirect back to dashboard
+  const isLogout = request.nextUrl.searchParams.get('logout') === 'true'
 
   // Redirigir a dashboard si está autenticado y trata de acceder a /login
-  if (isAuthPage && user) {
+  // BUT skip this if it's a logout redirect
+  if (isAuthPage && user && !isLogout) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

@@ -1,40 +1,65 @@
 'use client'
 
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useRouter } from 'next/navigation'
 
 export default function LogoutButton() {
-  const router = useRouter()
-
   const handleLogout = async () => {
     try {
-      // Call server-side logout route to properly handle cookies in production
-      const response = await fetch('/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      // Create a fresh client instance for logout
+      const supabase = createClientComponentClient()
       
-      // Even if the server request fails, try client-side logout as fallback
-      if (!response.ok) {
-        console.warn('Server logout failed, trying client-side logout')
-        try {
-          const supabase = createClientComponentClient()
-          await supabase.auth.signOut({ scope: 'global' })
-        } catch (clientError) {
-          // Ignore client-side errors, session might already be invalid
-          console.warn('Client-side logout warning:', clientError)
+      // First, call server-side logout route to properly handle cookies
+      // This must happen first to clear server-side session
+      try {
+        const response = await fetch('/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        })
+        
+        // Wait for response to ensure cookies are cleared
+        if (!response.ok) {
+          console.warn('Server logout response not OK:', response.status)
         }
+      } catch (fetchError) {
+        console.warn('Server logout request failed:', fetchError)
       }
       
-      // Always redirect to login with hard redirect to clear any cached state
-      window.location.href = '/login'
+      // Then sign out client-side
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' })
+      
+      if (signOutError) {
+        console.warn('Sign out error:', signOutError.message)
+      }
+      
+      // Clear any local storage items that might be related to auth
+      try {
+        const keys = Object.keys(localStorage)
+        keys.forEach(key => {
+          if (key.includes('supabase') || key.includes('auth') || key.includes('sb-')) {
+            localStorage.removeItem(key)
+          }
+        })
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+      
+      // Clear session storage
+      try {
+        sessionStorage.clear()
+      } catch (e) {
+        // Ignore sessionStorage errors
+      }
+      
+      // Redirect with logout flag to prevent middleware redirect loop
+      // The flag tells middleware to allow access to login page even if cookies aren't fully cleared yet
+      window.location.href = '/login?logout=true'
     } catch (error) {
-      // Even if there's an unexpected error, still redirect to login
       console.error('Error al cerrar sesión:', error)
-      router.replace('/login')
-      window.location.href = '/login'
+      // Still redirect even on error with logout flag
+      window.location.href = '/login?logout=true'
     }
   }
 

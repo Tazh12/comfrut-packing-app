@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { AuthContextType } from '@/types/auth'
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -12,6 +12,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Create client inside effect to avoid multiple instances
+    const supabase = createClientComponentClient()
+    
     // Listen for changes on auth state (sign in, sign out, etc.)
     // This will fire immediately with the current session when subscribed
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -23,11 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
+    const supabase = createClientComponentClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
   }
 
   const signOut = async () => {
+    const supabase = createClientComponentClient()
     // Try to sign out, but don't throw if session is already invalid
     // This handles cases where the session might already be expired
     const { error } = await supabase.auth.signOut({ scope: 'global' })
