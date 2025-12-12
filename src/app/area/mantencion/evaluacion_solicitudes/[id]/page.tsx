@@ -1029,7 +1029,7 @@ export default function EvaluacionSolicitudPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-medium" style={{ color: '#94A3B8' }}>
-                        {formatDateSafe(event.fecha, event.hora || '00:00:00', 'dd-MM-yyyy HH:mm')}
+                        {formatDateSafe(event.fecha, event.hora || '00:00:00')}
                       </span>
                       {event.autor && (
                         <>
