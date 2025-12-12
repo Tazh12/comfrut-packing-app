@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { Wrench, ClipboardCheck, BarChart3, ArrowLeft } from 'lucide-react'
+import { Wrench, ClipboardCheck, BarChart3, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para las tarjetas
@@ -12,31 +13,67 @@ interface MantencionCard {
   description: string
   storageKey?: string
   colorType?: 'normal' | 'dashboard'
+  badge?: string
+  badgeColor?: string
 }
 
-// Array de tarjetas de mantención
-const mantencionCards: MantencionCard[] = [
+// Definición de secciones por rol
+interface MantencionSection {
+  title: string
+  description: string
+  cards: MantencionCard[]
+}
+
+// Secciones organizadas por rol y flujo
+const mantencionSections: MantencionSection[] = [
   {
-    title: 'Crear solicitud de mantenimiento',
-    icon: Wrench,
-    href: '/area/mantencion/checklist/solicitud_mtto',
-    description: 'Registra una nueva solicitud de mantenimiento correctivo programado.',
-    storageKey: 'checklist-solicitud-mtto-draft',
-    colorType: 'normal'
+    title: 'Solicitudes',
+    description: 'Para todos los usuarios',
+    cards: [
+      {
+        title: 'Nueva solicitud',
+        icon: Wrench,
+        href: '/area/mantencion/checklist/solicitud_mtto',
+        description: 'Crea una nueva solicitud de mantenimiento.',
+        storageKey: 'checklist-solicitud-mtto-draft',
+        colorType: 'normal'
+      },
+      {
+        title: 'Mis solicitudes',
+        icon: ClipboardCheck,
+        href: '/area/mantencion/solicitudes/mis',
+        description: 'Revisa el estado de tus solicitudes.',
+        colorType: 'normal'
+      }
+    ]
   },
   {
-    title: 'Solicitudes por evaluar',
-    icon: ClipboardCheck,
-    href: '/area/mantencion/evaluacion_solicitudes',
-    description: 'Revisa y evalúa solicitudes pendientes.',
-    colorType: 'normal'
+    title: 'Gestión',
+    description: 'Para planificadores y supervisores',
+    cards: [
+      {
+        title: 'Gestión de solicitudes',
+        icon: ClipboardCheck,
+        href: '/area/mantencion/evaluacion_solicitudes',
+        description: 'Bandeja, asignación y validación de trabajos.',
+        colorType: 'normal',
+        badge: 'Planificador'
+      }
+    ]
   },
   {
-    title: 'Dashboard de Solicitudes',
-    icon: BarChart3,
-    href: '/area/mantencion/historial',
-    description: 'Visualiza y analiza datos de solicitudes.',
-    colorType: 'dashboard'
+    title: 'Técnicos',
+    description: 'Para personal de mantenimiento',
+    cards: [
+      {
+        title: 'Mis trabajos',
+        icon: Wrench,
+        href: '/area/mantencion/tecnico/mis-trabajos',
+        description: 'Trabajos asignados: programados y en ejecución.',
+        colorType: 'normal',
+        badge: 'Técnico'
+      }
+    ]
   }
 ]
 
@@ -105,6 +142,17 @@ function MantencionCardComponent({ card }: { card: MantencionCard }) {
       {card.storageKey && (
         <ChecklistCardStatusBadge storageKey={card.storageKey} />
       )}
+      {card.badge && (
+        <div 
+          className="absolute top-3 right-3 px-2 py-0.5 rounded text-xs font-medium"
+          style={{ 
+            backgroundColor: '#EFF6FF',
+            color: '#1D4ED8'
+          }}
+        >
+          {card.badge}
+        </div>
+      )}
       <div className="flex flex-col items-center text-center">
         {/* Icon circle */}
         <div 
@@ -129,13 +177,77 @@ function MantencionCardComponent({ card }: { card: MantencionCard }) {
   )
 }
 
+// Accordion Section Component
+function AccordionSection({ 
+  title, 
+  description,
+  isExpanded, 
+  onToggle, 
+  children 
+}: { 
+  title: string
+  description: string
+  isExpanded: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="mb-4 rounded-lg overflow-hidden" style={{ border: '1px solid #E2E8F0' }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 transition-colors"
+        style={{
+          backgroundColor: '#FFFFFF',
+          color: '#111827'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#F9FAFB'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#FFFFFF'
+        }}
+      >
+        <div className="text-left">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+            {description}
+          </p>
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="h-5 w-5" style={{ color: '#6B7280' }} />
+        ) : (
+          <ChevronDown className="h-5 w-5" style={{ color: '#6B7280' }} />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="p-4" style={{ backgroundColor: '#F5F7FB' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MantencionPage() {
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'Solicitudes': true,
+    'Gestión': true,
+    'Técnicos': true
+  })
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionTitle]: !prev[sectionTitle]
+    }))
+  }
+
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: '#F5F7FB' }}>
       {/* Container con ancho fijo y centrado */}
       <div className="max-w-[1150px] mx-auto">
         {/* Encabezado */}
-        <div className="mb-8">
+        <div className="mb-6">
           <Link 
             href="/dashboard"
             className="inline-flex items-center transition-colors mb-4"
@@ -146,29 +258,56 @@ export default function MantencionPage() {
             <ArrowLeft className="h-5 w-5 mr-2" />
             <span>Volver</span>
           </Link>
-          <h1 className="text-2xl font-semibold mb-2" style={{ color: '#111827' }}>Área de mantención</h1>
-          <p className="text-sm" style={{ color: '#6B7280' }}>
-            Gestiona solicitudes de mantenimiento correctivo y su estado.
-          </p>
+          
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold mb-2" style={{ color: '#111827' }}>
+                Área de mantención
+              </h1>
+              <p className="text-sm" style={{ color: '#6B7280' }}>
+                Gestiona solicitudes de mantenimiento correctivo y su estado.
+              </p>
+            </div>
+            
+            {/* Dashboard button */}
+            <Link
+              href="/area/mantencion/historial"
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E2E8F0',
+                color: '#111827'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#F9FAFB'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#FFFFFF'
+              }}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Dashboard de Solicitudes
+            </Link>
+          </div>
         </div>
 
-        {/* Sección de tarjetas */}
-        <div className="mb-6">
-          <h2 className="text-lg font-medium mb-6" style={{ color: '#6B7280' }}>
-            ¿Qué quieres hacer?
-          </h2>
-        </div>
-
-        {/* Grid de tarjetas - responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mantencionCards.map((card) => (
-            <MantencionCardComponent key={card.title} card={card} />
+        {/* Accordion Sections */}
+        <div className="space-y-4">
+          {mantencionSections.map((section) => (
+            <AccordionSection
+              key={section.title}
+              title={section.title}
+              description={section.description}
+              isExpanded={expandedSections[section.title] ?? true}
+              onToggle={() => toggleSection(section.title)}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {section.cards.map((card) => (
+                  <MantencionCardComponent key={card.title} card={card} />
+                ))}
+              </div>
+            </AccordionSection>
           ))}
-        </div>
-
-        {/* Espacio para contenido adicional */}
-        <div className="mt-12">
-          {/* Aquí se puede agregar más contenido específico del área */}
         </div>
       </div>
     </div>

@@ -4,89 +4,17 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
-import { FormularioResolucion } from '@/components/FormularioResolucion'
-import { pdf, Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
-import { ChecklistPDFMantenimientoDocument } from '@/components/ChecklistPDFMantenimiento'
+import { ArrowLeft, Clock, User, Calendar, ZoomIn, X, FileText, UserPlus, Info, Download, ExternalLink } from 'lucide-react'
+import { format, formatDistanceToNow, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-// Validation Section Component
-function ValidationSection({ 
-  solicitud, 
-  onValidate, 
-  onReturnToReview 
-}: { 
-  solicitud: any
-  onValidate: () => Promise<void>
-  onReturnToReview: (nota: string) => Promise<void>
-}) {
-  const [showReturnForm, setShowReturnForm] = useState(false)
-  const [nota, setNota] = useState('')
-
-  const handleReturnToReview = async () => {
-    if (!nota.trim()) {
-      alert('Por favor, agregue una nota explicando qué necesita ser revisado')
-      return
-    }
-    await onReturnToReview(nota)
-  }
-
-  return (
-    <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 rounded-lg shadow mb-6">
-      <h2 className="text-xl font-semibold text-yellow-900 mb-4">Validar Trabajo</h2>
-      <p className="text-sm text-yellow-800 mb-4">
-        El técnico ha marcado este trabajo como resuelto. Por favor, valide que todo esté correcto antes de finalizar.
-      </p>
-      
-      {!showReturnForm ? (
-        <div className="flex gap-4">
-          <button
-            onClick={onValidate}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-          >
-            Validar y Finalizar
-          </button>
-          <button
-            onClick={() => setShowReturnForm(true)}
-            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
-          >
-            Volver a Revisar
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nota para el técnico (requerida) *
-            </label>
-            <textarea
-              value={nota}
-              onChange={(e) => setNota(e.target.value)}
-              placeholder="Explique qué necesita ser corregido o revisado..."
-              rows={4}
-              className="block w-full border border-gray-300 rounded-md shadow-sm p-2"
-              required
-            />
-          </div>
-          <div className="flex gap-4">
-            <button
-              onClick={handleReturnToReview}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
-            >
-              Enviar y Devolver a Ejecución
-            </button>
-            <button
-              onClick={() => {
-                setShowReturnForm(false)
-                setNota('')
-              }}
-              className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+interface TimelineEvent {
+  fecha: string
+  hora?: string
+  tipo: 'creacion' | 'asignacion' | 'reasignacion' | 'inicio' | 'actualizacion' | 'validacion' | 'finalizacion'
+  descripcion: string
+  icon: string
+  autor?: string
 }
 
 export default function EvaluacionSolicitudPage() {
@@ -96,8 +24,10 @@ export default function EvaluacionSolicitudPage() {
   const { showToast } = useToast()
 
   const [solicitud, setSolicitud] = useState<any>(null)
-  const [pdfUrl, setPdfUrl] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null)
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [pdfUrl, setPdfUrl] = useState<string>('')
 
   useEffect(() => {
     const fetchSolicitud = async () => {
@@ -114,6 +44,11 @@ export default function EvaluacionSolicitudPage() {
           return
         }
         setSolicitud(data)
+        
+        // Parse timeline from observaciones
+        const events = parseTimeline(data)
+        setTimelineEvents(events)
+        
         // Check if PDF exists (only if ticket is finalized)
         if (data.estado === 'finalizada' || data.estado_final) {
           const ticketId = data.ticket_id
@@ -133,442 +68,1047 @@ export default function EvaluacionSolicitudPage() {
     fetchSolicitud()
   }, [id, showToast])
 
-  const handleFinalize = async (data: any) => {
-    // Verificar usuario autenticado
-    const { data: userCheck, error: userError } = await supabase.auth.getUser()
-    if (userError || !userCheck.user) {
-      console.error('❌ Usuario no autenticado', JSON.stringify(userError || {}, null, 2))
-      showToast('Debe iniciar sesión para finalizar la solicitud', 'error')
-      return
-    }
-    console.log('✅ Usuario autenticado:', userCheck.user.id)
-    const { tecnico, fechaEjecucion, accion, observaciones, estadoFinal, fotos: execFiles } = data
-    // Verificar ID definido
-    if (!id) {
-      console.error('ID de solicitud indefinido:', id)
-      showToast('ID de solicitud indefinido', 'error')
-      return
-    }
-    // Validación
-    if (!tecnico.trim() || !fechaEjecucion || !accion.trim() || !estadoFinal || execFiles.length === 0) {
-      showToast('Por favor complete todos los campos obligatorios', 'error')
-      return
-    }
+  const isValidDate = (dateStr: string): boolean => {
+    if (!dateStr) return false
     try {
-      // 1. Subir fotos de ejecución (using same bucket as request photos, with different prefix)
-      const execUrls: string[] = []
-      const execFileNames: string[] = []
-      
-      // Verify bucket permissions first
-      const { error: permCheck } = await supabase.storage.from('mtto-fotos-temp').list('', { limit: 1 })
-      if (permCheck) {
-        console.error('Sin permisos para el bucket mtto-fotos-temp:', JSON.stringify(permCheck, null, 2))
-        showToast('No tiene permisos para subir fotos', 'error')
-        return
-      }
-      
-      for (const file of execFiles) {
-        // Use "exec-" prefix to distinguish execution photos from request photos
-        // Ensure filename is safe (remove special characters)
-        const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-        const fileNameExec = `${id}-exec-${safeFileName}`
-        execFileNames.push(fileNameExec)
-        
-        // Ensure file is a proper File/Blob object
-        const fileToUpload = file instanceof File ? file : new File([file], safeFileName, { type: 'image/jpeg' })
-        
-        const { error: uploadExecError } = await supabase.storage
-          .from('mtto-fotos-temp')
-          .upload(fileNameExec, fileToUpload, { 
-            contentType: 'image/jpeg', 
-            upsert: true,
-            cacheControl: '3600'
-          })
-        if (uploadExecError) {
-          console.error('Error al subir foto de ejecución:', JSON.stringify(uploadExecError, null, 2))
-          showToast('Error al subir fotos de ejecución', 'error')
-          return
-        }
-        const { data: { publicUrl: execUrl } } = supabase.storage.from('mtto-fotos-temp').getPublicUrl(fileNameExec)
-        execUrls.push(execUrl)
-      }
-      // 2. Actualizar registro
-      // Workflow logic:
-      // - If estadoFinal is 'resuelta', move to 'por_validar' (needs manager validation)
-      // - If estadoFinal is 'derivada', stay in 'en_ejecucion' (3rd party hasn't finished yet)
-      // - If estadoFinal is 'no procede', move to Historial (closed)
-      let newEstado = estadoFinal
-      if (estadoFinal === 'resuelta') {
-        newEstado = 'por_validar' // Needs validation before going to Historial
-      } else if (estadoFinal === 'derivada') {
-        newEstado = 'derivada' // Status stays as 'derivada' but appears in En Ejecución tab
-      } else if (estadoFinal === 'no procede') {
-        newEstado = 'no procede' // Goes to Historial (closed)
-      }
-      
-      // Get current observaciones to append history
-      const { data: currentData } = await supabase
-        .from('solicitudes_mantenimiento')
-        .select('observaciones')
-        .eq('id', id)
-        .single()
-      
-      const historyEntry = `[${new Date().toLocaleString('es-ES')}] ${tecnico} - ${estadoFinal === 'resuelta' ? 'Marcado como resuelto' : estadoFinal === 'derivada' ? 'Derivado a terceros' : 'No procede'}\nAcción: ${accion}${observaciones ? `\nObservaciones: ${observaciones}` : ''}`
-      const updatedObservaciones = currentData?.observaciones 
-        ? `${currentData.observaciones}\n\n${historyEntry}`
-        : historyEntry
-      
-      const { error: updateError } = await supabase
-        .from('solicitudes_mantenimiento')
-        .update({
-          tecnico,
-          fecha_ejecucion: fechaEjecucion,
-          accion_realizada: accion,
-          observaciones: updatedObservaciones,
-          estado_final: estadoFinal,
-          fotos_ejecucion: execUrls,
-          estado: newEstado
-        })
-        .eq('id', id)
-      if (updateError) {
-        console.error('Error al actualizar solicitud:', JSON.stringify(updateError, null, 2))
-        showToast('Error al actualizar la solicitud', 'error')
-        return
-      }
-      
-      // 3. Generate PDF only if ticket is being closed (going to Historial)
-      // PDF is generated when status is 'no procede' (closed) or when validated from 'por_validar'
-      if (newEstado === 'no procede') {
-        // Get updated solicitud data to ensure we have ticket_id
-        const { data: updatedSolicitud, error: fetchError } = await supabase
-          .from('solicitudes_mantenimiento')
-          .select('*')
-          .eq('id', id)
-          .single()
-        
-        if (fetchError || !updatedSolicitud) {
-          console.error('Error al obtener solicitud actualizada:', fetchError)
-          showToast('Error al obtener datos de la solicitud', 'error')
-          return
-        }
-        
-        // Generate PDF filename using ticket_id
-        const ticketId = updatedSolicitud.ticket_id
-        if (!ticketId) {
-          showToast('Error: Ticket ID no encontrado', 'error')
-          return
-        }
-        const pdfFileName = `Ticket_${ticketId}_Full_Report.pdf`
-      // Estilos para PDF de resolución
-      const styles = StyleSheet.create({
-        page: { padding: 30, fontFamily: 'Roboto', backgroundColor: '#ffffff' },
-        section: { marginBottom: 20 },
-        title: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 10, color: '#005F9E' },
-        label: { fontSize: 12, fontWeight: 'bold', marginBottom: 4 },
-        value: { fontSize: 12, marginBottom: 8 },
-        photo: { width: '100%', height: 150, objectFit: 'contain', marginBottom: 10 },
-        footer: { position: 'absolute', bottom: 30, left: 30, right: 30, textAlign: 'center', color: '#9CA3AF', fontSize: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 10 }
-      })
-      // Generar documento con página de solicitud + página de resolución
-      const fullReportDoc = (
-        <Document>
-          <ChecklistPDFMantenimientoDocument 
-            data={{
-              fecha: updatedSolicitud.fecha,
-              hora: updatedSolicitud.hora,
-              solicitante: updatedSolicitud.solicitante,
-              zona: updatedSolicitud.zona,
-              tipo_falla: updatedSolicitud.tipo_falla,
-              nivel_riesgo: updatedSolicitud.nivel_riesgo,
-              equipo_afectado: updatedSolicitud.equipo_afectado,
-              descripcion_falla: updatedSolicitud.descripcion,
-              recomendacion: updatedSolicitud.recomendacion
-            }} 
-            fotos={updatedSolicitud.fotos_urls || []} 
-          />
-          <Page size="A4" style={styles.page}>
-            <Text style={styles.title}>Resolución de Solicitud #{ticketId}</Text>
-            <View style={styles.section}><Text style={styles.label}>Técnico:</Text><Text style={styles.value}>{tecnico}</Text></View>
-            <View style={styles.section}><Text style={styles.label}>Fecha de Ejecución:</Text><Text style={styles.value}>{fechaEjecucion}</Text></View>
-            <View style={styles.section}><Text style={styles.label}>Acción Realizada:</Text><Text style={styles.value}>{accion}</Text></View>
-            {observaciones && <View style={styles.section}><Text style={styles.label}>Observaciones:</Text><Text style={styles.value}>{observaciones}</Text></View>}
-            <View style={styles.section}><Text style={styles.label}>Estado Final:</Text><Text style={styles.value}>{estadoFinal}</Text></View>
-            {execUrls.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.label}>Fotos de Ejecución:</Text>
-                {execUrls.map((url, i) => (
-                  <Image key={i} src={url} style={styles.photo} />
-                ))}
-              </View>
-            )}
-            <Text style={styles.footer}>Este documento es parte del sistema de gestión de calidad de Comfrut</Text>
-          </Page>
-        </Document>
-      )
-      
-      let pdfBlob: Blob
-      try {
-        pdfBlob = await pdf(fullReportDoc).toBlob()
-      } catch (err) {
-        console.error('Error al generar PDF:', err)
-        showToast('Error al generar el PDF', 'error')
-        return
-      }
-      
-      // 4. Upload PDF to Supabase Storage
-      const { error: permPdfError } = await supabase.storage.from('mtto-pdf-solicitudes').list('', { limit: 1 })
-      if (permPdfError) {
-        console.error('Sin permisos para el bucket mtto-pdf-solicitudes:', JSON.stringify(permPdfError, null, 2))
-        showToast('No tiene permisos para subir el PDF', 'error')
-        return
-      }
-      
-      // Upload PDF with conflict handling
-      let uploadFileName = pdfFileName
-      let attemptIndex = 0
-      while (true) {
-        const { error: pdfUploadError } = await supabase.storage
-          .from('mtto-pdf-solicitudes')
-          .upload(uploadFileName, pdfBlob, { contentType: 'application/pdf', upsert: true })
-        
-        if (pdfUploadError) {
-          if (((pdfUploadError as any).status === 409) && attemptIndex < 26) {
-            // Conflict, add suffix
-            const suffix = String.fromCharCode('a'.charCodeAt(0) + attemptIndex)
-            uploadFileName = `${pdfFileName.replace('.pdf', '')}-${suffix}.pdf`
-            attemptIndex++
-            continue
-          }
-          console.error('Error al subir PDF:', JSON.stringify(pdfUploadError, null, 2))
-          showToast('Error al subir el PDF', 'error')
-          return
-        }
-        break
-      }
-      
-        console.log('PDF generado y subido con éxito:', uploadFileName)
-        showToast('Solicitud cerrada y PDF generado con éxito', 'success', 3000)
-      } else if (newEstado === 'por_validar') {
-        showToast('Solicitud marcada como resuelta. Pendiente de validación', 'success', 3000)
-      } else if (newEstado === 'en_ejecucion') {
-        showToast('Solicitud derivada a terceros. Continúa en ejecución', 'success', 3000)
-      }
-      
-      setTimeout(() => router.push('/area/mantencion/evaluacion_solicitudes'), 3000)
-    } catch (err) {
-      console.error('Error en resolución de solicitud:', err)
-      showToast('Error inesperado al finalizar solicitud', 'error')
+      const date = parseISO(dateStr)
+      return !isNaN(date.getTime())
+    } catch {
+      return false
     }
+  }
+
+  const formatDateSafe = (fecha: string, hora?: string): string => {
+    if (!fecha) return 'Fecha no disponible'
+    try {
+      const dateStr = hora ? `${fecha}T${hora}` : `${fecha}T00:00:00`
+      const date = parseISO(dateStr)
+      if (isNaN(date.getTime())) {
+        return fecha
+      }
+      return format(date, 'dd-MM-yyyy HH:mm', { locale: es })
+    } catch {
+      return fecha
+    }
+  }
+
+  const parseTimeline = (sol: any): TimelineEvent[] => {
+    const events: TimelineEvent[] = []
+    
+    // Creation event - only if fecha is valid
+    if (sol.fecha && isValidDate(sol.fecha)) {
+      events.push({
+        fecha: sol.fecha,
+        hora: sol.hora || '00:00:00',
+        tipo: 'creacion',
+        descripcion: `Creó la solicitud`,
+        autor: sol.solicitante || 'Usuario',
+        icon: '📄'
+      })
+    }
+
+    // Parse observaciones for assignment and other events
+    if (sol.observaciones) {
+      const obs = sol.observaciones
+      
+      // Check for assignment - improved regex to capture all details
+      const asignacionMatch = obs.match(/\[Asignación\]\s*Técnico:\s*([^|]+)\s*\|\s*Prioridad:\s*([^|]+)\s*\|\s*Fecha programada:\s*([^|\n]+)(?:\s*\|\s*Notas:\s*([^|\n]+))?/i)
+      if (asignacionMatch && sol.fecha && isValidDate(sol.fecha)) {
+        const tecnico = asignacionMatch[1].trim()
+        const prioridad = asignacionMatch[2].trim()
+        const fechaProg = asignacionMatch[3].trim()
+        const notas = asignacionMatch[4]?.trim() || ''
+        
+        // Format fecha programada
+        let fechaProgFormatted = fechaProg
+        try {
+          if (isValidDate(fechaProg)) {
+            fechaProgFormatted = format(parseISO(fechaProg), 'dd-MM-yyyy', { locale: es })
+          }
+        } catch {}
+        
+        const descripcion = `Asignó a ${tecnico}${prioridad ? ` (Prioridad: ${prioridad}` : ''}${fechaProgFormatted ? ` · Programado: ${fechaProgFormatted}` : ''}${notas ? ` · Nota: ${notas}` : ''}${prioridad ? ')' : ''}`
+        
+        events.push({
+          fecha: sol.fecha,
+          hora: sol.hora || '00:00:00',
+          tipo: 'asignacion',
+          descripcion,
+          autor: 'Supervisor',
+          icon: '👤'
+        })
+      }
+
+      // Check for work start
+      const inicioMatch = obs.match(/Trabajo iniciado|Iniciado por|\[.*\]\s*([^-\n]+)\s*-\s*Trabajo iniciado/i)
+      if (inicioMatch) {
+        const fechaInicio = sol.fecha_ejecucion || sol.fecha
+        if (fechaInicio && isValidDate(fechaInicio)) {
+          events.push({
+            fecha: fechaInicio,
+            hora: sol.hora || '00:00:00',
+            tipo: 'inicio',
+            descripcion: `Trabajo iniciado`,
+            autor: sol.tecnico || 'Técnico',
+            icon: '🔧'
+          })
+        }
+      }
+
+      // Check for updates - only meaningful ones
+      const updateMatches = obs.matchAll(/\[([^\]]+)\]\s*([^-\n]+)\s*-\s*(.+?)(?=\n\n|$)/g)
+      for (const match of updateMatches) {
+        const fechaHora = match[1]
+        const autor = match[2].trim()
+        const accion = match[3].trim()
+        
+        // Skip assignment duplicates and work start duplicates
+        if (accion.includes('Asignación') || accion.includes('Trabajo iniciado')) {
+          continue
+        }
+        
+        // Only include meaningful updates
+        if (accion.includes('Marcado como resuelto') || 
+            accion.includes('Derivado') || 
+            accion.includes('No procede') ||
+            accion.includes('Devuelto')) {
+          const fechaEvento = fechaHora.split(' ')[0] || sol.fecha
+          const horaEvento = fechaHora.split(' ')[1] || '00:00:00'
+          
+          const fechaFinal = (fechaEvento && isValidDate(fechaEvento)) ? fechaEvento : (sol.fecha && isValidDate(sol.fecha) ? sol.fecha : null)
+          
+          if (fechaFinal) {
+            let icon = '📝'
+            let tipo: TimelineEvent['tipo'] = 'actualizacion'
+            
+            if (accion.includes('Marcado como resuelto') || accion.includes('Enviado a validación')) {
+              icon = '✅'
+              tipo = 'finalizacion'
+            } else if (accion.includes('Devuelto')) {
+              icon = '↩️'
+              tipo = 'reasignacion'
+            }
+            
+            events.push({
+              fecha: fechaFinal,
+              hora: horaEvento,
+              tipo,
+              descripcion: accion,
+              autor,
+              icon
+            })
+          }
+        }
+      }
+
+      // Check for validation
+      if (sol.estado === 'por_validar') {
+        const fechaValidacion = sol.fecha_ejecucion || sol.fecha
+        if (fechaValidacion && isValidDate(fechaValidacion)) {
+          events.push({
+            fecha: fechaValidacion,
+            hora: sol.hora || '00:00:00',
+            tipo: 'validacion',
+            descripcion: `Enviado a validación`,
+            autor: sol.tecnico || 'Técnico',
+            icon: '✔️'
+          })
+        }
+      }
+
+      // Check for finalization
+      if (sol.estado === 'finalizada' || sol.estado_final === 'resuelta') {
+        const fechaFinalizacion = sol.fecha_ejecucion || sol.fecha
+        if (fechaFinalizacion && isValidDate(fechaFinalizacion)) {
+          events.push({
+            fecha: fechaFinalizacion,
+            hora: sol.hora || '00:00:00',
+            tipo: 'finalizacion',
+            descripcion: `Trabajo finalizado`,
+            autor: sol.tecnico || 'Técnico',
+            icon: '✅'
+          })
+        }
+      }
+    }
+
+    return events
+      .filter(event => event.fecha && isValidDate(event.fecha))
+      .sort((a, b) => {
+        try {
+          const dateA = parseISO(`${a.fecha}T${a.hora || '00:00:00'}`)
+          const dateB = parseISO(`${b.fecha}T${b.hora || '00:00:00'}`)
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            return 0
+          }
+          // Reverse order - most recent first
+          return dateB.getTime() - dateA.getTime()
+        } catch {
+          return 0
+        }
+      })
+  }
+
+  const getRiskBadgeStyle = (nivelRiesgo?: string) => {
+    if (!nivelRiesgo) return { bg: '#F3F4F6', text: '#6B7280', border: '#E5E7EB', label: 'Sin definir' }
+    
+    if (nivelRiesgo.includes('Crítico')) {
+      return { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA', label: 'Crítico' }
+    } else if (nivelRiesgo.includes('Alto')) {
+      return { bg: '#FFEDD5', text: '#C2410C', border: '#FED7AA', label: 'Alto' }
+    } else if (nivelRiesgo.includes('Medio')) {
+      return { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A', label: 'Medio' }
+    } else {
+      return { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0', label: 'Bajo' }
+    }
+  }
+
+  const getEstadoBadgeStyle = (estado: string) => {
+    switch (estado) {
+      case 'en_ejecucion':
+        return { bg: '#DBEAFE', text: '#1E40AF', label: 'En curso' }
+      case 'programada':
+        return { bg: '#FEF3C7', text: '#B45309', label: 'Asignado' }
+      case 'por_validar':
+        return { bg: '#EDE9FE', text: '#6D28D9', label: 'Terminado por técnico' }
+      case 'finalizada':
+        return { bg: '#DCFCE7', text: '#15803D', label: 'Validado' }
+      default:
+        return { bg: '#F3F4F6', text: '#6B7280', label: estado }
+    }
+  }
+
+  const getTituloDinamico = (estado: string, ticketId?: number): string => {
+    const ticketStr = ticketId ? ` #${ticketId}` : ''
+    switch (estado) {
+      case 'programada':
+        return `Trabajo asignado${ticketStr}`
+      case 'en_ejecucion':
+        return `Trabajo en curso${ticketStr}`
+      case 'por_validar':
+        return `Trabajo finalizado${ticketStr}`
+      case 'finalizada':
+        return `Trabajo validado${ticketStr}`
+      default:
+        return `Trabajo${ticketStr}`
+    }
+  }
+
+  const extractValidacionInfo = (obs?: string): { supervisor?: string; fecha?: string; comentario?: string } | null => {
+    if (!obs) return null
+    // Look for "Validó el trabajo" entry
+    const match = obs.match(/\[(\d{2}-\d{2}-\d{4})\s+(\d{2}:\d{2}:\d{2})\]\s*(.+?)\s*-\s*Validó el trabajo(?:\s*Comentario:\s*(.+))?/i)
+    if (match) {
+      const [, fecha, hora, supervisor, comentario] = match
+      return {
+        supervisor: supervisor.trim(),
+        fecha: `${fecha} ${hora}`,
+        comentario: comentario?.trim() || undefined
+      }
+    }
+    return null
+  }
+
+  const parseObservacionesForImpact = (obs?: string): string | null => {
+    if (!obs) return null
+    const match = obs.match(/Afecta producción:\s*([^|]+)/)
+    return match ? match[1].trim() : null
+  }
+
+  const extractAsignacionInfo = (obs?: string) => {
+    if (!obs) return null
+    const match = obs.match(/\[Asignación\]\s*Técnico:\s*([^|]+)\s*\|\s*Prioridad:\s*([^|]+)\s*\|\s*Fecha programada:\s*([^|\n]+)/)
+    if (match) {
+      return {
+        tecnico: match[1].trim(),
+        prioridad: match[2].trim(),
+        fechaProgramada: match[3].trim(),
+        notas: obs.match(/Notas:\s*([^|\n]+)/)?.[1]?.trim() || ''
+      }
+    }
+    return null
+  }
+
+  const getTimeSinceCreation = (fecha: string, hora: string): string => {
+    try {
+      const date = parseISO(`${fecha}T${hora}`)
+      return formatDistanceToNow(date, { addSuffix: true, locale: es })
+    } catch {
+      return 'Fecha inválida'
+    }
+  }
+
+  const getTimeSinceAssignment = (fecha: string, hora?: string): string => {
+    if (!fecha) return ''
+    try {
+      const date = parseISO(`${fecha}T${hora || '00:00:00'}`)
+      return formatDistanceToNow(date, { addSuffix: true, locale: es })
+    } catch {
+      return ''
+    }
+  }
+
+  const isOverdue = (fechaProgramada?: string): boolean => {
+    if (!fechaProgramada) return false
+    try {
+      const programada = parseISO(fechaProgramada)
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+      return programada < hoy
+    } catch {
+      return false
+    }
+  }
+
+  const getProgressSteps = () => {
+    const estado = solicitud?.estado || ''
+    const steps = [
+      { label: 'Asignado', completed: ['programada', 'en_ejecucion', 'por_validar', 'finalizada'].includes(estado), active: estado === 'programada' },
+      { label: 'En curso', completed: ['en_ejecucion', 'por_validar', 'finalizada'].includes(estado), active: estado === 'en_ejecucion' },
+      { label: 'Terminado por técnico', completed: ['por_validar', 'finalizada'].includes(estado), active: estado === 'por_validar' },
+      { label: 'Validado', completed: ['finalizada'].includes(estado), active: estado === 'finalizada' }
+    ]
+    return steps
   }
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-b-2 border-blue-600"></div></div>
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   if (!solicitud) {
-    return <p className="text-center mt-8">Solicitud no encontrada.</p>
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-600">Solicitud no encontrada.</p>
+      </div>
+    )
   }
 
+  const riskStyle = getRiskBadgeStyle(solicitud.nivel_riesgo)
+  const estadoStyle = getEstadoBadgeStyle(solicitud.estado)
+  const impacto = parseObservacionesForImpact(solicitud.observaciones)
+  const tiempoDesdeCreacion = getTimeSinceCreation(solicitud.fecha, solicitud.hora)
+  const asignacionInfo = extractAsignacionInfo(solicitud.observaciones) || { tecnico: solicitud.tecnico || '', prioridad: '', fechaProgramada: '', notas: '' }
+  const tiempoDesdeAsignacion = asignacionInfo.fechaProgramada ? getTimeSinceAssignment(asignacionInfo.fechaProgramada) : ''
+  const vencida = isOverdue(asignacionInfo.fechaProgramada)
+  const progressSteps = getProgressSteps()
+  const fotos = solicitud.fotos_urls && Array.isArray(solicitud.fotos_urls) ? solicitud.fotos_urls.filter((url: string) => url && url.trim()) : []
+  const fotosEjecucion = solicitud.fotos_ejecucion && Array.isArray(solicitud.fotos_ejecucion) ? solicitud.fotos_ejecucion.filter((url: string) => url && url.trim()) : []
+  const maxVisibleFotos = 3
+  const isFinalizada = solicitud.estado === 'finalizada'
+  const tituloDinamico = getTituloDinamico(solicitud.estado, solicitud.ticket_id)
+  const validacionInfo = extractValidacionInfo(solicitud.observaciones)
+
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      <button onClick={() => router.back()} className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
-        ← Volver
+    <div className="min-h-screen p-6" style={{ backgroundColor: '#F5F7FB' }}>
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border" style={{ borderColor: '#E5E7EB' }}>
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            <div className="flex-1">
+              <button 
+                onClick={() => router.push('/area/mantencion/evaluacion_solicitudes')} 
+                className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Volver
       </button>
-      <h1 className="text-2xl font-bold mb-4">
-        Detalle de Solicitud {solicitud.ticket_id && `#${solicitud.ticket_id}`}
-      </h1>
+              
+              <h1 className="text-2xl font-bold mb-3" style={{ color: '#111827' }}>
+                {tituloDinamico}
+              </h1>
       
-      {/* History Section - Show previous steps */}
-      {solicitud.observaciones && (
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-6">
-          <h2 className="text-lg font-semibold mb-2 text-blue-900">Historial de Acciones</h2>
-          <div className="space-y-3">
-            {solicitud.observaciones.split('\n\n').map((entry: string, idx: number) => (
-              <div key={idx} className="p-3 bg-white rounded border-l-2 border-blue-300">
-                <div className="text-sm text-gray-700 whitespace-pre-line">{entry}</div>
+              <div className="flex flex-wrap items-center gap-3 text-sm" style={{ color: '#6B7280' }}>
+                {isFinalizada && solicitud.fecha_ejecucion ? (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4" />
+                      Cerrado el {format(parseISO(solicitud.fecha_ejecucion), 'dd-MM-yyyy', { locale: es })}
+                    </span>
+                    <span>·</span>
+                  </>
+                ) : asignacionInfo.fechaProgramada ? (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4" />
+                      Programado: {format(parseISO(asignacionInfo.fechaProgramada), 'dd/MM/yyyy', { locale: es })}
+                    </span>
+                    <span>·</span>
+                  </>
+                ) : null}
+                {asignacionInfo.tecnico && (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <User className="h-4 w-4" />
+                      Técnico: {asignacionInfo.tecnico}
+                    </span>
+                    <span>·</span>
+                  </>
+                )}
+                <span className="flex items-center gap-1.5">
+                  {solicitud.zona}
+                </span>
               </div>
-            ))}
+            </div>
+            
+            <span 
+              className="px-4 py-2 rounded-lg text-base font-semibold inline-flex items-center"
+              style={{ 
+                backgroundColor: estadoStyle.bg,
+                color: estadoStyle.text
+              }}
+            >
+              {vencida && solicitud.estado === 'programada' ? 'Retrasado' : estadoStyle.label}
+            </span>
+          </div>
+        </div>
+
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Resumen de la solicitud / Solicitud original */}
+          <div className="space-y-6">
+            {/* Card: Resumen de la solicitud / Solicitud original */}
+            <div 
+              className="bg-white rounded-xl p-6 shadow-sm border"
+              style={{
+                borderColor: '#E5E7EB',
+                boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
+              }}
+            >
+              {/* Header */}
+              <h2 className="text-lg font-semibold mb-6" style={{ color: '#111827' }}>
+                {isFinalizada ? 'Solicitud original' : 'Resumen de la solicitud'}
+              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <span 
+                  className="px-3 py-1.5 rounded-lg font-bold text-xl text-white"
+                  style={{ backgroundColor: '#1D4ED8' }}
+                >
+                  #{solicitud.ticket_id}
+                </span>
+                <span 
+                  className="px-4 py-2 rounded-lg font-semibold text-sm border"
+                  style={{ 
+                    backgroundColor: riskStyle.bg,
+                    color: riskStyle.text,
+                    borderColor: riskStyle.border
+                  }}
+                >
+                  {riskStyle.label}
+                </span>
+              </div>
+
+              {/* Body */}
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center gap-2 text-sm">
+                  <span style={{ color: '#6B7280' }}>Fecha</span>
+                  <span style={{ color: '#111827', fontWeight: '500' }}>
+                    {format(parseISO(solicitud.fecha), 'dd-MM-yyyy', { locale: es })}
+                  </span>
+                  <span style={{ color: '#9CA3AF' }}>·</span>
+                  <span style={{ color: '#6B7280' }}>Hora</span>
+                  <span style={{ color: '#111827', fontWeight: '500' }}>{solicitud.hora}</span>
+                </div>
+                
+                <div>
+                  <span className="text-sm" style={{ color: '#6B7280' }}>Zona</span>
+                  <p className="text-sm font-medium mt-1" style={{ color: '#111827' }}>
+                    {solicitud.zona}
+                  </p>
+                </div>
+
+                {solicitud.equipo_afectado && (
+                  <div>
+                    <span className="text-sm" style={{ color: '#6B7280' }}>Equipo afectado</span>
+                    <p className="text-sm font-medium mt-1" style={{ color: '#111827' }}>
+                      {solicitud.equipo_afectado}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-sm" style={{ color: '#6B7280' }}>Solicitante</span>
+                  <p className="text-sm font-medium mt-1" style={{ color: '#111827' }}>
+                    {solicitud.solicitante}
+                  </p>
+                </div>
+
+                {solicitud.nivel_riesgo && (
+                  <div>
+                    <span className="text-sm" style={{ color: '#6B7280' }}>Nivel de riesgo</span>
+                    <div className="mt-1">
+                      <span 
+                        className="inline-block px-2 py-1 rounded text-xs font-medium border"
+                        style={{ 
+                          backgroundColor: riskStyle.bg,
+                          color: riskStyle.text,
+                          borderColor: riskStyle.border
+                        }}
+                      >
+                        {riskStyle.label}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {impacto && (
+                  <div>
+                    <span className="text-sm" style={{ color: '#6B7280' }}>Impacto</span>
+                    <div className="mt-1">
+                      <span 
+                        className="inline-block px-2 py-1 rounded text-xs font-medium"
+                        style={{ 
+                          backgroundColor: impacto.toLowerCase().includes('detenida') ? '#FEE2E2' : 
+                                         impacto.toLowerCase().includes('no afecta') ? '#DCFCE7' :
+                                         impacto.toLowerCase().includes('afecta pero') ? '#FEF3C7' : '#F3F4F6',
+                          color: impacto.toLowerCase().includes('detenida') ? '#B91C1C' : 
+                                impacto.toLowerCase().includes('no afecta') ? '#15803D' :
+                                impacto.toLowerCase().includes('afecta pero') ? '#B45309' : '#6B7280'
+                        }}
+                      >
+                        {impacto.toLowerCase().includes('detenida') ? 'Parada producción' : 
+                         impacto.toLowerCase().includes('no afecta') ? 'No afecta' :
+                         impacto.toLowerCase().includes('afecta pero') ? 'Afecta producción' : 
+                         impacto.toLowerCase().includes('afecta') ? 'Afecta producción' : impacto}
+                      </span>
           </div>
         </div>
       )}
       
-      <div className="bg-white p-6 rounded-lg shadow mb-6 space-y-2">
-        {solicitud.ticket_id && <p><strong>Ticket ID:</strong> #{solicitud.ticket_id}</p>}
-        <p><strong>Fecha:</strong> {solicitud.fecha}</p>
-        <p><strong>Hora:</strong> {solicitud.hora}</p>
-        <p><strong>Solicitante:</strong> {solicitud.solicitante}</p>
-        <p><strong>Zona:</strong> {solicitud.zona}</p>
-        <p><strong>Tipo de falla:</strong> {solicitud.tipo_falla}</p>
-        {solicitud.nivel_riesgo && <p><strong>Nivel de Riesgo:</strong> {solicitud.nivel_riesgo}</p>}
-        {solicitud.equipo_afectado && <p><strong>Equipo / Activo Afectado:</strong> {solicitud.equipo_afectado}</p>}
-        <p><strong>Descripción:</strong> {solicitud.descripcion}</p>
-        <p><strong>Recomendación:</strong> {solicitud.recomendacion}</p>
-        <p><strong>Estado:</strong> {solicitud.estado}</p>
-        {solicitud.tecnico && <p><strong>Técnico Asignado:</strong> {solicitud.tecnico}</p>}
-        {/* Resumen de resolución - Show if ticket has been worked on */}
-        {(solicitud.estado === 'por_validar' || solicitud.estado === 'finalizada' || solicitud.accion_realizada) && (
-          <div className="bg-green-50 border-l-4 border-green-500 p-6 rounded-lg shadow mb-6 space-y-2">
-            <h2 className="text-xl font-semibold text-green-900">Resumen de Trabajo Realizado</h2>
-            {solicitud.tecnico && <p><strong>Técnico responsable:</strong> {solicitud.tecnico}</p>}
-            {solicitud.fecha_ejecucion && <p><strong>Fecha de ejecución:</strong> {solicitud.fecha_ejecucion}</p>}
-            {solicitud.accion_realizada && <p><strong>Acción realizada:</strong> {solicitud.accion_realizada}</p>}
-            {solicitud.fotos_ejecucion?.length > 0 && (
               <div>
-                <p><strong>Fotos de ejecución:</strong></p>
-                <div className="flex space-x-2 mt-2">
-                  {solicitud.fotos_ejecucion.map((url: string, i: number) => (
-                    <img key={i} src={url} alt={`Ejecución ${i+1}`} className="h-20 w-20 object-cover rounded-md" />
-                  ))}
+                  <span className="text-sm" style={{ color: '#6B7280' }}>Descripción</span>
+                  <p className="text-sm mt-1 whitespace-pre-line" style={{ color: '#111827' }}>
+                    {solicitud.descripcion}
+                  </p>
                 </div>
+              </div>
+
+              {/* Footer - Fotos adjuntas */}
+              {fotos.length > 0 && (
+                <div className="pt-4 border-t" style={{ borderColor: '#E5E7EB' }}>
+                  <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>Fotos adjuntas</p>
+                  <div className="flex items-center gap-2">
+                    {fotos.slice(0, maxVisibleFotos).map((url: string, index: number) => (
+                      <div
+                        key={index}
+                        className="relative cursor-pointer rounded border overflow-hidden"
+                        style={{ 
+                          borderColor: '#E5E7EB',
+                          width: '64px',
+                          height: '64px'
+                        }}
+                        onClick={() => setSelectedImageIndex(index)}
+                      >
+                        <img
+                          src={url}
+                          alt={`Foto ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.style.display = 'none'
+                            const parent = target.parentElement
+                            if (parent) {
+                              parent.style.backgroundColor = '#F3F4F6'
+                              parent.style.display = 'flex'
+                              parent.style.alignItems = 'center'
+                              parent.style.justifyContent = 'center'
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {fotos.length > maxVisibleFotos && (
+                      <div
+                        className="flex items-center justify-center rounded border cursor-pointer"
+                        style={{ 
+                          borderColor: '#E5E7EB',
+                          width: '64px',
+                          height: '64px',
+                          backgroundColor: '#F9FAFB',
+                          color: '#6B7280',
+                          fontSize: '0.75rem',
+                          fontWeight: '500'
+                        }}
+                        onClick={() => setSelectedImageIndex(0)}
+                      >
+                        +{fotos.length - maxVisibleFotos}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Optional: Info adicional */}
+            {solicitud.recomendacion && (
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm border"
+                style={{
+                  borderColor: '#E5E7EB',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
+                }}
+              >
+                <h3 className="text-sm font-semibold mb-2" style={{ color: '#111827' }}>Recomendación del solicitante</h3>
+                <p className="text-sm" style={{ color: '#6B7280' }}>{solicitud.recomendacion}</p>
               </div>
             )}
           </div>
-        )}
-        
-        {/* Validation Section - Only show if ticket is in "por_validar" status */}
-        {solicitud.estado === 'por_validar' && (
-          <ValidationSection 
-            solicitud={solicitud}
-            onValidate={async () => {
-              // Generate PDF when validating
-              const ticketId = solicitud.ticket_id
-              if (ticketId) {
-                const pdfFileName = `Ticket_${ticketId}_Full_Report.pdf`
-                const styles = StyleSheet.create({
-                  page: { padding: 30, fontFamily: 'Roboto', backgroundColor: '#ffffff' },
-                  section: { marginBottom: 20 },
-                  title: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 10, color: '#005F9E' },
-                  label: { fontSize: 12, fontWeight: 'bold', marginBottom: 4 },
-                  value: { fontSize: 12, marginBottom: 8 },
-                  photo: { width: '100%', height: 150, objectFit: 'contain', marginBottom: 10 },
-                  footer: { position: 'absolute', bottom: 30, left: 30, right: 30, textAlign: 'center', color: '#9CA3AF', fontSize: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 10 }
-                })
-                
-                const fullReportDoc = (
-                  <Document>
-                    <ChecklistPDFMantenimientoDocument 
-                      data={{
-                        fecha: solicitud.fecha,
-                        hora: solicitud.hora,
-                        solicitante: solicitud.solicitante,
-                        zona: solicitud.zona,
-                        tipo_falla: solicitud.tipo_falla,
-                        nivel_riesgo: solicitud.nivel_riesgo,
-                        equipo_afectado: solicitud.equipo_afectado,
-                        descripcion_falla: solicitud.descripcion,
-                        recomendacion: solicitud.recomendacion
-                      }} 
-                      fotos={solicitud.fotos_urls || []} 
-                    />
-                    <Page size="A4" style={styles.page}>
-                      <Text style={styles.title}>Resolución de Solicitud #{ticketId}</Text>
-                      {solicitud.tecnico && <View style={styles.section}><Text style={styles.label}>Técnico:</Text><Text style={styles.value}>{solicitud.tecnico}</Text></View>}
-                      {solicitud.fecha_ejecucion && <View style={styles.section}><Text style={styles.label}>Fecha de Ejecución:</Text><Text style={styles.value}>{solicitud.fecha_ejecucion}</Text></View>}
-                      {solicitud.accion_realizada && <View style={styles.section}><Text style={styles.label}>Acción Realizada:</Text><Text style={styles.value}>{solicitud.accion_realizada}</Text></View>}
-                      {solicitud.observaciones && <View style={styles.section}><Text style={styles.label}>Observaciones:</Text><Text style={styles.value}>{solicitud.observaciones}</Text></View>}
-                      <View style={styles.section}><Text style={styles.label}>Estado Final:</Text><Text style={styles.value}>Finalizada</Text></View>
-                      {solicitud.fotos_ejecucion?.length > 0 && (
-                        <View style={styles.section}>
-                          <Text style={styles.label}>Fotos de Ejecución:</Text>
-                          {solicitud.fotos_ejecucion.map((url: string, i: number) => (
-                            <Image key={i} src={url} style={styles.photo} />
-                          ))}
-                        </View>
+
+          {/* Right Column - Estado del trabajo / Resultado del trabajo */}
+          <div className="space-y-6">
+            {isFinalizada ? (
+              /* Card: Resultado del trabajo (para trabajos finalizados) */
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm border"
+                style={{
+                  borderColor: '#E5E7EB',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
+                }}
+              >
+                <h2 className="text-lg font-semibold mb-6" style={{ color: '#111827' }}>
+                  Resultado del trabajo
+                </h2>
+
+                {/* Técnico responsable */}
+                {asignacionInfo.tecnico && (
+                  <div className="mb-6 pb-6 border-b" style={{ borderColor: '#E5E7EB' }}>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-semibold flex-shrink-0"
+                        style={{ backgroundColor: '#1D4ED8' }}
+                      >
+                        {asignacionInfo.tecnico.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                      </div>
+                      <div>
+                        <p className="text-base font-semibold" style={{ color: '#111827' }}>
+                          {asignacionInfo.tecnico}
+                        </p>
+                        <p className="text-xs" style={{ color: '#64748B' }}>
+                          Técnico de mantención
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Datos de ejecución */}
+                <div className="mb-6 pb-6 border-b space-y-3" style={{ borderColor: '#E5E7EB' }}>
+                  {solicitud.fecha_ejecucion && (
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ color: '#6B7280' }}>Fecha de ejecución</p>
+                      <p className="text-sm font-semibold" style={{ color: '#111827' }}>
+                        {format(parseISO(solicitud.fecha_ejecucion), 'dd-MM-yyyy', { locale: es })}
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {asignacionInfo.prioridad && (
+                      <span 
+                        className="px-3 py-1 rounded-lg text-xs font-medium border"
+                        style={{
+                          backgroundColor: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#FFEDD5' :
+                                          asignacionInfo.prioridad.toLowerCase().includes('media') ? '#FEF3C7' :
+                                          asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#DCFCE7' : '#F3F4F6',
+                          color: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#C2410C' :
+                                asignacionInfo.prioridad.toLowerCase().includes('media') ? '#B45309' :
+                                asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#15803D' : '#6B7280',
+                          borderColor: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#FED7AA' :
+                                      asignacionInfo.prioridad.toLowerCase().includes('media') ? '#FDE68A' :
+                                      asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#BBF7D0' : '#E5E7EB'
+                        }}
+                      >
+                        Prioridad: {asignacionInfo.prioridad}
+                      </span>
+                    )}
+                    <span 
+                      className="px-3 py-1 rounded-lg text-xs font-medium border"
+                      style={{ 
+                        backgroundColor: riskStyle.bg,
+                        color: riskStyle.text,
+                        borderColor: riskStyle.border
+                      }}
+                    >
+                      Nivel de riesgo: {riskStyle.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Acción realizada */}
+                {solicitud.accion_realizada && (
+                  <div className="mb-6 pb-6 border-b" style={{ borderColor: '#E5E7EB' }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>Acción realizada</p>
+                    <p className="text-sm whitespace-pre-line" style={{ color: '#111827' }}>
+                      {solicitud.accion_realizada}
+                    </p>
+                  </div>
+                )}
+
+                {/* Fotos de ejecución */}
+                {fotosEjecucion.length > 0 && (
+                  <div className="mb-6 pb-6 border-b" style={{ borderColor: '#E5E7EB' }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>Fotos de ejecución</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {fotosEjecucion.map((url: string, index: number) => (
+                        <div
+                          key={index}
+                          className="relative cursor-pointer rounded border overflow-hidden"
+                          style={{ 
+                            borderColor: '#E5E7EB',
+                            aspectRatio: '1/1'
+                          }}
+                          onClick={() => setSelectedImageIndex(fotos.length + index)}
+                        >
+                          <img
+                            src={url}
+                            alt={`Ejecución ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Validación */}
+                {validacionInfo && (
+                  <div className="mb-6 pb-6 border-b" style={{ borderColor: '#E5E7EB' }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: '#6B7280' }}>Validación</p>
+                    <div className="space-y-1">
+                      <p className="text-sm" style={{ color: '#111827' }}>
+                        <span className="font-medium">Validado por:</span> {validacionInfo.supervisor}
+                      </p>
+                      {validacionInfo.fecha && (
+                        <p className="text-sm" style={{ color: '#111827' }}>
+                          <span className="font-medium">Fecha de validación:</span> {validacionInfo.fecha}
+                        </p>
                       )}
-                      <Text style={styles.footer}>Este documento es parte del sistema de gestión de calidad de Comfrut</Text>
-                    </Page>
-                  </Document>
-                )
-                
-                try {
-                  const pdfBlob = await pdf(fullReportDoc).toBlob()
-                  
-                  // Check if bucket exists, if not, show error
-                  const { error: permPdfError } = await supabase.storage.from('mtto-pdf-solicitudes').list('', { limit: 1 })
-                  if (permPdfError) {
-                    console.error('Error al acceder al bucket mtto-pdf-solicitudes:', permPdfError)
-                    showToast('Error: El bucket de PDFs no existe. Por favor créelo en Supabase Storage.', 'error')
-                    return
-                  }
-                  
-                  const { error: pdfUploadError } = await supabase.storage
-                    .from('mtto-pdf-solicitudes')
-                    .upload(pdfFileName, pdfBlob, { contentType: 'application/pdf', upsert: true })
-                  
-                  if (pdfUploadError) {
-                    console.error('Error al subir PDF:', pdfUploadError)
-                    showToast('Error al subir el PDF', 'error')
-                    return
-                  }
-                } catch (err) {
-                  console.error('Error al generar PDF:', err)
-                  showToast('Error al generar el PDF', 'error')
-                  return
-                }
-              }
+                      {validacionInfo.comentario && (
+                        <p className="text-sm mt-2 whitespace-pre-line" style={{ color: '#4B5563' }}>
+                          <span className="font-medium">Comentario:</span> {validacionInfo.comentario}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Acciones - PDF */}
+                {pdfUrl && (
+                  <div className="space-y-2">
+                    <a
+                      href={pdfUrl}
+                      download
+                      className="w-full px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      style={{ 
+                        borderColor: '#1D6FE3',
+                        color: '#1D6FE3',
+                        backgroundColor: '#FFFFFF'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#EFF6FF'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#FFFFFF'
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                      Descargar informe PDF
+                    </a>
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full px-4 py-2 text-sm text-center text-blue-600 hover:text-blue-700 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Ver PDF en nueva pestaña
+                    </a>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Card: Estado del trabajo (para trabajos en curso) */
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm border"
+                style={{
+                  borderColor: '#E5E7EB',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
+                }}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold" style={{ color: '#111827' }}>
+                    Estado del trabajo
+                  </h2>
+                  <button
+                    onClick={() => {
+                      showToast('La funcionalidad de reasignación está en desarrollo. Próximamente disponible.', 'info', 4000)
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors font-medium"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Reasignar
+                  </button>
+                </div>
+
+                {/* Bloque 1 - Técnico */}
+                {asignacionInfo.tecnico && (
+                  <div className="mb-6 pb-6 border-b" style={{ borderColor: '#E5E7EB' }}>
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-semibold flex-shrink-0"
+                        style={{ backgroundColor: '#1D4ED8' }}
+                      >
+                        {asignacionInfo.tecnico.split(' ').map((n: string) => n[0]).join('').substring(0, 2)}
+                      </div>
+                      <div>
+                        <p className="text-base font-semibold" style={{ color: '#111827' }}>
+                          {asignacionInfo.tecnico}
+                        </p>
+                        <p className="text-xs" style={{ color: '#64748B' }}>
+                          Técnico de mantención
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+        
+                {/* Bloque 2 - Tags */}
+                <div className="mb-6 pb-6 border-b flex flex-wrap gap-2" style={{ borderColor: '#E5E7EB' }}>
+                  {asignacionInfo.prioridad && (
+                    <span 
+                      className="px-3 py-1 rounded-lg text-xs font-medium border"
+                      style={{
+                        backgroundColor: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#FFEDD5' :
+                                        asignacionInfo.prioridad.toLowerCase().includes('media') ? '#FEF3C7' :
+                                        asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#DCFCE7' : '#F3F4F6',
+                        color: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#C2410C' :
+                              asignacionInfo.prioridad.toLowerCase().includes('media') ? '#B45309' :
+                              asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#15803D' : '#6B7280',
+                        borderColor: asignacionInfo.prioridad.toLowerCase().includes('alta') ? '#FED7AA' :
+                                    asignacionInfo.prioridad.toLowerCase().includes('media') ? '#FDE68A' :
+                                    asignacionInfo.prioridad.toLowerCase().includes('baja') ? '#BBF7D0' : '#E5E7EB'
+                      }}
+                    >
+                      Prioridad: {asignacionInfo.prioridad}
+                    </span>
+                  )}
+                  <span 
+                    className="px-3 py-1 rounded-lg text-xs font-medium border"
+                    style={{ 
+                      backgroundColor: riskStyle.bg,
+                      color: riskStyle.text,
+                      borderColor: riskStyle.border
+                    }}
+                  >
+                    Nivel de riesgo: {riskStyle.label}
+                  </span>
+                </div>
+
+                {/* Bloque 3 - Fechas */}
+                <div className="mb-6 pb-6 border-b space-y-2" style={{ borderColor: '#E5E7EB' }}>
+                  {asignacionInfo.fechaProgramada && (
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ color: '#6B7280' }}>Programado para</p>
+                      <p className="text-sm font-semibold" style={{ color: '#111827' }}>
+                        {format(parseISO(asignacionInfo.fechaProgramada), 'dd-MM-yyyy', { locale: es })}
+                        {vencida && (
+                          <span className="ml-2 px-2 py-0.5 rounded text-xs" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+                            Retrasado
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                  {tiempoDesdeAsignacion && (
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ color: '#6B7280' }}>Tiempo desde asignación</p>
+                      <p className="text-sm font-semibold" style={{ color: '#111827' }}>
+                        {tiempoDesdeAsignacion}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bloque 4 - Progreso */}
+                <div>
+                  <p className="text-xs font-medium mb-3" style={{ color: '#6B7280' }}>Progreso</p>
+                  <div className="flex items-center gap-2">
+                    {progressSteps.map((step, index) => (
+                      <React.Fragment key={index}>
+                        <div className="flex-1">
+                          <div 
+                            className="h-2 rounded-full"
+                            style={{ 
+                              backgroundColor: step.active ? estadoStyle.bg.replace('50', '600') : step.completed ? '#CBD5E1' : '#E5E7EB'
+                            }}
+                          ></div>
+                          <p className="text-xs mt-1 text-center" style={{ color: step.active ? estadoStyle.text : step.completed ? '#64748B' : '#9CA3AF' }}>
+                            {step.label}
+                          </p>
+                        </div>
+                        {index < progressSteps.length - 1 && (
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#E5E7EB' }}></div>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Card: Última actualización del técnico */}
+            <div 
+              className="bg-white rounded-xl p-6 shadow-sm border"
+              style={{
+                borderColor: '#E5E7EB',
+                boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
+              }}
+            >
+              <h2 className="text-lg font-semibold mb-4" style={{ color: '#111827' }}>
+                Última actualización del técnico
+              </h2>
               
-              const { error } = await supabase
-                .from('solicitudes_mantenimiento')
-                .update({ estado: 'finalizada' })
-                .eq('id', id)
-              if (error) {
-                showToast('Error al validar', 'error')
-              } else {
-                showToast('Trabajo validado y finalizado', 'success')
-                setTimeout(() => router.push('/area/mantencion/evaluacion_solicitudes'), 1500)
-              }
+              {solicitud.fecha_ejecucion || solicitud.accion_realizada ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm" style={{ color: '#94A3B8' }}>
+                      {solicitud.fecha_ejecucion && formatDateSafe(solicitud.fecha_ejecucion, solicitud.hora)}
+                    </span>
+                    {asignacionInfo.tecnico && (
+                      <>
+                        <span style={{ color: '#94A3B8' }}>·</span>
+                        <span className="text-sm font-medium" style={{ color: '#111827' }}>
+                          {asignacionInfo.tecnico}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {solicitud.accion_realizada && (
+                    <p className="text-sm whitespace-pre-line" style={{ color: '#111827' }}>
+                      {solicitud.accion_realizada}
+                    </p>
+                  )}
+                  {solicitud.observaciones && solicitud.observaciones.includes('Observaciones:') && (
+                    <p className="text-sm whitespace-pre-line" style={{ color: '#6B7280' }}>
+                      {solicitud.observaciones.split('Observaciones:')[1]?.trim() || ''}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Info className="h-8 w-8 mx-auto mb-2" style={{ color: '#9CA3AF' }} />
+                  <p className="text-sm" style={{ color: '#9CA3AF' }}>
+                    El técnico aún no ha registrado avances en este trabajo.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Historial de acciones - Full width card (below columns) */}
+        {timelineEvents.length > 0 && (
+          <div 
+            className="bg-white rounded-xl p-6 shadow-sm border"
+            style={{
+              borderColor: '#E5E7EB',
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)'
             }}
-            onReturnToReview={async (nota: string) => {
-              // Get current observaciones to append history
-              const { data: currentData } = await supabase
-                .from('solicitudes_mantenimiento')
-                .select('observaciones')
-                .eq('id', id)
-                .single()
-              
-              const historyEntry = `[${new Date().toLocaleString('es-ES')}] Manager - Devuelto a revisión\nNota: ${nota}`
-              const updatedObservaciones = currentData?.observaciones 
-                ? `${currentData.observaciones}\n\n${historyEntry}`
-                : historyEntry
-              
-              const { error } = await supabase
-                .from('solicitudes_mantenimiento')
-                .update({ 
-                  estado: 'en_ejecucion',
-                  observaciones: updatedObservaciones
-                })
-                .eq('id', id)
-              
-              if (error) {
-                showToast('Error al devolver a revisión', 'error')
-              } else {
-                showToast('Solicitud devuelta a ejecución', 'success')
-                setTimeout(() => router.push('/area/mantencion/evaluacion_solicitudes'), 1500)
-              }
-            }}
-          />
+          >
+            <h2 className="text-lg font-semibold mb-4" style={{ color: '#111827' }}>
+              Historial de acciones
+            </h2>
+            <div className="space-y-3">
+              {timelineEvents.map((event, index) => (
+                <div key={index} className="flex items-start gap-3 pb-3 border-b last:border-b-0 last:pb-0" style={{ borderColor: '#F1F5F9' }}>
+                  <span className="text-lg flex-shrink-0">{event.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium" style={{ color: '#94A3B8' }}>
+                        {formatDateSafe(event.fecha, event.hora || '00:00:00', 'dd-MM-yyyy HH:mm')}
+                      </span>
+                      {event.autor && (
+                        <>
+                          <span style={{ color: '#94A3B8' }}>·</span>
+                          <span className="text-xs font-semibold" style={{ color: '#111827' }}>
+                            {event.autor}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-sm" style={{ color: '#4B5563' }}>
+                      {event.descripcion}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
-      {/* Only show resolution form if ticket is in execution and not in validation */}
-      {solicitud.estado !== 'no procede' && solicitud.estado !== 'finalizada' && solicitud.estado !== 'por_validar' && (
-        <FormularioResolucion 
-          solicitudId={id} 
-          assignedTecnico={solicitud.tecnico}
-          onFinalize={handleFinalize} 
-        />
-      )}
-      
-      {/* Show PDF link if finalized */}
-      {solicitud.estado === 'finalizada' && pdfUrl && (
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <a 
-            href={pdfUrl} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="text-blue-600 hover:underline font-medium"
-          >
-            📄 Descargar PDF Completo del Trabajo
-          </a>
+
+      {/* Image Modal/Lightbox */}
+      {selectedImageIndex !== null && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedImageIndex(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full">
+            <button
+              onClick={() => setSelectedImageIndex(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white hover:bg-gray-100 transition-colors"
+              style={{ color: '#111827' }}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            {(() => {
+              const allImages = [...fotos, ...fotosEjecucion]
+              const currentImage = allImages[selectedImageIndex]
+              const totalImages = allImages.length
+              
+              return (
+                <>
+                  <img
+                    src={currentImage}
+                    alt={`Imagen ${selectedImageIndex + 1}`}
+                    className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  {totalImages > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedImageIndex((selectedImageIndex - 1 + totalImages) % totalImages)
+                        }}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white hover:bg-gray-100 transition-colors"
+                        style={{ color: '#111827' }}
+                      >
+                        <ArrowLeft className="h-6 w-6" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedImageIndex((selectedImageIndex + 1) % totalImages)
+                        }}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white hover:bg-gray-100 transition-colors"
+                        style={{ color: '#111827' }}
+                      >
+                        <ArrowLeft className="h-6 w-6 rotate-180" />
+                      </button>
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black bg-opacity-50 text-white text-sm">
+                        {selectedImageIndex + 1} / {totalImages}
+                      </div>
+                    </>
+                  )}
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
     </div>
