@@ -18,7 +18,18 @@ export const Button: React.FC<ButtonProps> = ({
   const variantStyles = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
     secondary: 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500',
-    outline: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-blue-500'
+    outline: 'border focus:ring-blue-500'
+  }
+
+  const getVariantStyle = (variant: string) => {
+    if (variant === 'outline') {
+      return {
+        borderColor: 'var(--input-border)',
+        backgroundColor: 'var(--card-bg)',
+        color: 'var(--title-text)',
+      }
+    }
+    return {}
   }
   
   const sizeStyles = {
@@ -30,6 +41,17 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      style={getVariantStyle(variant)}
+      onMouseEnter={(e) => {
+        if (variant === 'outline') {
+          e.currentTarget.style.backgroundColor = 'var(--card-hover-bg)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (variant === 'outline') {
+          e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+        }
+      }}
       {...props}
     >
       {children}

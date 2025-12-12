@@ -20,6 +20,8 @@ import {
 } from 'lucide-react'
 import { ChecklistStatusBadge } from '@/components/ChecklistStatusBadge'
 import { useTheme } from '@/context/ThemeContext'
+import { ProfileSheet } from '@/components/ProfileSheet'
+import { createClient } from '@/lib/supabase-config'
 
 const areas = [
   {
@@ -66,6 +68,8 @@ export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isThemeSubmenuOpen, setIsThemeSubmenuOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [displayName, setDisplayName] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Redirect to login if not authenticated (middleware should handle this, but this is a safety check)
@@ -77,6 +81,24 @@ export default function DashboardPage() {
 
   // Get email from user
   const email = user?.email || ''
+
+  // Fetch display name from profiles
+  useEffect(() => {
+    if (!user?.id) return
+
+    const fetchDisplayName = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+      
+      setDisplayName(data?.full_name || null)
+    }
+
+    fetchDisplayName()
+  }, [user?.id])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -108,12 +130,19 @@ export default function DashboardPage() {
     }
   }
 
-  // Extract first name from email
-  const getUserFirstName = () => {
+  // Get display name: profiles.full_name ?? fallback(email)
+  const getUserDisplayName = () => {
+    if (displayName) return displayName
     if (!email) return ''
     const namePart = email.split('@')[0]
     const firstName = namePart.split('.')[0]
     return firstName.charAt(0).toUpperCase() + firstName.slice(1)
+  }
+
+  // Get first name for avatar initial
+  const getUserFirstName = () => {
+    const name = getUserDisplayName()
+    return name.charAt(0).toUpperCase()
   }
 
   const handleSignOut = async () => {
@@ -180,8 +209,23 @@ export default function DashboardPage() {
 
   const handleProfileClick = () => {
     setIsDropdownOpen(false)
-    // TODO: Navigate to profile page when implemented
-    showToast('Perfil - Próximamente', 'info')
+    setProfileOpen(true)
+  }
+
+  const handleProfileClose = (open: boolean) => {
+    setProfileOpen(open)
+    // Refresh display name after profile sheet closes (in case it was updated)
+    if (!open && user?.id) {
+      const supabase = createClient()
+      supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          setDisplayName(data?.full_name || null)
+        })
+    }
   }
 
   if (authLoading) {
@@ -203,7 +247,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-2xl font-semibold" style={{ color: 'var(--app-title)' }}>Comfrut Packing Control app</h1>
               <p className="mt-1 text-sm" style={{ color: 'var(--muted-text)' }}>
-                {getGreeting()}, {getUserFirstName()}. ¿Qué área te gustaría ver hoy?
+                {getGreeting()}, {getUserDisplayName()}. ¿Qué área te gustaría ver hoy?
               </p>
             </div>
             <div className="relative" ref={dropdownRef}>
@@ -214,7 +258,7 @@ export default function DashboardPage() {
               >
                 <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-shadow" style={{ backgroundColor: 'var(--avatar-bg)' }}>
                   <span className="text-sm font-semibold" style={{ color: 'var(--primary-text)' }}>
-                    {getUserFirstName().charAt(0)}
+                    {getUserFirstName()}
                   </span>
                 </div>
                 <ChevronDown className={`h-4 w-4 transition-transform ${isDropdownOpen ? 'transform rotate-180' : ''}`} style={{ color: 'var(--chevron-color)' }} />
@@ -373,6 +417,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <ProfileSheet open={profileOpen} onOpenChange={handleProfileClose} />
     </div>
   )
 } 
