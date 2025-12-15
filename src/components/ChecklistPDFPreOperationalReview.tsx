@@ -2,12 +2,13 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
   PDFSectionTitle,
   PDFStatusBadge,
-  PDFStatusColors
+  PDFStatusColors,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -178,12 +179,11 @@ export const ChecklistPreOperationalReviewPDFDocument: React.FC<ChecklistPreOper
     <Document>
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Pre-Operational Review Processing Areas"
           titleEs="Áreas de procesamiento de revisión preoperacional"
           documentCode="CF/PC-ASC-017-RG001"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Meta Info Block */}
@@ -262,8 +262,15 @@ export const ChecklistPreOperationalReviewPDFDocument: React.FC<ChecklistPreOper
           </View>
         </View>
 
+        {/* Validation Section */}
+        <PDFValidationBlock
+          data={{
+            signature: undefined
+          }}
+        />
+
         {/* Footer */}
-        <PDFFooter creationTimestamp={creationDate} />
+        <PDFFooter />
       </Page>
     </Document>
   )

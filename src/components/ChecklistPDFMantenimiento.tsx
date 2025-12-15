@@ -1,16 +1,14 @@
 import React from 'react'
-import { Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer'
-
-// Registrar fuentes
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' },
-    { src: '/fonts/Roboto-Italic.ttf', fontStyle: 'italic' }, // nuevo
-    // FALTA el archivo Roboto-Italic.ttf en public/fonts/ si no existe
-  ]
-})
+import { Page, Text, View, StyleSheet, Image, Document } from '@react-pdf/renderer'
+import { 
+  PDFStyles, 
+  PDFHeader2Row, 
+  PDFMetaInfo, 
+  PDFFooter, 
+  PDFSectionTitle,
+  PDFPhotoCard,
+  PDFValidationBlock
+} from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
   page: {
@@ -126,35 +124,75 @@ export const ChecklistPDFMantenimientoDocument: React.FC<ChecklistPDFMantenimien
   // Cada foto en su propia página
   const photoGroups = fotos.map(url => [url])
 
+  // Split infoEntries into left and right columns
+  const leftColumn = infoEntries.slice(0, Math.ceil(infoEntries.length / 2)).map(([label, value]) => ({
+    label,
+    value
+  }))
+  const rightColumn = infoEntries.slice(Math.ceil(infoEntries.length / 2)).map(([label, value]) => ({
+    label,
+    value
+  }))
+
+  const totalPages = 1 + photoGroups.length
+
   return (
-    <>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Solicitud de Mantenimiento Correctivo Programado</Text>
-        <Text style={styles.subtitle}>CF-PC-MAN-001-RG006</Text>
-        <View style={styles.infoContainer}>
-          {infoEntries.map(([label, value], idx) => (
-            <View style={styles.infoGroup} key={idx}>
-              <Text>
-                <Text style={styles.infoLabel}>{label}:</Text>
-                <Text style={styles.infoValue}>{value}</Text>
-              </Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.footer}>Este documento es parte del sistema de gestión de calidad de Comfrut</Text>
+    <Document>
+      <Page size="A4" style={PDFStyles.page}>
+        {/* Header Bar */}
+        <PDFHeader2Row
+          titleEn="Corrective Maintenance Request"
+          titleEs="Solicitud de Mantenimiento Correctivo Programado"
+          documentCode="CF-PC-MAN-001-RG006"
+          version="V.01"
+        />
+
+        {/* Meta Info Block */}
+        <PDFMetaInfo
+          leftColumn={leftColumn}
+          rightColumn={rightColumn}
+        />
+
+        {/* Footer */}
+        <PDFFooter pageNumber={1} totalPages={totalPages} />
       </Page>
 
       {photoGroups.map((group, pageIndex) => (
-        <Page size="A4" style={styles.page} key={pageIndex}>
-          <View style={styles.photoSection}>
-            <View style={styles.photoFrame}>
-              <Image src={group[0]} style={styles.photo} />
-              <Text style={styles.photoCaption}>{`Foto ${pageIndex + 1} - Vista general`}</Text>
-            </View>
-          </View>
-          <Text style={styles.footer}>Este documento es parte del sistema de gestión de calidad de Comfrut</Text>
+        <Page size="A4" style={PDFStyles.page} key={pageIndex}>
+          {/* Header Bar */}
+          <PDFHeader2Row
+            titleEn="Corrective Maintenance Request"
+            titleEs="Solicitud de Mantenimiento Correctivo Programado"
+            documentCode="CF-PC-MAN-001-RG006"
+            version="V.01"
+          />
+
+          {/* Section Title */}
+          <PDFSectionTitle
+            titleEn="Section 2 – Evidence Photos"
+            titleEs="Sección 2 – Fotos de evidencia"
+          />
+
+          {/* Photo */}
+          <PDFPhotoCard
+            photoUrl={group[0]}
+            photoNumber={pageIndex + 1}
+            caption="Vista general"
+          />
+
+          {/* Validation Section on last photo page */}
+          {pageIndex === photoGroups.length - 1 && (
+            <PDFValidationBlock
+              data={{
+                signature: undefined
+              }}
+            />
+          )}
+
+          {/* Footer */}
+          <PDFFooter pageNumber={pageIndex + 2} totalPages={totalPages} />
         </Page>
       ))}
-    </>
+    </Document>
   )
 } 

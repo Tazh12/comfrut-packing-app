@@ -2,11 +2,12 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
   PDFSectionTitle,
-  PDFStatusBadge
+  PDFStatusBadge,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -284,12 +285,11 @@ export const ChecklistMaterialsControlPDFDocument: React.FC<ChecklistMaterialsCo
     pages.push(
       <Page key={pageIndex} size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Internal Control of Materials Used in Production Areas"
           titleEs="Control interno de materiales usados en áreas productivas"
           documentCode="CF/PC-ASC-004-RG008"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Section 1: Basic Info - Only show on first page */}
@@ -333,10 +333,18 @@ export const ChecklistMaterialsControlPDFDocument: React.FC<ChecklistMaterialsCo
           ))}
         </View>
 
+        {/* Validation Section - Only on last page */}
+        {pageIndex === totalPages - 1 && (
+          <PDFValidationBlock
+            data={{
+              signature: undefined
+            }}
+          />
+        )}
+
         <PDFFooter 
           pageNumber={pageIndex + 1} 
-          totalPages={totalPages} 
-          creationTimestamp={creationDate} 
+          totalPages={totalPages}
         />
       </Page>
     )

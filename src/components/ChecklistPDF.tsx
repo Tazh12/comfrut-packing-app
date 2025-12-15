@@ -18,10 +18,13 @@ import { es } from 'date-fns/locale'
 import { ChecklistRecord } from '@/lib/checklist'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
-  PDFStatusBadge
+  PDFStatusBadge,
+  PDFSectionTitle,
+  PDFValidationBlock,
+  PDFPhotoCard
 } from '@/lib/pdf-layout'
 
 // Estilos
@@ -217,12 +220,11 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
     <Document>
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Checklist Packing Machine"
           titleEs="Checklist envasadora"
           documentCode="CD/PC-PG-PRO-001-RG001"
           version="V.03"
-          date={formattedDate}
         />
 
         {/* Meta Info Block */}
@@ -279,61 +281,61 @@ const ChecklistPDFDocument = ({ formData, photos, metadata }: ChecklistPDFProps)
         </View>
 
         {/* Pie de página */}
-        <PDFFooter creationTimestamp={creationDate} />
+        <PDFFooter pageNumber={1} totalPages={2} />
       </Page>
 
       {/* Segunda página: Fotos */}
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Checklist Packing Machine"
           titleEs="Checklist envasadora"
           documentCode="CD/PC-PG-PRO-001-RG001"
           version="V.03"
-          date={formattedDate}
         />
 
-        {/* Foto 1: Codificación de bolsa */}
-        <View style={styles.photoSection}>
-          <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Photo 1</Text>
-            <Text style={styles.photoSubtitle}>Vista general del equipo</Text>
-          </View>
-          <View style={styles.photoFrame}>
-            {safePhotos?.photo1?.preview && (
-              <Image src={safePhotos.photo1.preview} style={styles.photo} />
-            )}
-          </View>
-        </View>
+        {/* Section Title */}
+        <PDFSectionTitle
+          titleEn="Section 2 – Evidence Photos"
+          titleEs="Sección 2 – Fotos de evidencia"
+        />
 
-        {/* Foto 2: Codificación de caja */}
-        <View style={styles.photoSection}>
-          <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Photo 2</Text>
-            <Text style={styles.photoSubtitle}>Detalle específico</Text>
-          </View>
-          <View style={styles.photoFrame}>
-            {safePhotos?.photo2?.preview && (
-              <Image src={safePhotos.photo2.preview} style={styles.photo} />
-            )}
-          </View>
-        </View>
+        {/* Photo 1 */}
+        {safePhotos?.photo1?.preview && (
+          <PDFPhotoCard
+            photoUrl={safePhotos.photo1.preview}
+            photoNumber={1}
+            caption="Vista general del equipo"
+          />
+        )}
 
-        {/* Foto 3: Etiqueta adicional */}
-        <View style={styles.photoSection}>
-          <View style={styles.photoHeader}>
-            <Text style={styles.photoTitle}>Photo 3</Text>
-            <Text style={styles.photoSubtitle}>Detalle adicional</Text>
-          </View>
-          <View style={styles.photoFrame}>
-            {safePhotos?.photo3?.preview && (
-              <Image src={safePhotos.photo3.preview} style={styles.photo} />
-            )}
-          </View>
-        </View>
+        {/* Photo 2 */}
+        {safePhotos?.photo2?.preview && (
+          <PDFPhotoCard
+            photoUrl={safePhotos.photo2.preview}
+            photoNumber={2}
+            caption="Detalle específico"
+          />
+        )}
+
+        {/* Photo 3 */}
+        {safePhotos?.photo3?.preview && (
+          <PDFPhotoCard
+            photoUrl={safePhotos.photo3.preview}
+            photoNumber={3}
+            caption="Detalle adicional"
+          />
+        )}
+
+        {/* Validation Section */}
+        <PDFValidationBlock
+          data={{
+            signature: undefined
+          }}
+        />
 
         {/* Pie de página */}
-        <PDFFooter pageNumber={2} totalPages={2} creationTimestamp={creationDate} />
+        <PDFFooter pageNumber={2} totalPages={2} />
       </Page>
     </Document>
   );

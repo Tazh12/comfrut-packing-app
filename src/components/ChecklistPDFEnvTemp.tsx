@@ -2,11 +2,12 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
   PDFSectionTitle,
-  PDFStatusBadge
+  PDFStatusBadge,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -549,12 +550,11 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
       {/* First Page: Section 1 and Section 2 with Graph */}
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Process Environmental Temperature Control"
           titleEs="Control de temperatura ambiental del proceso"
           documentCode="CF/PC-ASC-009-RG001"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Meta Info Block */}
@@ -629,44 +629,27 @@ export const ChecklistEnvTempPDFDocument: React.FC<ChecklistEnvTempPDFProps> = (
           )}
         </View>
 
-        <PDFFooter pageNumber={1} totalPages={2} creationTimestamp={creationDate} />
+        <PDFFooter pageNumber={1} totalPages={2} />
       </Page>
 
       {/* Second Page: Section 3 */}
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Process Environmental Temperature Control"
           titleEs="Control de temperatura ambiental del proceso"
           documentCode="CF/PC-ASC-009-RG001"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Section 3: Final Verification */}
-        <View style={styles.section}>
-          <PDFSectionTitle 
-            titleEn="Section 3 – Final Verification"
-            titleEs="Sección 3 – Verificación final"
-          />
-          <PDFMetaInfo
-            leftColumn={[
-              { label: 'Checker Name', value: section3Data.checkerName || '-' },
-              { label: 'Verification Date', value: section3Data.verificationDate || '-' }
-            ]}
-            rightColumn={[]}
-          />
-          <View style={styles.signatureBox}>
-            <Text style={styles.signatureLabel}>Checker Signature</Text>
-            {section3Data.checkerSignature ? (
-              <Image src={section3Data.checkerSignature} style={styles.signatureImage} />
-            ) : (
-              <Text style={{ fontSize: 8, color: '#9CA3AF' }}></Text>
-            )}
-          </View>
-        </View>
+        <PDFValidationBlock
+          data={{
+            signature: section3Data.checkerSignature
+          }}
+        />
 
-        <PDFFooter pageNumber={2} totalPages={2} creationTimestamp={creationDate} />
+        <PDFFooter pageNumber={2} totalPages={2} />
       </Page>
     </Document>
   )

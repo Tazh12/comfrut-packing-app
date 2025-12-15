@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Trash2, AlertTriangle, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatDateMMMDDYYYY, formatDateForFilename as formatDateForFilenameUtil } from '@/lib/date-utils'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistMaterialsControlPDFDocument } from '@/components/ChecklistPDFMaterialsControl'
 import { uploadChecklistPDF, insertChecklistMaterialsControl, getNextPdfNumber } from '@/lib/supabase/checklistMaterialsControl'
@@ -270,30 +271,11 @@ export default function ChecklistMaterialsControlPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [expandedPersonnelId, setExpandedPersonnelId] = useState<number | null>(null)
 
-  // Format date as MMM-DD-YYYY
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      return format(date, 'MMM-dd-yyyy').toUpperCase()
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date as MMM-DD-YYYY - uses utility to avoid timezone issues
+  const formatDate = formatDateMMMDDYYYY
 
-  // Format date for PDF filename: YYYY-MMMM-DD
-  const formatDateForFilename = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      const year = date.getFullYear()
-      const month = format(date, 'MMMM').toUpperCase()
-      const day = date.getDate().toString().padStart(2, '0')
-      return `${year}-${month}-${day}`
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date for PDF filename - uses utility to avoid timezone issues
+  const formatDateForFilename = (dateStr: string): string => formatDateForFilenameUtil(dateStr, true)
 
   // Reset form function
   const resetForm = () => {
@@ -618,19 +600,41 @@ export default function ChecklistMaterialsControlPage() {
       <p className="text-center text-sm text-gray-500 mb-2">Control interno de materiales usados en áreas productivas</p>
       <p className="text-center text-sm text-gray-500 mb-6">Code: CF/PC-ASC-004-RG008</p>
 
-      {pdfUrl && isInitialSubmitted ? (
-        <div className="bg-white p-6 rounded-lg shadow-md text-center">
-          <h2 className="text-xl font-semibold mb-4">Checklist Submitted Successfully!</h2>
-          <a
-            href={pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-          >
-            View PDF
-          </a>
+      {/* Success Message */}
+      {isInitialSubmitted && pdfUrl && (
+        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
+            </a>
+            <a
+              href={pdfUrl}
+              download
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
+            </a>
+            <Link
+              href="/area/calidad"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
+            </Link>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {!isInitialSubmitted && (
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Section 1: Basic Info */}
           <div className="bg-white p-6 rounded-lg shadow-md">
@@ -1008,30 +1012,22 @@ export default function ChecklistMaterialsControlPage() {
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">📄 Controls</h2>
-            <div className="flex flex-col sm:flex-row gap-4">
-              {isInitialSubmitted && pdfUrl && (
-                <a
-                  href={`${pdfUrl}?t=${Date.now()}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-center"
-                >
-                  View PDF / Ver PDF
-                </a>
+          {/* Submit Button */}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex flex-col items-center"
+            >
+              {isSubmitting ? (
+                'Submitting...'
+              ) : (
+                <>
+                  <span>Submit Checklist</span>
+                  <span className="text-xs opacity-90">Enviar Checklist</span>
+                </>
               )}
-              {!isInitialSubmitted && (
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Checklist / Enviar Checklist'}
-                </button>
-              )}
-            </div>
+            </button>
           </div>
         </form>
       )}

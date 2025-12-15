@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Info, X } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatDateMMMDDYYYY, formatDateForFilename as formatDateForFilenameUtil } from '@/lib/date-utils'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistPreOperationalReviewPDFDocument } from '@/components/ChecklistPDFPreOperationalReview'
 import { useToast } from '@/context/ToastContext'
@@ -544,30 +545,11 @@ export default function ChecklistPreOperationalReviewPage() {
     }
   }, [])
 
-  // Format date as MMM-DD-YYYY
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      return format(date, 'MMM-dd-yyyy').toUpperCase()
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date as MMM-DD-YYYY - uses utility to avoid timezone issues
+  const formatDate = formatDateMMMDDYYYY
 
-  // Format date for PDF filename
-  const formatDateForFilename = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      const year = date.getFullYear()
-      const month = format(date, 'MMM').toUpperCase()
-      const day = date.getDate().toString().padStart(2, '0')
-      return `${year}-${month}-${day}`
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date for PDF filename - uses utility to avoid timezone issues
+  const formatDateForFilename = (dateStr: string): string => formatDateForFilenameUtil(dateStr, false)
 
   // Update item
   const handleItemChange = (id: string, field: keyof ChecklistItem, value: any) => {
@@ -985,49 +967,56 @@ export default function ChecklistPreOperationalReviewPage() {
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">📄 Controls</h2>
           <div className="flex flex-col sm:flex-row gap-4">
-            {isSubmitted && pdfUrl && (
-              <a
-                href={`${pdfUrl}?t=${Date.now()}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-center"
-              >
-                View PDF / Ver PDF
-              </a>
-            )}
             {!isSubmitted && (
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex flex-col items-center"
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Checklist / Enviar Checklist'}
+                {isSubmitting ? (
+                  'Submitting...'
+                ) : (
+                  <>
+                    <span>Submit Checklist</span>
+                    <span className="text-xs opacity-90">Enviar Checklist</span>
+                  </>
+                )}
               </button>
             )}
           </div>
         </div>
       </form>
 
-      {/* PDF View Section */}
+      {/* Success Message */}
       {isSubmitted && pdfUrl && (
-        <div className="mt-8 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">PDF Generated Successfully</h2>
-          <div className="flex gap-4">
+        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
+          <div className="flex flex-col sm:flex-row gap-4">
             <a
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
             >
-              View PDF / Ver PDF
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
             </a>
             <a
               href={pdfUrl}
               download
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
             >
-              Download PDF / Descargar PDF
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
             </a>
+            <Link
+              href="/area/calidad"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
+            </Link>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Trash2, AlertTriangle, ChevronDown, ChevronUp, Info, X } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatDateMMMDDYYYY, formatDateForFilename as formatDateForFilenameUtil } from '@/lib/date-utils'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistFootbathControlPDFDocument } from '@/components/ChecklistPDFFootbathControl'
 import { uploadChecklistPDF, insertChecklistFootbathControl } from '@/lib/supabase/checklistFootbathControl'
@@ -296,30 +297,11 @@ export default function ChecklistFootbathControlPage() {
   const [showColorChartModal, setShowColorChartModal] = useState(false)
   const [showProblemsModal, setShowProblemsModal] = useState(false)
 
-  // Format date as MMM-DD-YYYY
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      return format(date, 'MMM-dd-yyyy').toUpperCase()
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date as MMM-DD-YYYY - uses utility to avoid timezone issues
+  const formatDate = formatDateMMMDDYYYY
 
-  // Format date for PDF filename: yyyy-mmm-dd
-  const formatDateForFilename = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      const year = date.getFullYear()
-      const month = format(date, 'MMM').toUpperCase()
-      const day = date.getDate().toString().padStart(2, '0')
-      return `${year}-${month}-${day}`
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date for PDF filename - uses utility to avoid timezone issues
+  const formatDateForFilename = (dateStr: string): string => formatDateForFilenameUtil(dateStr, false)
 
   // Reset form function
   const resetForm = () => {
@@ -823,9 +805,16 @@ export default function ChecklistFootbathControlPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex flex-col items-center"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit Checklist / Enviar Checklist'}
+            {isSubmitting ? (
+              'Submitting...'
+            ) : (
+              <>
+                <span>Submit Checklist</span>
+                <span className="text-xs opacity-90">Enviar Checklist</span>
+              </>
+            )}
           </button>
         </div>
       </form>
@@ -841,22 +830,25 @@ export default function ChecklistFootbathControlPage() {
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
             >
-              View PDF / Ver PDF
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
             </a>
             <a
               href={pdfUrl}
               download
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center"
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
             >
-              Download PDF / Descargar PDF
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
             </a>
             <Link
               href="/area/calidad"
-              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
             >
-              Back to Quality / Volver a Calidad
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
             </Link>
           </div>
         </div>

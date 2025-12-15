@@ -665,25 +665,34 @@ export default function MonoproductoChecklistPage() {
             {errorMessage && <p className="text-red-600 mb-2">{errorMessage}</p>}
             <button
               onClick={handleFinalizeAll}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex flex-col items-center"
             >
-              Finalizar
-            </button>
-          </div>
-        )}
-        {/* Botones Descargar PDF y Salir */}
-        {finalized && (
-          <div className="mt-6 space-x-4">
-            <ChecklistPDFMonoproductoLink pallets={pallets} metadata={pdfMetadata} />
-            <button
-              onClick={handleExit}
-              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-            >
-              Salir
+              <span>Finalize</span>
+              <span className="text-xs opacity-90">Finalizar</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* Success Message */}
+      {finalized && (
+        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col items-center">
+              <ChecklistPDFMonoproductoLink pallets={pallets} metadata={pdfMetadata} />
+            </div>
+            <Link
+              href="/area/calidad"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center justify-center"
+            >
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   )
 } 

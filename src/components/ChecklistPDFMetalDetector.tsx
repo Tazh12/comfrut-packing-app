@@ -2,10 +2,11 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
-  PDFSectionTitle
+  PDFSectionTitle,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -187,12 +188,11 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
     <Document>
       <Page size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Metal Detector PCC#1 Control"
           titleEs="Control PCC#1 detector de metales"
           documentCode="CF/PC-PL-HACCP-001-RG001"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Meta Info Block */}
@@ -279,8 +279,15 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
           </View>
         </View>
 
+        {/* Validation Section */}
+        <PDFValidationBlock
+          data={{
+            signature: undefined
+          }}
+        />
+
         {/* Footer */}
-        <PDFFooter creationTimestamp={creationDate} />
+        <PDFFooter />
       </Page>
     </Document>
   )

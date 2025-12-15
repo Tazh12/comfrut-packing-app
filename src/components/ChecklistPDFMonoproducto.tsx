@@ -12,9 +12,10 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
-  PDFFooter
+  PDFFooter,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -44,8 +45,16 @@ interface ChecklistPDFMonoproductoProps {
 // Ajustar formato de fecha para evitar desfase de zona horaria
 const formatDate = (date: string): string => {
   try {
-    // Forzar hora a medianoche local
-    return format(new Date(date + 'T00:00:00'), 'dd / MMM / yyyy', { locale: es })
+    // Parse date string directly to avoid timezone conversion issues
+    // Expected format: YYYY-MM-DD
+    const parts = date.split('-')
+    if (parts.length === 3) {
+      const [year, month, day] = parts
+      // Create date using UTC to avoid timezone shifts
+      const dateObj = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)))
+      return format(dateObj, 'dd / MMM / yyyy', { locale: es })
+    }
+    return date
   } catch {
     return date
   }
@@ -93,12 +102,11 @@ export const ChecklistPDFMonoproductoDocument = ({ pallets, metadata }: Checklis
       {palletGroups.map((group, pageIndex) => (
         <Page key={pageIndex} size="A4" style={PDFStyles.page}>
           {/* Header Bar */}
-          <PDFHeader
+          <PDFHeader2Row
             titleEn="Quality Control of Freezing Fruit Process"
             titleEs="Control de calidad del proceso de congelado de frutas"
             documentCode="CF/PC-PG-ASC-006-RG001"
             version="V.01"
-            date={metadata.date}
           />
 
           {/* Metadata solo en primera página */}
@@ -143,10 +151,18 @@ export const ChecklistPDFMonoproductoDocument = ({ pallets, metadata }: Checklis
             ))}
           </View>
 
+          {/* Validation Section - Only on last page */}
+          {pageIndex === palletGroups.length - 1 && (
+            <PDFValidationBlock
+              data={{
+                signature: undefined
+              }}
+            />
+          )}
+
           <PDFFooter 
             pageNumber={pageIndex + 1} 
-            totalPages={palletGroups.length} 
-            creationTimestamp={creationDate} 
+            totalPages={palletGroups.length}
           />
         </Page>
       ))}

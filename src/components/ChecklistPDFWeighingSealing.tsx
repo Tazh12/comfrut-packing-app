@@ -2,10 +2,11 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
-  PDFSectionTitle
+  PDFSectionTitle,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -276,12 +277,11 @@ export const ChecklistWeighingSealingPDFDocument: React.FC<ChecklistWeighingSeal
     pages.push(
       <Page key={pageIndex} size="A4" style={PDFStyles.page}>
         {/* Header Bar */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Check weighing and sealing of packaged products"
           titleEs="Chequeo de pesaje y sellado de los productos envasados"
           documentCode="CF/PC-ASC-006-RG005"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Section 1: Basic Info - Only show on first page */}
@@ -353,10 +353,18 @@ export const ChecklistWeighingSealingPDFDocument: React.FC<ChecklistWeighingSeal
           </View>
         )}
 
+        {/* Validation Section - Only on last page */}
+        {pageIndex === totalPages - 1 && (
+          <PDFValidationBlock
+            data={{
+              signature: undefined
+            }}
+          />
+        )}
+
         <PDFFooter 
           pageNumber={pageIndex + 1} 
-          totalPages={totalPages} 
-          creationTimestamp={creationDate} 
+          totalPages={totalPages}
         />
       </Page>
     )

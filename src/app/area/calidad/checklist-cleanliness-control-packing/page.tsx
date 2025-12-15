@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Info, X, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatDateMMMDDYYYY, formatDateForFilename as formatDateForFilenameUtil } from '@/lib/date-utils'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistCleanlinessControlPackingPDFDocument } from '@/components/ChecklistPDFCleanlinessControlPacking'
 import { uploadChecklistPDF, insertChecklistCleanlinessControlPacking, getNextPdfNumber } from '@/lib/supabase/checklistCleanlinessControlPacking'
@@ -416,16 +417,8 @@ export default function ChecklistCleanlinessControlPackingPage() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
 
-  // Format date as MMM-DD-YYYY
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return ''
-    try {
-      const date = new Date(dateStr)
-      return format(date, 'MMM-dd-yyyy').toUpperCase()
-    } catch {
-      return dateStr
-    }
-  }
+  // Format date as MMM-DD-YYYY - uses utility to avoid timezone issues
+  const formatDate = formatDateMMMDDYYYY
 
   // Reset form function
   const resetForm = () => {
@@ -669,19 +662,8 @@ export default function ChecklistCleanlinessControlPackingPage() {
         return
       }
 
-      // Format date functions
-      const formatDateForFilename = (dateStr: string): string => {
-        if (!dateStr) return ''
-        try {
-          const date = new Date(dateStr)
-          const year = date.getFullYear()
-          const month = format(date, 'MMMM').toUpperCase()
-          const day = date.getDate().toString().padStart(2, '0')
-          return `${year}-${month}-${day}`
-        } catch {
-          return dateStr
-        }
-      }
+      // Format date for filename - use utility to avoid timezone issues
+      const formatDateForFilename = (dateStr: string): string => formatDateForFilenameUtil(dateStr, true)
 
       // Prepare form data for PDF
       const formData = {
@@ -780,21 +762,41 @@ export default function ChecklistCleanlinessControlPackingPage() {
       <p className="text-center text-sm text-gray-500 mb-2">Control de limpieza de empaque</p>
       <p className="text-center text-sm text-gray-500 mb-6">Code: CF/PC-PG-SAN-001-RG005</p>
 
-      {isSubmitted ? (
-        <div className="bg-white p-6 rounded-lg shadow-md text-center">
-          <h2 className="text-xl font-semibold mb-4">Checklist Submitted Successfully!</h2>
-          {pdfUrl && (
+      {/* Success Message */}
+      {isSubmitted && pdfUrl && (
+        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
+          <div className="flex flex-col sm:flex-row gap-4">
             <a
               href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
             >
-              View PDF
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
             </a>
-          )}
+            <a
+              href={pdfUrl}
+              download
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
+            </a>
+            <Link
+              href="/area/calidad"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
+            </Link>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {!isSubmitted && (
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Info Buttons */}
           <div className="bg-white p-6 rounded-lg shadow-md">

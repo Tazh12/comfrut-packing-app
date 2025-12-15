@@ -2,10 +2,11 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { 
   PDFStyles, 
-  PDFHeader, 
+  PDFHeader2Row, 
   PDFMetaInfo, 
   PDFFooter, 
-  PDFSectionTitle
+  PDFSectionTitle,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -193,12 +194,11 @@ export const ChecklistFootbathControlPDFDocument: React.FC<ChecklistFootbathCont
     <Document>
       <Page size="A4" style={PDFStyles.page}>
         {/* Header */}
-        <PDFHeader
+        <PDFHeader2Row
           titleEn="Footbath Control"
           titleEs="Control de Pediluvios"
           documentCode="CF/PC-SAN-001-RG007"
           version="V.01"
-          date={data.section1.date}
         />
 
         {/* Section 1: Basic Info */}
@@ -274,6 +274,13 @@ export const ChecklistFootbathControlPDFDocument: React.FC<ChecklistFootbathCont
             </View>
           ))}
         </View>
+
+        {/* Validation Section */}
+        <PDFValidationBlock
+          data={{
+            signature: undefined
+          }}
+        />
 
         {/* Footer */}
         <PDFFooter />
