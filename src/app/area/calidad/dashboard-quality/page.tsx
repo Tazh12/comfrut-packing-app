@@ -582,8 +582,9 @@ export default function DashboardQualityPage() {
         const runsWithIncompleteVerification = finalRecords.filter((record: any) => {
           const readings = record.readings || []
           return readings.some((r: any) => 
-            !r.bf || !r.bnf || !r.bss || 
-            r.bf === '' || r.bnf === '' || r.bss === ''
+            // These fields are modeled as status unions, so empty-string checks are invalid in TS.
+            // Treat only missing values (null/undefined) as incomplete.
+            r.bf == null || r.bnf == null || r.bss == null
           )
         })
         const runsIncompleteCount = runsWithIncompleteVerification.length
@@ -1391,7 +1392,9 @@ export default function DashboardQualityPage() {
         allStaffMembers.forEach(member => {
           parameterFields.forEach(field => {
             totalParameterChecks++
-            if (!member.parameters[field] || member.parameters[field] === '') {
+            // parameters[field] is typed as "comply" | "not_comply" (and may be missing/undefined),
+            // so treat only missing values as "missing data".
+            if (!member.parameters[field]) {
               missingParameterChecks++
             }
           })
@@ -3850,7 +3853,7 @@ export default function DashboardQualityPage() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {Array.from(new Set(chartData.heatmapData.map((d: any) => d.area))).map((area: string) => (
+                          {Array.from(new Set<string>(chartData.heatmapData.map((d: any) => d.area as string))).map((area) => (
                             <tr key={area} className="hover:bg-gray-50">
                               <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                                 {area}

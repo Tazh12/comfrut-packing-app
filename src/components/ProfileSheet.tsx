@@ -145,7 +145,7 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
       setInitialAvatarColor(avatarColor) // Keep the selected color in state even if DB doesn't support it
       setSaving(false)
       onOpenChange(false)
-      showToast("Nombre guardado. Ejecuta la migración SQL para guardar el color del avatar.", "warning")
+      showToast("Nombre guardado. Ejecuta la migración SQL para guardar el color del avatar.", "info")
       return
     } else if (upsertErr) {
       console.error("Error saving profile:", upsertErr)
