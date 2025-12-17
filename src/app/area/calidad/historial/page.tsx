@@ -176,16 +176,26 @@ export default function HistorialPage() {
         }
         
       } else if (selected === 'Checklist Mix Producto') {
-        let query = supabase.from('checklist_calidad_mix').select('*')
+        let query = supabase.from('checklist_producto_mix').select('*')
         
+        // Filter by date_utc (timestamp) or date_string
         if (fromDate) {
+          const startUTC = new Date(`${fromDate}T00:00:00Z`).toISOString()
           if (!toDate) {
-            query = query.eq('fecha', fromDate)
+            // Single date: check if date_utc starts on that day
+            const endUTC = new Date(`${fromDate}T23:59:59Z`).toISOString()
+            query = query.gte('date_utc', startUTC).lte('date_utc', endUTC)
           } else {
-            query = query.gte('fecha', fromDate).lte('fecha', toDate)
+            const endDateObj = new Date(`${toDate}T00:00:00Z`)
+            endDateObj.setDate(endDateObj.getDate() + 1)
+            const endUTC = endDateObj.toISOString()
+            query = query.gte('date_utc', startUTC).lt('date_utc', endUTC)
           }
         } else if (toDate) {
-          query = query.lte('fecha', toDate)
+          const endDateObj = new Date(`${toDate}T00:00:00Z`)
+          endDateObj.setDate(endDateObj.getDate() + 1)
+          const endUTC = endDateObj.toISOString()
+          query = query.lt('date_utc', endUTC)
         }
         
         if (orden) {
@@ -196,6 +206,9 @@ export default function HistorialPage() {
         }
         if (producto) {
           query = query.ilike('producto', `%${producto}%`)
+        }
+        if (marca) {
+          query = query.ilike('cliente', `%${marca}%`)
         }
         
         const { data: result, error } = await query
@@ -568,7 +581,7 @@ export default function HistorialPage() {
         const orden = selectedRecord.orden_fabricacion
         const tableName = selected === 'Checklist Monoproducto' 
           ? 'checklist_calidad_monoproducto' 
-          : 'checklist_calidad_mix'
+          : 'checklist_producto_mix'
         
         const { data, error } = await supabase
           .from(tableName)
@@ -1854,56 +1867,80 @@ export default function HistorialPage() {
 
     ;(async () => {
       try {
-        if (selected === 'Process Environmental Temperature Control' || selected === 'Staff Good Practices Control' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Internal control of materials used in production areas' || selected === 'Footbath Control' || selected === 'Check weighing and sealing of packaged products' || selected === 'Cleanliness Control Packing' || selected === 'Metal Detector (PCC #1)' || selected === 'Process area staff glasses and auditory protector control') {
-          // For Temp, Staff Practices, Pre-Operational Review, Materials Control, Footbath Control, Weighing Sealing, Metal Detector, and Staff Glasses Auditory checklists, use pdf_url directly from record
-          if (selectedRecord.pdf_url) {
-            setPdfUrl(selectedRecord.pdf_url)
-          }
-          setLoadingFiles(false)
-          return
+        // Determine storage bucket based on checklist type
+        let storageBucket = 'checklistcalidad'
+        if (selected === 'Checklist Mix Producto') {
+          storageBucket = 'checklist-producto-mix'
         }
 
-        const { data: fileList, error: listError } = await supabase.storage
-          .from('checklistcalidad')
-          .list('', { limit: 1000 })
+        // For checklists that store pdf_url directly in the record, use it if available
+        const checklistsWithPdfUrl = [
+          'Process Environmental Temperature Control',
+          'Staff Good Practices Control',
+          'Pre-Operational Review Processing Areas',
+          'Internal control of materials used in production areas',
+          'Footbath Control',
+          'Check weighing and sealing of packaged products',
+          'Cleanliness Control Packing',
+          'Metal Detector (PCC #1)',
+          'Process area staff glasses and auditory protector control',
+          'Foreign Material Findings Record',
+          'Checklist Mix Producto',
+          'Checklist Monoproducto'
+        ]
 
-        if (listError) throw listError
-        if (!fileList || fileList.length === 0) {
-          setLoadingFiles(false)
-          return
-        }
-
-        const orden = selectedRecord.orden_fabricacion || selectedRecord.orden
-
-        // For Foreign Material, Pre-Operational Review, Metal Detector, and Staff Glasses Auditory, use pdf_url directly if available
-        if ((selected === 'Foreign Material Findings Record' || selected === 'Pre-Operational Review Processing Areas' || selected === 'Metal Detector (PCC #1)' || selected === 'Process area staff glasses and auditory protector control') && selectedRecord.pdf_url) {
+        if (checklistsWithPdfUrl.includes(selected) && selectedRecord.pdf_url) {
+          // Use pdf_url directly from record
           setPdfUrl(selectedRecord.pdf_url)
           setLoadingFiles(false)
           return
         }
 
-        // For other checklists, search for PDF files
-        if (orden) {
-          const pdfFile = fileList.find((file) =>
-            file.name.endsWith(`-${orden}.pdf`)
-          )
-          if (pdfFile) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('checklistcalidad')
-              .getPublicUrl(pdfFile.name)
-            setPdfUrl(publicUrl)
-          }
+        // If pdf_url is not available, search in storage bucket
+        const orden = selectedRecord.orden_fabricacion || selectedRecord.orden
 
-          const excelFile = fileList.find((file) =>
-            orden && file.name.toLowerCase().includes(orden.toLowerCase()) &&
-            file.name.endsWith('.xlsx')
-          )
-          if (excelFile) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('checklistcalidad')
-              .getPublicUrl(excelFile.name)
-            setExcelUrl(publicUrl)
-          }
+        if (!orden) {
+          setLoadingFiles(false)
+          return
+        }
+
+        // Search for PDF files in the appropriate storage bucket
+        const { data: fileList, error: listError } = await supabase.storage
+          .from(storageBucket)
+          .list('', { limit: 1000 })
+
+        if (listError) {
+          console.error('Error listing files from storage:', listError)
+          setLoadingFiles(false)
+          return
+        }
+
+        if (!fileList || fileList.length === 0) {
+          setLoadingFiles(false)
+          return
+        }
+
+        // Search for PDF files
+        const pdfFile = fileList.find((file) =>
+          file.name.endsWith(`-${orden}.pdf`) || file.name.includes(orden)
+        )
+        if (pdfFile) {
+          const { data: { publicUrl } } = supabase.storage
+            .from(storageBucket)
+            .getPublicUrl(pdfFile.name)
+          setPdfUrl(publicUrl)
+        }
+
+        // Search for Excel files
+        const excelFile = fileList.find((file) =>
+          file.name.toLowerCase().includes(orden.toLowerCase()) &&
+          file.name.endsWith('.xlsx')
+        )
+        if (excelFile) {
+          const { data: { publicUrl } } = supabase.storage
+            .from(storageBucket)
+            .getPublicUrl(excelFile.name)
+          setExcelUrl(publicUrl)
         }
       } catch (error: any) {
         console.error('Error al buscar archivos:', error)

@@ -70,6 +70,7 @@ export default function DashboardPage() {
   const [isThemeSubmenuOpen, setIsThemeSubmenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [displayName, setDisplayName] = useState<string | null>(null)
+  const [avatarColor, setAvatarColor] = useState<string>("#1D6FE3")
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Redirect to login if not authenticated (middleware should handle this, but this is a safety check)
@@ -82,22 +83,23 @@ export default function DashboardPage() {
   // Get email from user
   const email = user?.email || ''
 
-  // Fetch display name from profiles
+  // Fetch display name and avatar color from profiles
   useEffect(() => {
     if (!user?.id) return
 
-    const fetchDisplayName = async () => {
+    const fetchProfile = async () => {
       const supabase = createClient()
       const { data } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, avatar_color')
         .eq('id', user.id)
         .maybeSingle()
       
       setDisplayName(data?.full_name || null)
+      setAvatarColor(data?.avatar_color || "#1D6FE3")
     }
 
-    fetchDisplayName()
+    fetchProfile()
   }, [user?.id])
 
   // Close dropdown when clicking outside
@@ -214,16 +216,33 @@ export default function DashboardPage() {
 
   const handleProfileClose = (open: boolean) => {
     setProfileOpen(open)
-    // Refresh display name after profile sheet closes (in case it was updated)
+    // Refresh display name and avatar color after profile sheet closes (in case it was updated)
     if (!open && user?.id) {
       const supabase = createClient()
       supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, avatar_color')
         .eq('id', user.id)
         .maybeSingle()
-        .then(({ data }) => {
-          setDisplayName(data?.full_name || null)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Error refreshing profile:", error)
+            // If avatar_color column doesn't exist, try without it
+            if (error.message?.includes('column') || error.message?.includes('does not exist')) {
+              supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user.id)
+                .maybeSingle()
+                .then(({ data: fallbackData }) => {
+                  setDisplayName(fallbackData?.full_name || null)
+                  // Keep current avatar color or use default
+                })
+            }
+          } else {
+            setDisplayName(data?.full_name || null)
+            setAvatarColor(data?.avatar_color || "#1D6FE3")
+          }
         })
     }
   }
@@ -256,8 +275,8 @@ export default function DashboardPage() {
                 className="flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-full"
                 style={{ '--tw-ring-color': 'var(--card-hover-border)' } as React.CSSProperties}
               >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-shadow" style={{ backgroundColor: 'var(--avatar-bg)' }}>
-                  <span className="text-sm font-semibold" style={{ color: 'var(--primary-text)' }}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-md hover:shadow-lg transition-shadow" style={{ backgroundColor: avatarColor }}>
+                  <span className="text-sm font-semibold text-white">
                     {getUserFirstName()}
                   </span>
                 </div>

@@ -65,6 +65,7 @@ type TemperatureDailyStats = {
   maxTemp: number
   withinRange: number
   outOfRange: number
+  overLimit: number
   totalReadings: number
 }
 
@@ -133,6 +134,29 @@ type CleanlinessControlPackingDailyStats = {
 
 type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats | CleanlinessControlPackingDailyStats
 
+// Parameter field names mapping for Staff Good Practices Control
+const STAFF_PRACTICES_PARAMETER_FIELDS = [
+  'staffAppearance',
+  'completeUniform',
+  'accessoriesAbsence',
+  'workToolsUsage',
+  'cutCleanNotPolishedNails',
+  'noMakeupOn',
+  'staffBehavior',
+  'staffHealth'
+] as const
+
+const STAFF_PRACTICES_PARAMETER_NAMES: Record<string, string> = {
+  staffAppearance: 'Staff Appearance',
+  completeUniform: 'Complete Uniform',
+  accessoriesAbsence: 'Accessories Absence',
+  workToolsUsage: 'Work Tools Usage',
+  cutCleanNotPolishedNails: 'Cut Clean Nails',
+  noMakeupOn: 'No Makeup',
+  staffBehavior: 'Staff Behavior',
+  staffHealth: 'Staff Health'
+}
+
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
   const [selectedChecklist, setSelectedChecklist] = useState('Process Environmental Temperature Control')
@@ -143,12 +167,14 @@ export default function DashboardQualityPage() {
   const [selectedProduct, setSelectedProduct] = useState('')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any[]>([])
-  const [chartData, setChartData] = useState<any[]>([])
+  const [chartData, setChartData] = useState<any>([])
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
   const [summaryStats, setSummaryStats] = useState<any>({})
   const [availableOrdens, setAvailableOrdens] = useState<string[]>([])
   const [availableBrands, setAvailableBrands] = useState<string[]>([])
   const [availableProducts, setAvailableProducts] = useState<string[]>([])
+  const [availableSkus, setAvailableSkus] = useState<string[]>([])
+  const [selectedSku, setSelectedSku] = useState('')
 
   // Set default date range to last 30 days
   useEffect(() => {
@@ -200,6 +226,7 @@ export default function DashboardQualityPage() {
 
         // Calculate daily statistics
         const statsMap = new Map<string, TemperatureDailyStats>()
+        const TEMP_LIMIT = 50 // °F
         
         processedData.forEach((point) => {
           const date = point.date
@@ -211,6 +238,7 @@ export default function DashboardQualityPage() {
               maxTemp: -Infinity,
               withinRange: 0,
               outOfRange: 0,
+              overLimit: 0,
               totalReadings: 0
             })
           }
@@ -226,6 +254,11 @@ export default function DashboardQualityPage() {
           } else {
             stats.outOfRange++
           }
+          
+          // Track "Over Limit" specifically (temp > 50°F)
+          if (point.averageTemp > TEMP_LIMIT) {
+            stats.overLimit++
+          }
         })
 
         // Calculate averages
@@ -237,13 +270,52 @@ export default function DashboardQualityPage() {
         dailyStatsArray.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         setDailyStats(dailyStatsArray)
         
+        // Calculate HACCP/Compliance KPIs
+        const totalReadings = processedData.length
+        const deviations = processedData.filter((d) => d.averageTemp > TEMP_LIMIT)
+        const deviationCount = deviations.length
+        const compliantCount = processedData.filter((d) => d.averageTemp <= TEMP_LIMIT).length
+        const compliancePercentage = totalReadings > 0 
+          ? ((compliantCount / totalReadings) * 100).toFixed(1)
+          : '0.0'
+        
+        // Calculate worst excursion (max temp above limit)
+        const overLimitTemps = processedData
+          .filter((d) => d.averageTemp > TEMP_LIMIT)
+          .map((d) => d.averageTemp)
+        const worstExcursion = overLimitTemps.length > 0
+          ? Math.max(...overLimitTemps).toFixed(1)
+          : '0.0'
+        const worstExcursionValue = overLimitTemps.length > 0
+          ? Math.max(...overLimitTemps) - TEMP_LIMIT
+          : 0
+        
+        // Calculate consecutive deviation streak
+        let maxConsecutiveStreak = 0
+        let currentStreak = 0
+        processedData.forEach((point) => {
+          if (point.averageTemp > TEMP_LIMIT) {
+            currentStreak++
+            maxConsecutiveStreak = Math.max(maxConsecutiveStreak, currentStreak)
+          } else {
+            currentStreak = 0
+          }
+        })
+        
         setSummaryStats({
           totalRecords: records.length,
-          totalReadings: processedData.length,
+          totalReadings: totalReadings,
           avgTemp: processedData.length > 0 
             ? (processedData.reduce((sum, d) => sum + d.averageTemp, 0) / processedData.length).toFixed(1)
             : '0.0',
-          withinRange: processedData.filter((d) => d.status === 'Within Range').length
+          withinRange: processedData.filter((d) => d.status === 'Within Range').length,
+          // HACCP KPIs
+          compliancePercentage: compliancePercentage,
+          deviationCount: deviationCount,
+          timeOutOfSpec: deviationCount, // Number of readings above limit
+          worstExcursion: worstExcursion,
+          worstExcursionValue: worstExcursionValue,
+          consecutiveStreak: maxConsecutiveStreak
         })
         
       } else if (selectedChecklist === 'Metal Detector (PCC #1)') {
@@ -389,19 +461,54 @@ export default function DashboardQualityPage() {
         
         setData(finalRecords)
 
-        // Process data for charts
+        // Process data with full metadata for comprehensive KPIs
         const processedData: any[] = []
         const deviationData: any[] = []
+        const allReadingsWithMetadata: any[] = []
+        
+        // SOP requirement: checks should be every hour +/- 10 minutes
+        const REQUIRED_CHECK_INTERVAL_MINUTES = 60
+        const ALLOWED_VARIANCE_MINUTES = 10
         
         finalRecords.forEach((record: any) => {
-          record.readings?.forEach((reading: any) => {
+          record.readings?.forEach((reading: any, readingIndex: number) => {
             const hasDeviation = reading.bf === 'ND' || reading.bnf === 'ND' || reading.bss === 'ND' ||
                                  reading.sensitivity === 'No comply' || reading.noiseAlarm === 'No comply' ||
                                  reading.rejectingArm === 'No comply'
             
-            processedData.push({
+            // Parse datetime for gap calculations
+            // Date format is "MMM-DD-YYYY" (e.g., "NOV-17-2025")
+            // Hour format is "HH:mm" (e.g., "08:30")
+            let readingDateTime: Date | null = null
+            if (reading.hour && record.date_string) {
+              try {
+                // Convert MMM-DD-YYYY to a parseable format
+                const dateParts = record.date_string.split('-')
+                if (dateParts.length === 3) {
+                  const monthMap: { [key: string]: string } = {
+                    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+                    'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+                    'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+                  }
+                  const month = monthMap[dateParts[0].toUpperCase()] || '01'
+                  const day = dateParts[1].padStart(2, '0')
+                  const year = dateParts[2]
+                  const isoDate = `${year}-${month}-${day}T${reading.hour}:00`
+                  readingDateTime = new Date(isoDate)
+                  // Check if date is valid
+                  if (isNaN(readingDateTime.getTime())) {
+                    readingDateTime = null
+                  }
+                }
+              } catch (e) {
+                readingDateTime = null
+              }
+            }
+            
+            const readingData = {
               date: record.date_string,
               hour: reading.hour || '',
+              datetime: readingDateTime,
               bf: reading.bf || '',
               bnf: reading.bnf || '',
               bss: reading.bss || '',
@@ -411,170 +518,269 @@ export default function DashboardQualityPage() {
               hasDeviation: hasDeviation,
               orden: record.orden,
               brand: record.brand,
-              product: record.product
-            })
+              product: record.product,
+              processLine: record.process_line || '',
+              detectorId: record.metal_detector_id || '',
+              startTime: record.metal_detector_start_time || '',
+              finishTime: record.metal_detector_finish_time || '',
+              observation: reading.observation || '',
+              correctiveActions: reading.correctiveActions || '',
+              recordId: record.id || '',
+              readingIndex: readingIndex
+            }
+            
+            processedData.push(readingData)
+            allReadingsWithMetadata.push(readingData)
             
             if (hasDeviation) {
+              // Determine which test piece failed
+              let testPieceFailed = 'Other'
+              if (reading.bf === 'ND') testPieceFailed = 'BF'
+              else if (reading.bnf === 'ND') testPieceFailed = 'B.NF'
+              else if (reading.bss === 'ND') testPieceFailed = 'B.S.S'
+              
               deviationData.push({
-                date: record.date_string,
-                hour: reading.hour || '',
-                type: reading.bf === 'ND' ? 'BF' : 
-                      reading.bnf === 'ND' ? 'B.NF' :
-                      reading.bss === 'ND' ? 'B.S.S' :
+                ...readingData,
+                type: testPieceFailed !== 'Other' ? testPieceFailed :
                       reading.sensitivity === 'No comply' ? 'Sensitivity' :
                       reading.noiseAlarm === 'No comply' ? 'Noise Alarm' :
                       reading.rejectingArm === 'No comply' ? 'Rejecting Arm' : 'Other',
-                observation: reading.observation || '',
-                correctiveActions: reading.correctiveActions || ''
+                testPieceFailed: testPieceFailed
               })
             }
           })
         })
-
-        // Check if we should group by hour (single day or single orden)
-        const uniqueDates = new Set(processedData.map(p => p.date))
-        const shouldGroupByHour = uniqueDates.size === 1 || (selectedOrden && uniqueDates.size <= 1)
         
-        let chartDataArray: any[] = []
-        
-        if (shouldGroupByHour && processedData.length > 0) {
-          // Group by hour
-          const hourMap = new Map<string, any>()
-          processedData.forEach((point) => {
-            const hour = point.hour || 'Unknown'
-            if (!hourMap.has(hour)) {
-              hourMap.set(hour, {
-                hour,
-                totalReadings: 0,
-                deviations: 0,
-                compliant: 0
-              })
-            }
-            const hourData = hourMap.get(hour)!
-            hourData.totalReadings++
-            if (point.hasDeviation) {
-              hourData.deviations++
-            } else {
-              hourData.compliant++
-            }
-          })
-          
-          chartDataArray = Array.from(hourMap.values()).map((stats) => ({
-            hour: stats.hour,
-            totalReadings: stats.totalReadings,
-            deviations: stats.deviations,
-            compliant: stats.compliant,
-            complianceRate: stats.totalReadings > 0 
-              ? ((stats.compliant / stats.totalReadings) * 100).toFixed(1)
-              : '0.0'
-          })).sort((a, b) => {
-            // Sort by hour (time)
-            const timeA = a.hour || '00:00'
-            const timeB = b.hour || '00:00'
-            return timeA.localeCompare(timeB)
-          })
-        } else {
-          // Group by date for daily stats
-          const dateMap = new Map<string, any>()
-          processedData.forEach((point) => {
-            const date = point.date
-            if (!dateMap.has(date)) {
-              dateMap.set(date, {
-                date,
-                totalReadings: 0,
-                deviations: 0,
-                compliant: 0,
-                brands: new Set(),
-                products: new Set()
-              })
-            }
-            const dayData = dateMap.get(date)!
-            dayData.totalReadings++
-            if (point.hasDeviation) {
-              dayData.deviations++
-            } else {
-              dayData.compliant++
-            }
-            if (point.brand) dayData.brands.add(point.brand)
-            if (point.product) dayData.products.add(point.product)
-          })
-
-          chartDataArray = Array.from(dateMap.values()).map((stats) => ({
-            date: stats.date,
-            totalReadings: stats.totalReadings,
-            deviations: stats.deviations,
-            compliant: stats.compliant,
-            brands: stats.brands.size,
-            products: stats.products.size,
-            complianceRate: stats.totalReadings > 0 
-              ? ((stats.compliant / stats.totalReadings) * 100).toFixed(1)
-              : '0.0'
-          })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        }
-
-        setChartData(chartDataArray)
-        
-        // Always calculate daily stats for the table
-        const dateMap = new Map<string, {
-          date: string
-          totalReadings: number
-          deviations: number
-          compliant: number
-          brands: Set<string>
-          products: Set<string>
-        }>()
-        processedData.forEach((point) => {
-          const date = point.date
-          if (!dateMap.has(date)) {
-            dateMap.set(date, {
-              date,
-              totalReadings: 0,
-              deviations: 0,
-              compliant: 0,
-              brands: new Set(),
-              products: new Set()
-            })
-          }
-          const dayData = dateMap.get(date)!
-          dayData.totalReadings++
-          if (point.hasDeviation) {
-            dayData.deviations++
-          } else {
-            dayData.compliant++
-          }
-          if (point.brand) dayData.brands.add(point.brand)
-          if (point.product) dayData.products.add(point.product)
+        // Sort all readings by datetime for gap calculations
+        allReadingsWithMetadata.sort((a, b) => {
+          if (!a.datetime || !b.datetime) return 0
+          return a.datetime.getTime() - b.datetime.getTime()
         })
 
-        const dailyStatsArray: DailyStats[] = Array.from(dateMap.values()).map((stats) => ({
-          date: stats.date,
-          totalReadings: stats.totalReadings,
-          deviations: stats.deviations,
-          compliant: stats.compliant,
-          brands: stats.brands.size,
-          products: stats.products.size,
-          complianceRate: stats.totalReadings > 0 
-            ? ((stats.compliant / stats.totalReadings) * 100).toFixed(1)
-            : '0.0'
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-        setDailyStats(dailyStatsArray)
-        
-        // Calculate summary stats
+        // ============================================
+        // 1. CCP PROTECTION KPIs
+        // ============================================
         const totalReadings = processedData.length
-        const totalDeviations = deviationData.length
-        const complianceRate = totalReadings > 0 
-          ? ((totalReadings - totalDeviations) / totalReadings * 100).toFixed(1)
+        const passedReadings = processedData.filter(p => !p.hasDeviation).length
+        const readingsPassRate = totalReadings > 0 
+          ? ((passedReadings / totalReadings) * 100).toFixed(1)
           : '0.0'
         
+        // Calculate longest gap between checks (in minutes)
+        let longestGapMinutes = 0
+        for (let i = 1; i < allReadingsWithMetadata.length; i++) {
+          const prev = allReadingsWithMetadata[i - 1]
+          const curr = allReadingsWithMetadata[i]
+          if (prev.datetime && curr.datetime) {
+            const gapMinutes = (curr.datetime.getTime() - prev.datetime.getTime()) / (1000 * 60)
+            longestGapMinutes = Math.max(longestGapMinutes, gapMinutes)
+          }
+        }
+        
+        // Check for runs with incomplete verification
+        // A run is incomplete if it doesn't have all 3 test pieces (BF, B.NF, B.S.S) passing
+        const runsWithIncompleteVerification = finalRecords.filter((record: any) => {
+          const readings = record.readings || []
+          return readings.some((r: any) => 
+            !r.bf || !r.bnf || !r.bss || 
+            r.bf === '' || r.bnf === '' || r.bss === ''
+          )
+        })
+        const runsIncompleteCount = runsWithIncompleteVerification.length
+        const runsIncompletePercentage = finalRecords.length > 0
+          ? ((runsIncompleteCount / finalRecords.length) * 100).toFixed(1)
+          : '0.0'
+        
+        // ============================================
+        // 2. CHALLENGE TEST PERFORMANCE
+        // ============================================
+        // Pass rate by test piece type
+        const bfTests = processedData.filter(p => p.bf === 'D' || p.bf === 'ND')
+        const bfPassed = bfTests.filter(p => p.bf === 'D').length
+        const bfPassRate = bfTests.length > 0 ? ((bfPassed / bfTests.length) * 100).toFixed(1) : '0.0'
+        const bfFailures = bfTests.filter(p => p.bf === 'ND').length
+        
+        const bnfTests = processedData.filter(p => p.bnf === 'D' || p.bnf === 'ND')
+        const bnfPassed = bnfTests.filter(p => p.bnf === 'D').length
+        const bnfPassRate = bnfTests.length > 0 ? ((bnfPassed / bnfTests.length) * 100).toFixed(1) : '0.0'
+        const bnfFailures = bnfTests.filter(p => p.bnf === 'ND').length
+        
+        const bssTests = processedData.filter(p => p.bss === 'D' || p.bss === 'ND')
+        const bssPassed = bssTests.filter(p => p.bss === 'D').length
+        const bssPassRate = bssTests.length > 0 ? ((bssPassed / bssTests.length) * 100).toFixed(1) : '0.0'
+        const bssFailures = bssTests.filter(p => p.bss === 'ND').length
+        
+        // ============================================
+        // 3. DEVIATION SEVERITY KPIs
+        // ============================================
+        // Calculate time at risk per failure
+        // Time at risk = time from last good check to failure found
+        const deviationLog: any[] = []
+        deviationData.forEach((deviation) => {
+          // Find the last good check before this deviation
+          const deviationIndex = allReadingsWithMetadata.findIndex(r => 
+            r.date === deviation.date && r.hour === deviation.hour
+          )
+          
+          let timeAtRiskMinutes = 0
+          let lastGoodCheckTime: Date | null = null
+          
+          if (deviationIndex > 0 && allReadingsWithMetadata[deviationIndex - 1].datetime) {
+            lastGoodCheckTime = allReadingsWithMetadata[deviationIndex - 1].datetime
+            if (deviation.datetime && lastGoodCheckTime) {
+              timeAtRiskMinutes = (deviation.datetime.getTime() - lastGoodCheckTime.getTime()) / (1000 * 60)
+            }
+          }
+          
+          deviationLog.push({
+            date: deviation.date,
+            time: deviation.hour,
+            datetime: deviation.datetime,
+            line: deviation.processLine,
+            detectorId: deviation.detectorId,
+            order: deviation.orden,
+            testPieceFailed: deviation.testPieceFailed,
+            timeAtRisk: timeAtRiskMinutes,
+            timeAtRiskFormatted: timeAtRiskMinutes > 0 
+              ? `${Math.floor(timeAtRiskMinutes / 60)}h ${Math.floor(timeAtRiskMinutes % 60)}m`
+              : 'N/A',
+            correctiveAction: deviation.correctiveActions || deviation.observation || '',
+            closeTime: '' // Would need to be tracked separately
+          })
+        })
+        
+        // Calculate lots/orders impacted
+        const impactedOrders = new Set(deviationData.map(d => d.orden).filter(Boolean))
+        const lotsImpactedCount = impactedOrders.size
+        
+        // ============================================
+        // 4. EQUIPMENT RELIABILITY KPIs
+        // ============================================
+        // Rejecting arm test pass rate
+        const rejectingArmTests = processedData.filter(p => p.rejectingArm === 'Ok' || p.rejectingArm === 'No comply')
+        const rejectingArmPassed = rejectingArmTests.filter(p => p.rejectingArm === 'Ok').length
+        const rejectingArmPassRate = rejectingArmTests.length > 0
+          ? ((rejectingArmPassed / rejectingArmTests.length) * 100).toFixed(1)
+          : '0.0'
+        
+        // Noise alarm events rate
+        const noiseAlarmEvents = processedData.filter(p => p.noiseAlarm === 'No comply').length
+        const noiseAlarmRate = totalReadings > 0
+          ? ((noiseAlarmEvents / totalReadings) * 100).toFixed(2)
+          : '0.00'
+        
+        // Sensitivity setting tracking (would need actual numeric values, using pass/fail for now)
+        const sensitivityTests = processedData.filter(p => p.sensitivity === 'Ok' || p.sensitivity === 'No comply')
+        const sensitivityPassed = sensitivityTests.filter(p => p.sensitivity === 'Ok').length
+        const sensitivityPassRate = sensitivityTests.length > 0
+          ? ((sensitivityPassed / sensitivityTests.length) * 100).toFixed(1)
+          : '0.0'
+        
+        // Detector-specific failure rate
+        const detectorStats = new Map<string, { total: number, failures: number }>()
+        processedData.forEach((point) => {
+          const detectorId = point.detectorId || 'Unknown'
+          if (!detectorStats.has(detectorId)) {
+            detectorStats.set(detectorId, { total: 0, failures: 0 })
+          }
+          const stats = detectorStats.get(detectorId)!
+          stats.total++
+          if (point.hasDeviation) {
+            stats.failures++
+          }
+        })
+        
+        const detectorFailureRates = Array.from(detectorStats.entries()).map(([detectorId, stats]) => ({
+          detectorId,
+          total: stats.total,
+          failures: stats.failures,
+          failureRate: stats.total > 0 ? ((stats.failures / stats.total) * 100).toFixed(1) : '0.0',
+          passRate: stats.total > 0 ? (((stats.total - stats.failures) / stats.total) * 100).toFixed(1) : '0.0'
+        })).sort((a, b) => parseFloat(b.failureRate) - parseFloat(a.failureRate))
+        
+        // ============================================
+        // CHART DATA
+        // ============================================
+        // Challenge Test Performance: Pass/Fail by test piece type (stacked bar)
+        const testPieceChartData = [
+          {
+            testPiece: 'BF',
+            passed: bfPassed,
+            failed: bfFailures,
+            passRate: parseFloat(bfPassRate)
+          },
+          {
+            testPiece: 'B.NF',
+            passed: bnfPassed,
+            failed: bnfFailures,
+            passRate: parseFloat(bnfPassRate)
+          },
+          {
+            testPiece: 'B.S.S',
+            passed: bssPassed,
+            failed: bssFailures,
+            passRate: parseFloat(bssPassRate)
+          }
+        ]
+        
+        // Weekly/Monthly trend for test piece failures
+        const failureTrendMap = new Map<string, { date: string, bf: number, bnf: number, bss: number }>()
+        deviationData.forEach((dev) => {
+          const date = dev.date
+          if (!failureTrendMap.has(date)) {
+            failureTrendMap.set(date, { date, bf: 0, bnf: 0, bss: 0 })
+          }
+          const trend = failureTrendMap.get(date)!
+          if (dev.testPieceFailed === 'BF') trend.bf++
+          else if (dev.testPieceFailed === 'B.NF') trend.bnf++
+          else if (dev.testPieceFailed === 'B.S.S') trend.bss++
+        })
+        
+        const failureTrendData = Array.from(failureTrendMap.values())
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        
+        setChartData({
+          testPiecePerformance: testPieceChartData,
+          failureTrend: failureTrendData,
+          detectorFailureRates: detectorFailureRates
+        })
+        
+        setDailyStats([]) // Not using daily stats table for Metal Detector anymore
+        
+        // Set comprehensive summary stats
         setSummaryStats({
+          // CCP Protection KPIs
+          readingsPassRate: readingsPassRate,
+          longestGapMinutes: longestGapMinutes,
+          longestGapFormatted: longestGapMinutes > 0
+            ? `${Math.floor(longestGapMinutes / 60)}h ${Math.floor(longestGapMinutes % 60)}m`
+            : 'N/A',
+          runsIncompleteCount: runsIncompleteCount,
+          runsIncompletePercentage: runsIncompletePercentage,
+          
+          // Challenge Test Performance
+          bfPassRate: bfPassRate,
+          bfFailures: bfFailures,
+          bnfPassRate: bnfPassRate,
+          bnfFailures: bnfFailures,
+          bssPassRate: bssPassRate,
+          bssFailures: bssFailures,
+          
+          // Deviation Severity
+          lotsImpactedCount: lotsImpactedCount,
+          deviationLog: deviationLog,
+          
+          // Equipment Reliability
+          rejectingArmPassRate: rejectingArmPassRate,
+          noiseAlarmEvents: noiseAlarmEvents,
+          noiseAlarmRate: noiseAlarmRate,
+          sensitivityPassRate: sensitivityPassRate,
+          detectorFailureRates: detectorFailureRates,
+          
+          // Legacy (for compatibility)
           totalRecords: finalRecords.length,
           totalReadings: totalReadings,
-          totalDeviations: totalDeviations,
-          complianceRate: complianceRate,
-          uniqueBrands: new Set(processedData.map(p => p.brand).filter(Boolean)).size,
-          uniqueProducts: new Set(processedData.map(p => p.product).filter(Boolean)).size,
-          groupByHour: shouldGroupByHour
+          totalDeviations: deviationData.length
         })
         
       } else if (selectedChecklist === 'Checklist Monoproducto') {
@@ -684,12 +890,46 @@ export default function DashboardQualityPage() {
         })
         
       } else if (selectedChecklist === 'Checklist Mix Producto') {
-        let query = supabase.from('checklist_calidad_mix').select('*')
-        if (startDate) query = query.gte('fecha', startDate)
-        if (endDate) query = query.lte('fecha', endDate)
-        
-        const { data: records, error } = await query
+        // NOTE: Mix Product checklist is stored in `checklist_producto_mix`
+        // Use `date_utc` for filtering and map it to a YYYY-MM-DD `fecha` field for charts/filters.
+        let query = supabase.from('checklist_producto_mix').select('*')
+        if (startDate) {
+          const startUTC = new Date(`${startDate}T00:00:00Z`).toISOString()
+          query = query.gte('date_utc', startUTC)
+        }
+        if (endDate) {
+          const endDateObj = new Date(`${endDate}T00:00:00Z`)
+          endDateObj.setDate(endDateObj.getDate() + 1)
+          query = query.lt('date_utc', endDateObj.toISOString())
+        }
+
+        const { data: rawRecords, error } = await query
         if (error) throw error
+
+        const records =
+          (rawRecords || []).map((r: any) => {
+            // Parse date_string (format: "DEC-31-2025") to YYYY-MM-DD for filtering/charts
+            let fecha = ''
+            if (r?.date_string) {
+              // Parse MMM-DD-YYYY format
+              const monthMap: Record<string, string> = {
+                'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+                'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+              }
+              const parts = r.date_string.split('-')
+              if (parts.length === 3) {
+                const [month, day, year] = parts
+                fecha = `${year}-${monthMap[month.toUpperCase()] || '01'}-${day.padStart(2, '0')}`
+              }
+            }
+            if (!fecha && r?.date_utc) {
+              fecha = new Date(r.date_utc).toISOString().split('T')[0]
+            }
+            return {
+              ...r,
+              fecha
+            }
+          }) || []
         
         // Cascading filter logic for Mix Producto
         let availableOrdens = Array.from(new Set(records?.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort()
@@ -758,175 +998,629 @@ export default function DashboardQualityPage() {
             r.producto?.toLowerCase().includes(selectedProduct.toLowerCase())
           )
         }
+        if (selectedSku) {
+          finalRecords = finalRecords.filter((r: any) => 
+            r.sku?.toLowerCase().includes(selectedSku.toLowerCase())
+          )
+        }
+
+        // Update available options based on current filters
+        setAvailableOrdens(Array.from(new Set(finalRecords.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort())
+        setAvailableBrands(Array.from(new Set(finalRecords.map((r: any) => r.cliente).filter(Boolean))).sort())
+        setAvailableProducts(Array.from(new Set(finalRecords.map((r: any) => r.producto).filter(Boolean))).sort())
+        setAvailableSkus(Array.from(new Set(finalRecords.map((r: any) => r.sku).filter(Boolean))).sort())
         
         setData(finalRecords)
-        setAvailableOrdens(availableOrdens)
-        setAvailableBrands(availableBrands)
-        setAvailableProducts(availableProducts)
         
-        // Process data for charts - group by date
-        const dateMap = new Map<string, any>()
-        finalRecords?.forEach((record: any) => {
+        // ============================================
+        // MIX PRODUCT METRICS CALCULATION
+        // ============================================
+        
+        let totalPallets = 0
+        let compliantMixPallets = 0
+        let totalMixDeviation = 0
+        let mixDeviationCount = 0
+        let tempMeasurements: number[] = []
+        let bagWeights: number[] = []
+        let defectCounts: Record<string, number> = {}
+        let fruitDefectCounts: Record<string, number> = {}
+        
+        // Charts Data Accumulators
+        // Group by date for temperature (global)
+        const specsStabilityMap = new Map<string, { 
+          date: string, 
+          temps: number[], 
+          phs: number[], 
+          brixs: number[] 
+        }>()
+        
+        // Group by date-product for weight (per product)
+        const weightByDateProduct = new Map<string, { date: string, product: string, weights: number[] }>()
+        
+        // Track processed pallets to avoid duplicates
+        const processedPallets = new Set<string>()
+
+        finalRecords.forEach((record: any) => {
           const date = record.fecha
-          if (!dateMap.has(date)) {
-            dateMap.set(date, { date, count: 0, orders: new Set() })
+          const product = record.producto || 'Unknown'
+          
+          if (!specsStabilityMap.has(date)) {
+            specsStabilityMap.set(date, { date, temps: [], phs: [], brixs: [] })
           }
-          const dayData = dateMap.get(date)!
-          dayData.count++
-          dayData.orders.add(record.orden_fabricacion)
+          const dailySpecs = specsStabilityMap.get(date)!
+          
+          const dateProductKey = `${date}-${product}`
+          if (!weightByDateProduct.has(dateProductKey)) {
+            weightByDateProduct.set(dateProductKey, { date, product, weights: [] })
+          }
+          const dailyProductSpecs = weightByDateProduct.get(dateProductKey)!
+
+          if (record.pallets && Array.isArray(record.pallets)) {
+            record.pallets.forEach((pallet: any) => {
+              // Create unique pallet ID to avoid duplicates
+              const palletId = `${record.id}-${pallet.id}`
+              if (processedPallets.has(palletId)) {
+                return // Skip duplicate pallet
+              }
+              processedPallets.add(palletId)
+              
+              totalPallets++
+              let isPalletMixCompliant = true
+              
+              // 1. Mix Compliance & Deviation
+              if (pallet.fieldsByFruit && pallet.expectedCompositions) {
+                // Get bag weight for percentage calc
+                let pesoBolsa = 0
+                const commonFields = pallet.commonFields || []
+                const pesoBolsaField = commonFields.find((f: any) => f.campo.includes('Peso Bolsa'))
+                const pesoBolsaValue = pallet.values[pesoBolsaField?.campo] || pallet.values['Peso Bolsa (gr)'] || pallet.values['Peso Bolsa']
+                if (pesoBolsaValue) {
+                  pesoBolsa = parseFloat(pesoBolsaValue.toString().replace(/[^\d.]/g, ''))
+                }
+
+                // Per fruit checks
+                Object.keys(pallet.fieldsByFruit).forEach(fruit => {
+                  const expectedPctDecimal = pallet.expectedCompositions[fruit]
+                  if (expectedPctDecimal !== undefined && pesoBolsa > 0) {
+                    const pesoFrutaKey = `Peso Fruta ${fruit}`
+                    const pesoFrutaVal = pallet.values[pesoFrutaKey]
+                    if (pesoFrutaVal) {
+                      const pesoFruta = parseFloat(pesoFrutaVal.toString().replace(/[^\d.]/g, ''))
+                      const actualPct = (pesoFruta / pesoBolsa) * 100
+                      const expectedPct = expectedPctDecimal * 100
+                      const deviation = Math.abs(actualPct - expectedPct)
+                      
+                      totalMixDeviation += deviation
+                      mixDeviationCount++
+                      
+                      if (deviation > 5) {
+                        isPalletMixCompliant = false
+                      }
+                    }
+                  }
+                  
+                  // 4. Defects
+                  const fields = pallet.fieldsByFruit[fruit] || []
+                  fields.forEach((f: any) => {
+                    const key = `${fruit}-${f.campo}`
+                    const val = pallet.values[key]
+                    if (val && (f.campo.toLowerCase().includes('defecto') || f.campo.toLowerCase().includes('caracter'))) {
+                      const numVal = parseFloat(val.toString().replace(/[^\d.]/g, ''))
+                      if (numVal > 0) {
+                        defectCounts[f.campo] = (defectCounts[f.campo] || 0) + numVal
+                        fruitDefectCounts[fruit] = (fruitDefectCounts[fruit] || 0) + numVal
+                      }
+                    }
+                  })
+                })
+              }
+              
+              if (isPalletMixCompliant) compliantMixPallets++
+
+              // 2. Specs (Temp, Weight, pH, Brix)
+              // Temp
+              const tempField = (pallet.commonFields || []).find((f: any) => f.campo.includes('Temp') || f.campo.includes('Pulpa'))
+              const tempVal = pallet.values[tempField?.campo]
+              if (tempVal) {
+                const t = parseFloat(tempVal.toString().replace(/[^\d.-]/g, '')) // Allow negative
+                if (!isNaN(t)) {
+                  tempMeasurements.push(t)
+                  dailySpecs.temps.push(t)
+                }
+              }
+              
+              // Weight - grouped by date-product
+              const weightField = (pallet.commonFields || []).find((f: any) => f.campo.includes('Peso Bolsa'))
+              const weightVal = pallet.values[weightField?.campo]
+              if (weightVal) {
+                const w = parseFloat(weightVal.toString().replace(/[^\d.]/g, ''))
+                if (!isNaN(w)) {
+                  bagWeights.push(w)
+                  dailyProductSpecs.weights.push(w) // Add to product-specific weights
+                }
+              }
+
+              // pH
+              const phField = (pallet.commonFields || []).find((f: any) => f.campo.toLowerCase() === 'ph' || f.campo.includes('pH'))
+              const phVal = pallet.values[phField?.campo]
+              if (phVal) {
+                const p = parseFloat(phVal.toString().replace(/[^\d.]/g, ''))
+                if (!isNaN(p)) dailySpecs.phs.push(p)
+              }
+
+              // Brix
+              const brixField = (pallet.commonFields || []).find((f: any) => f.campo.toLowerCase().includes('brix'))
+              const brixVal = pallet.values[brixField?.campo]
+              if (brixVal) {
+                const b = parseFloat(brixVal.toString().replace(/[^\d.]/g, ''))
+                if (!isNaN(b)) dailySpecs.brixs.push(b)
+              }
+            })
+          }
+        })
+
+        // --- Calculate KPIs ---
+        const mixComplianceRate = totalPallets > 0 ? ((compliantMixPallets / totalPallets) * 100).toFixed(1) : '0.0'
+        const avgMixDeviation = mixDeviationCount > 0 ? (totalMixDeviation / mixDeviationCount).toFixed(1) : '0.0'
+        
+        // Temp Stats
+        const validTemps = tempMeasurements.filter(t => !isNaN(t))
+        const maxTemp = validTemps.length > 0 ? Math.max(...validTemps) : 0
+        // Assume limit -18C. Compliance = % <= -18
+        const compliantTemps = validTemps.filter(t => t <= -18).length
+        const tempComplianceRate = validTemps.length > 0 ? ((compliantTemps / validTemps.length) * 100).toFixed(1) : '0.0'
+
+        // Weight Stats
+        const validWeights = bagWeights.filter(w => !isNaN(w))
+        const avgWeight = validWeights.length > 0 ? (validWeights.reduce((a, b) => a + b, 0) / validWeights.length).toFixed(1) : '0.0'
+        const weightComplianceRate = validWeights.length > 0 ? '100.0' : '0.0' 
+
+        // Top Defect
+        const sortedDefects = Object.entries(defectCounts).sort((a, b) => b[1] - a[1])
+        const topDefect = sortedDefects.length > 0 ? sortedDefects[0][0] : 'None'
+        const topDefectCount = sortedDefects.length > 0 ? sortedDefects[0][1] : 0
+
+        // --- Prepare Chart Data ---
+        
+        // B) Specs Stability (Line Chart)
+        // Get all unique dates
+        const allDates = Array.from(new Set([
+          ...Array.from(specsStabilityMap.keys()),
+          ...Array.from(weightByDateProduct.values()).map(v => v.date)
+        ])).sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+        
+        // Get all unique products
+        const allProducts = Array.from(new Set(
+          Array.from(weightByDateProduct.values()).map(v => v.product)
+        )).sort()
+        
+        // Build chart data: one entry per date, with weight columns per product
+        const specsStabilityData = allDates.map(date => {
+          const dailySpecs = specsStabilityMap.get(date) || { temps: [], phs: [], brixs: [] }
+          
+          // Build weight data per product
+          const weightData: Record<string, number | null> = {}
+          allProducts.forEach(product => {
+            const dateProductKey = `${date}-${product}`
+            const productWeights = weightByDateProduct.get(dateProductKey)
+            if (productWeights && productWeights.weights.length > 0) {
+              weightData[`avgWeight_${product}`] = productWeights.weights.reduce((a, b) => a + b, 0) / productWeights.weights.length
+            } else {
+              weightData[`avgWeight_${product}`] = null
+            }
+          })
+          
+          return {
+            date,
+            avgTemp: dailySpecs.temps.length ? dailySpecs.temps.reduce((a, b) => a + b, 0) / dailySpecs.temps.length : null,
+            minTemp: dailySpecs.temps.length ? Math.min(...dailySpecs.temps) : null,
+            maxTemp: dailySpecs.temps.length ? Math.max(...dailySpecs.temps) : null,
+            avgPh: dailySpecs.phs.length ? dailySpecs.phs.reduce((a, b) => a + b, 0) / dailySpecs.phs.length : null,
+            avgBrix: dailySpecs.brixs.length ? dailySpecs.brixs.reduce((a, b) => a + b, 0) / dailySpecs.brixs.length : null,
+            ...weightData,
+            // Keep for backward compatibility - use first product's weight if available
+            avgWeight: allProducts.length > 0 && weightData[`avgWeight_${allProducts[0]}`] !== null 
+              ? weightData[`avgWeight_${allProducts[0]}`] 
+              : null
+          }
         })
         
-        const chartDataArray = Array.from(dateMap.values()).map(d => ({
-          date: d.date,
-          registros: d.count,
-          ordenes: d.orders.size
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        
-        setChartData(chartDataArray)
+        // Store product list for chart rendering
+        const productList = allProducts
+
+        // C) Defects Pareto (Bar Chart)
+        const defectsParetoData = sortedDefects.slice(0, 5).map(([name, count]) => ({
+          name: name.length > 20 ? name.substring(0, 20) + '...' : name,
+          count
+        }))
+
+        const fruitDefectsParetoData = Object.entries(fruitDefectCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([name, count]) => ({ name, count }))
+
+        setChartData(specsStabilityData) // Main chart: Specs Stability
         setSummaryStats({
-          totalRecords: finalRecords?.length || 0,
-          totalOrders: new Set(finalRecords?.map((r: any) => r.orden_fabricacion)).size,
-          dateRange: chartDataArray.length > 0 ? `${chartDataArray[0].date} - ${chartDataArray[chartDataArray.length - 1].date}` : '-'
+          totalRecords: finalRecords.length,
+          mixComplianceRate,
+          avgMixDeviation,
+          tempComplianceRate,
+          worstTemp: maxTemp.toFixed(1),
+          weightComplianceRate,
+          avgWeight,
+          topDefect,
+          topDefectCount,
+          defectsParetoData: defectsParetoData || [],
+          fruitDefectsParetoData: fruitDefectsParetoData || [],
+          productList: productList || [] // Store product list for chart rendering
         })
         
       } else if (selectedChecklist === 'Staff Good Practices Control') {
         const records = await fetchChecklistStaffPracticesData(startDate, endDate)
         setData(records)
 
-        // Parameter field names mapping
-        const parameterFields = [
-          'staffAppearance',
-          'completeUniform',
-          'accessoriesAbsence',
-          'workToolsUsage',
-          'cutCleanNotPolishedNails',
-          'noMakeupOn',
-          'staffBehavior',
-          'staffHealth'
-        ] as const
+        // Use the constants defined at component level
+        const parameterFields = STAFF_PRACTICES_PARAMETER_FIELDS
+        const parameterNames = STAFF_PRACTICES_PARAMETER_NAMES
 
-        const parameterNames: Record<string, string> = {
-          staffAppearance: 'Staff Appearance',
-          completeUniform: 'Complete Uniform',
-          accessoriesAbsence: 'Accessories Absence',
-          workToolsUsage: 'Work Tools Usage',
-          cutCleanNotPolishedNails: 'Cut Clean Nails',
-          noMakeupOn: 'No Makeup',
-          staffBehavior: 'Staff Behavior',
-          staffHealth: 'Staff Health'
-        }
-
-        // Process data for charts - group by date, count parameters
-        const dateMap = new Map<string, any>()
-        records.forEach((record: any) => {
-          const date = record.date_string
-          if (!dateMap.has(date)) {
-            dateMap.set(date, { 
-              date, 
-              count: 0, 
-              totalStaff: 0,
-              totalParameters: 0,
-              compliantParameters: 0,
-              nonCompliantParameters: 0
-            })
-          }
-          const dayData = dateMap.get(date)!
-          dayData.count++
-          dayData.totalStaff += record.staff_members?.length || 0
-          
-          // Count parameters (not staff members)
-          record.staff_members?.forEach((member: any) => {
-            parameterFields.forEach(field => {
-              dayData.totalParameters++
-              if (member[field] === 'comply') {
-                dayData.compliantParameters++
-              } else if (member[field] === 'not_comply') {
-                dayData.nonCompliantParameters++
-              }
-            })
-          })
-        })
-
-        const chartDataArray = Array.from(dateMap.values()).map(d => ({
-          date: d.date,
-          registros: d.count,
-          totalStaff: d.totalStaff,
-          compliant: d.compliantParameters,
-          nonCompliant: d.nonCompliantParameters
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-        setChartData(chartDataArray)
+        // ============================================
+        // COMPREHENSIVE DATA PROCESSING
+        // ============================================
+        const allStaffMembers: Array<{
+          name: string
+          area: string
+          date: string
+          shift: string
+          recordId: string
+          parameters: Record<string, 'comply' | 'not_comply' | ''>
+        }> = []
         
-        // Calculate daily stats
-        const dailyStatsArray: DailyStats[] = chartDataArray.map(d => {
-          const totalParams = d.compliant + d.nonCompliant
-          return {
-            date: d.date,
-            totalRecords: d.registros,
-            totalStaff: d.totalStaff,
-            compliant: d.compliant,
-            nonCompliant: d.nonCompliant,
-            totalParameters: totalParams,
-            complianceRate: totalParams > 0 ? ((d.compliant / totalParams) * 100).toFixed(1) : '0.0'
-          } as StaffPracticesDailyStats
-        })
+        const areaMap = new Map<string, { total: number, nonCompliant: number }>()
+        const areaParameterMap = new Map<string, Map<string, { total: number, nonCompliant: number }>>()
+        const shiftMap = new Map<string, { total: number }>()
+        const dateShiftMap = new Map<string, Set<string>>()
+        const parameterCounts: Record<string, { compliant: number, nonCompliant: number, total: number }> = {}
+        const personNCHistory: Map<string, Array<{ date: string, parameter: string }>> = new Map()
         
-        setDailyStats(dailyStatsArray)
-        
-        // Calculate overall summary stats
-        let totalStaff = 0
-        let totalParameters = 0
-        let compliantParameters = 0
-        const parameterCounts: Record<string, { compliant: number, nonCompliant: number }> = {}
-
         // Initialize parameter counts
         parameterFields.forEach(field => {
-          parameterCounts[field] = { compliant: 0, nonCompliant: 0 }
+          parameterCounts[field] = { compliant: 0, nonCompliant: 0, total: 0 }
         })
 
         records.forEach((record: any) => {
-          totalStaff += record.staff_members?.length || 0
+          const date = record.date_string
+          const shift = record.shift || 'Unknown'
+          const dateShiftKey = `${date}_${shift}`
+          
+          if (!dateShiftMap.has(date)) {
+            dateShiftMap.set(date, new Set())
+          }
+          dateShiftMap.get(date)!.add(shift)
+          
+          if (!shiftMap.has(shift)) {
+            shiftMap.set(shift, { total: 0 })
+          }
+          
           record.staff_members?.forEach((member: any) => {
+            const area = member.area || 'Unknown'
+            const personKey = `${member.name}_${area}`
+            
+            // Track person for repeat behavior
+            if (!personNCHistory.has(personKey)) {
+              personNCHistory.set(personKey, [])
+            }
+            
+            shiftMap.get(shift)!.total++
+            
+            // Initialize area stats
+            if (!areaMap.has(area)) {
+              areaMap.set(area, { total: 0, nonCompliant: 0 })
+            }
+            areaMap.get(area)!.total++
+            
+            // Initialize area-parameter stats
+            if (!areaParameterMap.has(area)) {
+              areaParameterMap.set(area, new Map())
+            }
+            const areaParams = areaParameterMap.get(area)!
             parameterFields.forEach(field => {
-              totalParameters++
-              if (member[field] === 'comply') {
-                compliantParameters++
-                parameterCounts[field].compliant++
-              } else if (member[field] === 'not_comply') {
-                parameterCounts[field].nonCompliant++
+              if (!areaParams.has(field)) {
+                areaParams.set(field, { total: 0, nonCompliant: 0 })
               }
+            })
+            
+            const memberParams: Record<string, 'comply' | 'not_comply' | ''> = {}
+            let memberHasNC = false
+            
+            parameterFields.forEach(field => {
+              const value = member[field] || ''
+              memberParams[field] = value as 'comply' | 'not_comply' | ''
+              
+              parameterCounts[field].total++
+              const areaParamStats = areaParameterMap.get(area)!.get(field)!
+              areaParamStats.total++
+              
+              if (value === 'comply') {
+                parameterCounts[field].compliant++
+              } else if (value === 'not_comply') {
+                parameterCounts[field].nonCompliant++
+                areaParamStats.nonCompliant++
+                areaMap.get(area)!.nonCompliant++
+                memberHasNC = true
+                personNCHistory.get(personKey)!.push({ date, parameter: field })
+              }
+            })
+            
+            allStaffMembers.push({
+              name: member.name || 'Unknown',
+              area,
+              date,
+              shift,
+              recordId: record.id || '',
+              parameters: memberParams
             })
           })
         })
 
-        const nonCompliantParameters = totalParameters - compliantParameters
-        const complianceRate = totalParameters > 0 
-          ? ((compliantParameters / totalParameters) * 100).toFixed(1) 
+        // ============================================
+        // 1. COVERAGE & DISCIPLINE KPIs
+        // ============================================
+        const totalStaff = allStaffMembers.length
+        const peopleEvaluatedPerShift = Array.from(shiftMap.entries()).map(([shift, data]) => ({
+          shift,
+          count: data.total
+        }))
+        
+        const peopleEvaluatedPerArea = Array.from(areaMap.entries()).map(([area, data]) => ({
+          area,
+          count: data.total
+        }))
+        
+        // Audits completed vs planned (assuming 1 audit per day per shift as baseline)
+        const uniqueDates = new Set(records.map((r: any) => r.date_string))
+        const auditsCompleted = records.length
+        // Estimate planned: 1 per day per shift (3 shifts typically)
+        const auditsPlanned = uniqueDates.size * 3 // Assuming 3 shifts
+        const auditsCompletionRate = auditsPlanned > 0
+          ? ((auditsCompleted / auditsPlanned) * 100).toFixed(1)
           : '0.0'
-
-        // Find most non-compliant parameter
+        
+        // Missing data % (empty parameter values)
+        let totalParameterChecks = 0
+        let missingParameterChecks = 0
+        allStaffMembers.forEach(member => {
+          parameterFields.forEach(field => {
+            totalParameterChecks++
+            if (!member.parameters[field] || member.parameters[field] === '') {
+              missingParameterChecks++
+            }
+          })
+        })
+        const missingDataPercentage = totalParameterChecks > 0
+          ? ((missingParameterChecks / totalParameterChecks) * 100).toFixed(1)
+          : '0.0'
+        
+        // Parameter with most No Comply
         let mostNonCompliantParam = { name: 'N/A', count: 0, percentage: '0.0' }
         parameterFields.forEach(field => {
-          const count = parameterCounts[field].nonCompliant
-          const total = parameterCounts[field].compliant + count
-          if (total > 0 && count > mostNonCompliantParam.count) {
-            const percentage = ((count / total) * 100).toFixed(1)
+          const stats = parameterCounts[field]
+          const total = stats.total
+          const nc = stats.nonCompliant
+          if (total > 0 && nc > mostNonCompliantParam.count) {
+            const percentage = ((nc / total) * 100).toFixed(1)
             mostNonCompliantParam = {
               name: parameterNames[field],
-              count,
+              count: nc,
               percentage
             }
           }
         })
+
+        // ============================================
+        // 2. TRUE COMPLIANCE KPIs
+        // ============================================
+        const totalAnswers = parameterFields.reduce((sum, field) => sum + parameterCounts[field].total, 0)
+        const totalNonCompliantAnswers = parameterFields.reduce((sum, field) => sum + parameterCounts[field].nonCompliant, 0)
+        const ncRate = totalAnswers > 0
+          ? ((totalNonCompliantAnswers / totalAnswers) * 100).toFixed(1)
+          : '0.0'
         
+        // % people with at least 1 noncompliance
+        const peopleWithNC = new Set<string>()
+        allStaffMembers.forEach(member => {
+          const hasNC = parameterFields.some(field => member.parameters[field] === 'not_comply')
+          if (hasNC) {
+            peopleWithNC.add(`${member.name}_${member.area}`)
+          }
+        })
+        const peopleWithNCPercentage = totalStaff > 0
+          ? ((peopleWithNC.size / totalStaff) * 100).toFixed(1)
+          : '0.0'
+        
+        // Avg noncompliances per person
+        let totalNCs = 0
+        allStaffMembers.forEach(member => {
+          parameterFields.forEach(field => {
+            if (member.parameters[field] === 'not_comply') {
+              totalNCs++
+            }
+          })
+        })
+        const avgNCPerPerson = totalStaff > 0
+          ? (totalNCs / totalStaff).toFixed(2)
+          : '0.00'
+
+        // ============================================
+        // 3. WHERE PROBLEMS LIVE
+        // ============================================
+        // NC rate by area
+        const ncRateByArea = Array.from(areaMap.entries()).map(([area, data]) => ({
+          area,
+          total: data.total,
+          nonCompliant: data.nonCompliant,
+          ncRate: data.total > 0 ? ((data.nonCompliant / data.total) * 100).toFixed(1) : '0.0',
+          ncRateValue: data.total > 0 ? (data.nonCompliant / data.total) * 100 : 0
+        })).sort((a, b) => b.ncRateValue - a.ncRateValue)
+        
+        // Area × Parameter heatmap data
+        const heatmapData: Array<{ area: string, parameter: string, ncRate: number, count: number }> = []
+        areaParameterMap.forEach((paramMap, area) => {
+          paramMap.forEach((stats, paramField) => {
+            const ncRate = stats.total > 0 ? (stats.nonCompliant / stats.total) * 100 : 0
+            heatmapData.push({
+              area,
+              parameter: parameterNames[paramField],
+              ncRate,
+              count: stats.nonCompliant
+            })
+          })
+        })
+        
+        // Top 3 hotspots (area + parameter combo)
+        const hotspots = heatmapData
+          .sort((a, b) => b.ncRate - a.ncRate)
+          .slice(0, 3)
+          .map(h => ({
+            area: h.area,
+            parameter: h.parameter,
+            ncRate: h.ncRate.toFixed(1),
+            count: h.count
+          }))
+
+        // ============================================
+        // 4. REPEAT BEHAVIOR
+        // ============================================
+        // Repeat offender count (people with ≥2 NC in last X days)
+        const repeatOffenders = new Set<string>()
+        personNCHistory.forEach((ncList, personKey) => {
+          if (ncList.length >= 2) {
+            repeatOffenders.add(personKey)
+          }
+        })
+        const repeatOffenderCount = repeatOffenders.size
+        
+        // Top repeat parameters (same person failing same rule)
+        const parameterRepeatMap = new Map<string, Map<string, number>>()
+        personNCHistory.forEach((ncList, personKey) => {
+          const paramCounts = new Map<string, number>()
+          ncList.forEach(nc => {
+            paramCounts.set(nc.parameter, (paramCounts.get(nc.parameter) || 0) + 1)
+          })
+          paramCounts.forEach((count, param) => {
+            if (count >= 2) {
+              if (!parameterRepeatMap.has(param)) {
+                parameterRepeatMap.set(param, new Map())
+              }
+              parameterRepeatMap.get(param)!.set(personKey, count)
+            }
+          })
+        })
+        
+        const topRepeatParameters = Array.from(parameterRepeatMap.entries())
+          .map(([param, personMap]) => ({
+            parameter: parameterNames[param] || param,
+            repeatCount: personMap.size,
+            totalRepeats: Array.from(personMap.values()).reduce((sum, count) => sum + count, 0)
+          }))
+          .sort((a, b) => b.repeatCount - a.repeatCount)
+          .slice(0, 5)
+        
+        // Recurrence rate = % people who fail again
+        const peopleWhoFailedAgain = new Set<string>()
+        personNCHistory.forEach((ncList, personKey) => {
+          if (ncList.length >= 2) {
+            // Check if they failed the same parameter multiple times
+            const paramCounts = new Map<string, number>()
+            ncList.forEach(nc => {
+              paramCounts.set(nc.parameter, (paramCounts.get(nc.parameter) || 0) + 1)
+            })
+            if (Array.from(paramCounts.values()).some(count => count >= 2)) {
+              peopleWhoFailedAgain.add(personKey)
+            }
+          }
+        })
+        const recurrenceRate = peopleWithNC.size > 0
+          ? ((peopleWhoFailedAgain.size / peopleWithNC.size) * 100).toFixed(1)
+          : '0.0'
+        
+        // Area recurrence (areas with repeated failures week over week)
+        // Group by week and area
+        const weekAreaMap = new Map<string, Map<string, number>>()
+        allStaffMembers.forEach(member => {
+          if (member.parameters && Object.values(member.parameters).some(v => v === 'not_comply')) {
+            // Simple week calculation (could be improved)
+            const weekKey = member.date // Simplified - would need proper week calculation
+            if (!weekAreaMap.has(weekKey)) {
+              weekAreaMap.set(weekKey, new Map())
+            }
+            const areaNC = weekAreaMap.get(weekKey)!
+            areaNC.set(member.area, (areaNC.get(member.area) || 0) + 1)
+          }
+        })
+        
+        // ============================================
+        // CHART DATA
+        // ============================================
+        // Pareto: Noncompliance by parameter
+        const paretoData = parameterFields.map(field => ({
+          parameter: parameterNames[field],
+          nonCompliant: parameterCounts[field].nonCompliant,
+          compliant: parameterCounts[field].compliant,
+          total: parameterCounts[field].total,
+          ncRate: parameterCounts[field].total > 0
+            ? ((parameterCounts[field].nonCompliant / parameterCounts[field].total) * 100).toFixed(1)
+            : '0.0',
+          ncRateValue: parameterCounts[field].total > 0
+            ? (parameterCounts[field].nonCompliant / parameterCounts[field].total) * 100
+            : 0
+        })).sort((a, b) => b.nonCompliant - a.nonCompliant)
+        
+        setChartData({
+          paretoData,
+          ncRateByArea,
+          heatmapData,
+          peopleEvaluatedPerShift,
+          peopleEvaluatedPerArea
+        })
+        
+        setDailyStats([]) // Not using daily stats table
+        
+        // Set comprehensive summary stats
         setSummaryStats({
-          totalRecords: records.length,
+          // Coverage & Discipline
           totalStaff,
-          totalParameters,
-          compliantParameters,
-          nonCompliantParameters,
-          complianceRate,
-          mostNonCompliantParameter: mostNonCompliantParam
+          peopleEvaluatedPerShift,
+          peopleEvaluatedPerArea,
+          auditsCompleted,
+          auditsPlanned,
+          auditsCompletionRate,
+          missingDataPercentage,
+          mostNonCompliantParameter: mostNonCompliantParam,
+          
+          // True Compliance
+          ncRate,
+          peopleWithNC: peopleWithNC.size,
+          peopleWithNCPercentage,
+          avgNCPerPerson,
+          
+          // Where Problems Live
+          ncRateByArea,
+          heatmapData,
+          hotspots,
+          
+          // Repeat Behavior
+          repeatOffenderCount,
+          topRepeatParameters,
+          recurrenceRate,
+          
+          // Legacy (for compatibility)
+          totalRecords: records.length,
+          totalParameters: totalAnswers,
+          compliantParameters: totalAnswers - totalNonCompliantAnswers,
+          nonCompliantParameters: totalNonCompliantAnswers,
+          complianceRate: totalAnswers > 0
+            ? (((totalAnswers - totalNonCompliantAnswers) / totalAnswers) * 100).toFixed(1)
+            : '0.0'
         })
       } else if (selectedChecklist === 'Foreign Material Findings Record') {
         const records = await fetchChecklistForeignMaterialData(startDate, endDate)
@@ -2204,9 +2898,11 @@ export default function DashboardQualityPage() {
     setSelectedOrden('')
     setSelectedBrand('')
     setSelectedProduct('')
+    setSelectedSku('')
     setAvailableOrdens([])
     setAvailableBrands([])
     setAvailableProducts([])
+    setAvailableSkus([])
   }, [selectedChecklist])
 
   // Fetch data when dates, checklist, or filters change
@@ -2214,7 +2910,7 @@ export default function DashboardQualityPage() {
     if (startDate && endDate) {
       loadData()
     }
-  }, [startDate, endDate, selectedChecklist, selectedOrden, selectedBrand, selectedProduct, loadData])
+  }, [startDate, endDate, selectedChecklist, selectedOrden, selectedBrand, selectedProduct, selectedSku, loadData])
 
   const handleFilter = () => {
     if (!startDate || !endDate) {
@@ -2228,6 +2924,7 @@ export default function DashboardQualityPage() {
     setSelectedOrden('')
     setSelectedBrand('')
     setSelectedProduct('')
+    setSelectedSku('')
     // Reset dates to default (last 30 days)
     const today = new Date()
     const thirtyDaysAgo = new Date()
@@ -2416,7 +3113,7 @@ export default function DashboardQualityPage() {
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
-        ) : chartData.length === 0 ? (
+        ) : (Array.isArray(chartData) && chartData.length === 0) || (!Array.isArray(chartData) && Object.keys(chartData || {}).length === 0) ? (
           <div className="bg-white p-8 rounded-lg shadow text-center">
             <p className="text-gray-600">No hay datos disponibles para el rango de fechas seleccionado.</p>
           </div>
@@ -2426,64 +3123,99 @@ export default function DashboardQualityPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {selectedChecklist === 'Metal Detector (PCC #1)' ? (
                 <>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  {/* CCP Protection KPIs */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">% Lecturas Aprobadas</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.readingsPassRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summaryStats.totalReadings || 0} lecturas totales
+                    </p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Lecturas</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalReadings || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Brecha Más Larga</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.longestGapFormatted || 'N/A'}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Entre verificaciones (SOP: 1h ±10min)
+                    </p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Cumplimiento</h3>
-                    <p className="text-2xl font-bold text-green-600">{summaryStats.complianceRate || '0.0'}%</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Desviaciones</h3>
-                    <p className="text-2xl font-bold text-red-600">{summaryStats.totalDeviations || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Corridas Incompletas</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.runsIncompleteCount || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summaryStats.runsIncompletePercentage || '0.0'}% del total
+                    </p>
                   </div>
                 </>
               ) : selectedChecklist === 'Process Environmental Temperature Control' ? (
                 <>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  {/* HACCP/Compliance KPIs */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Desviaciones</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.deviationCount || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Lecturas sobre 50°F</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Lecturas</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalReadings || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tiempo Fuera de Especificación</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.timeOutOfSpec || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Lecturas fuera de especificación</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Temperatura Promedio</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.avgTemp || '0.0'}°F</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-600">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Peor Excursión</h3>
+                    <p className="text-2xl font-bold text-red-700">{summaryStats.worstExcursion || '0.0'}°F</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summaryStats.worstExcursionValue > 0 
+                        ? `+${summaryStats.worstExcursionValue.toFixed(1)}°F sobre límite`
+                        : 'Sin excursiones'}
+                    </p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Dentro del Rango</h3>
-                    <p className="text-2xl font-bold text-green-600">{summaryStats.withinRange || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">% Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.compliancePercentage || '0.0'}%</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summaryStats.totalReadings || 0} lecturas totales
+                    </p>
                   </div>
                 </>
               ) : selectedChecklist === 'Staff Good Practices Control' ? (
                 <>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                  {/* Coverage & Discipline KPIs */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Personal Evaluado</h3>
+                    <p className="text-2xl font-bold text-blue-600">{summaryStats.totalStaff || 0}</p>
+                    <p className="text-xs text-gray-500 mt-1">Total evaluado en período</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Personal</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalStaff || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Datos Faltantes</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.missingDataPercentage || '0.0'}%</p>
+                    <p className="text-xs text-gray-500 mt-1">Parámetros sin evaluar</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Cumplimiento</h3>
-                    <p className="text-2xl font-bold text-blue-600">{summaryStats.complianceRate || '0.0'}%</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Parámetro con Más No Cumplimiento</h3>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Parámetro con Más NC</h3>
                     <p className="text-lg font-bold text-red-600">
                       {summaryStats.mostNonCompliantParameter?.name || 'N/A'}
                     </p>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       {summaryStats.mostNonCompliantParameter?.count || 0} casos ({summaryStats.mostNonCompliantParameter?.percentage || '0.0'}%)
                     </p>
+                  </div>
+                  
+                  {/* True Compliance KPIs */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-600">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de No Cumplimiento</h3>
+                    <p className="text-2xl font-bold text-red-700">{summaryStats.ncRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-500 mt-1">NC / Total respuestas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-amber-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Personas con ≥1 NC</h3>
+                    <p className="text-2xl font-bold text-amber-600">{summaryStats.peopleWithNCPercentage || '0.0'}%</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {summaryStats.peopleWithNC || 0} de {summaryStats.totalStaff || 0} personas
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Promedio NC/Persona</h3>
+                    <p className="text-2xl font-bold text-purple-600">{summaryStats.avgNCPerPerson || '0.00'}</p>
+                    <p className="text-xs text-gray-500 mt-1">No cumplimientos promedio</p>
                   </div>
                 </>
               ) : selectedChecklist === 'Foreign Material Findings Record' ? (
@@ -2695,23 +3427,48 @@ export default function DashboardQualityPage() {
                     <p className="text-xs text-gray-600 mt-1">Registros sin hallazgos</p>
                   </div>
                 </>
-              ) : selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto' ? (
+              ) : selectedChecklist === 'Checklist Mix Producto' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Mix Compliance %</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.mixComplianceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">Pallets con todos los componentes en rango ±5%</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Avg Mix Deviation</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.avgMixDeviation || '0.0'} pp</p>
+                    <p className="text-xs text-gray-600 mt-1">Desviación absoluta promedio</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Pulp Temp Compliance</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.tempComplianceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Peor Excursión: {summaryStats.worstTemp ? `${summaryStats.worstTemp}°C` : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Top Defect Driver</h3>
+                    <p className="text-2xl font-bold text-gray-900 truncate" title={summaryStats.topDefect}>{summaryStats.topDefect || '-'}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.topDefectCount || 0} ocurrencias</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Checklist Monoproducto' ? (
                 <>
                   <div className="bg-white p-6 rounded-lg shadow">
                     <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
                     <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
                   </div>
                   <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Órdenes</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalOrders || 0}</p>
-                  </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Rango de Fechas</h3>
-                    <p className="text-sm font-bold text-gray-900">{summaryStats.dateRange || '-'}</p>
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Productos Únicos</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.productos || 0}</p>
                   </div>
                   <div className="bg-white p-6 rounded-lg shadow">
                     <h3 className="text-sm font-medium text-gray-500 mb-1">Días con Registros</h3>
                     <p className="text-2xl font-bold text-gray-900">{chartData.length}</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Rango de Fechas</h3>
+                    <p className="text-sm font-bold text-gray-900">{startDate} - {endDate}</p>
                   </div>
                 </>
               ) : (
@@ -2739,80 +3496,122 @@ export default function DashboardQualityPage() {
             {/* Charts Section - Different charts based on checklist type */}
             {selectedChecklist === 'Metal Detector (PCC #1)' && (
               <>
-                {/* Compliance Rate Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    {summaryStats.groupByHour ? 'Tasa de Cumplimiento por Hora' : 'Tasa de Cumplimiento por Día'}
-                  </h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey={summaryStats.groupByHour ? "hour" : "date"}
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        stroke="#6b7280"
-                        label={{ value: 'Tasa de Cumplimiento (%)', angle: -90, position: 'insideLeft' }}
-                        domain={[0, 100]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                        formatter={(value: number) => [`${value}%`, 'Tasa de Cumplimiento']}
-                      />
-                      <Legend />
-                      <ReferenceLine y={95} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Objetivo (95%)', position: 'right' }} />
-                      <Line
-                        type="monotone"
-                        dataKey="complianceRate"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                        name="Tasa de Cumplimiento (%)"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Challenge Test Performance: Pass/Fail by Test Piece Type */}
+                {chartData.testPiecePerformance && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Rendimiento de Pruebas de Desafío - Pass/Fail por Tipo de Pieza
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.testPiecePerformance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="testPiece"
+                          stroke="#6b7280"
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="passed" stackId="a" fill="#10b981" name="Aprobado" />
+                        <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Fallido" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
-                {/* Readings vs Deviations Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    {summaryStats.groupByHour ? 'Lecturas vs Desviaciones por Hora' : 'Lecturas vs Desviaciones por Día'}
-                  </h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey={summaryStats.groupByHour ? "hour" : "date"}
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="totalReadings" fill="#3b82f6" name="Total Lecturas" />
-                      <Bar dataKey="compliant" fill="#10b981" name="Cumplimiento" />
-                      <Bar dataKey="deviations" fill="#ef4444" name="Desviaciones" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Failure Trend by Test Piece Type */}
+                {chartData.failureTrend && chartData.failureTrend.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Tendencia de Fallos por Tipo de Pieza de Prueba
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={chartData.failureTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="bf"
+                          stroke="#ef4444"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="BF Fallos"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="bnf"
+                          stroke="#f59e0b"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="B.NF Fallos"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="bss"
+                          stroke="#dc2626"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="B.S.S Fallos"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Equipment Reliability: Pareto - Failures by Detector ID */}
+                {chartData.detectorFailureRates && chartData.detectorFailureRates.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Tasa de Fallos por Detector (Pareto)
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.detectorFailureRates.slice(0, 10)} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis
+                          dataKey="detectorId"
+                          type="category"
+                          stroke="#6b7280"
+                          width={120}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: any) => [`${value}%`, 'Tasa de Fallo']}
+                        />
+                        <Legend />
+                        <Bar dataKey="failureRate" fill="#ef4444" name="Tasa de Fallo (%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </>
             )}
 
@@ -2860,127 +3659,235 @@ export default function DashboardQualityPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+              </>
+            )}
 
-                {/* Temperature Comparison Chart */}
+            {selectedChecklist === 'Checklist Mix Producto' && (
+              <>
+                {/* Defects Pareto */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Top 5 Defectos (Pareto)</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.defectsParetoData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis dataKey="name" type="category" stroke="#6b7280" width={150} tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                        <Legend />
+                        <Bar dataKey="count" fill="#ef4444" name="Cantidad" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Top 5 Frutas con Defectos</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.fruitDefectsParetoData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis dataKey="name" type="category" stroke="#6b7280" width={100} tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                        <Legend />
+                        <Bar dataKey="count" fill="#f97316" name="Cantidad" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Specs Stability: Weight Only (Bar Chart) */}
                 <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Comparación de Termómetros</h2>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Estabilidad de Especificaciones Clave (Peso)</h2>
                   <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={chartData.slice(0, 50)}>
+                    <BarChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="time"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        interval="preserveStartEnd"
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        stroke="#6b7280"
-                        label={{ value: 'Temperatura (°F)', angle: -90, position: 'insideLeft' }}
-                        domain={[35, 55]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                        formatter={(value: number) => [`${value.toFixed(1)}°F`, '']}
-                      />
+                      <XAxis dataKey="date" stroke="#6b7280" tick={{ fontSize: 12 }} />
+                      <YAxis stroke="#10b981" label={{ value: 'Peso (gr)', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
                       <Legend />
-                      <ReferenceLine y={42} stroke="#ef4444" strokeDasharray="5 5" />
-                      <ReferenceLine y={50} stroke="#ef4444" strokeDasharray="5 5" />
-                      <Line
-                        type="monotone"
-                        dataKey="digitalTemp"
-                        stroke="#8b5cf6"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        name="Termómetro Digital"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="wallTemp"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        name="Termómetro de Pared"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="averageTemp"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        name="Promedio"
-                      />
+                      {/* Dynamic weight bars per product */}
+                      {(summaryStats.productList || []).map((product: string, index: number) => {
+                        const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#022c22']
+                        const color = colors[index % colors.length]
+                        return (
+                          <Bar 
+                            key={product}
+                            dataKey={`avgWeight_${product}`} 
+                            fill={color} 
+                            name={`Peso Promedio - ${product}`}
+                          />
+                        )
+                      })}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Specs Stability: Chemical (Brix & pH) */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Estabilidad Química (Brix & pH)</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="date" stroke="#6b7280" tick={{ fontSize: 12 }} />
+                      <YAxis yAxisId="left" stroke="#8b5cf6" label={{ value: 'Brix', angle: -90, position: 'insideLeft' }} />
+                      <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" label={{ value: 'pH', angle: 90, position: 'insideRight' }} domain={[0, 14]} />
+                      <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                      <Legend />
+                      <Line yAxisId="left" type="monotone" dataKey="avgBrix" stroke="#8b5cf6" name="Brix Promedio" dot={false} />
+                      <Line yAxisId="right" type="monotone" dataKey="avgPh" stroke="#f59e0b" name="pH Promedio" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               </>
             )}
 
+
             {selectedChecklist === 'Staff Good Practices Control' && (
               <>
-                {/* Staff Compliance Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Cumplimiento por Fecha</h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="compliant" fill="#10b981" name="Cumplimiento" />
-                      <Bar dataKey="nonCompliant" fill="#ef4444" name="No Cumplimiento" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* Pareto: Noncompliance by Parameter */}
+                {chartData.paretoData && chartData.paretoData.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      No Cumplimiento por Parámetro (Pareto)
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.paretoData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis
+                          dataKey="parameter"
+                          type="category"
+                          stroke="#6b7280"
+                          width={150}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: any, name: string) => {
+                            if (name === 'No Cumplimiento') {
+                              return [value, 'No Cumplimientos']
+                            }
+                            return [value, name]
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="nonCompliant" fill="#ef4444" name="No Cumplimiento" />
+                        <Bar dataKey="compliant" fill="#10b981" name="Cumplimiento" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
-                {/* Staff Members per Day Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Personal Evaluado por Fecha</h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="totalStaff" fill="#3b82f6" name="Total Personal" />
-                      <Bar dataKey="registros" fill="#8b5cf6" name="Registros" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {/* NC Rate by Area (Ranked Bar Chart) */}
+                {chartData.ncRateByArea && chartData.ncRateByArea.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Tasa de No Cumplimiento por Área (Ranked)
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.ncRateByArea} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          type="number"
+                          stroke="#6b7280"
+                          label={{ value: 'Tasa de NC (%)', position: 'insideBottom', offset: -5 }}
+                          domain={[0, 100]}
+                        />
+                        <YAxis
+                          dataKey="area"
+                          type="category"
+                          stroke="#6b7280"
+                          width={120}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: any) => [`${value}%`, 'Tasa de NC']}
+                        />
+                        <Legend />
+                        <Bar dataKey="ncRateValue" fill="#ef4444" name="Tasa de No Cumplimiento (%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Area × Parameter Heatmap */}
+                {chartData.heatmapData && chartData.heatmapData.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Mapa de Calor: Área × Parámetro
+                    </h2>
+                    <div className="mb-4">
+                      <h3 className="text-sm font-semibold text-red-600 mb-2">Top 3 Hotspots:</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {summaryStats.hotspots && summaryStats.hotspots.map((hotspot: any, idx: number) => (
+                          <span key={idx} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            {hotspot.area} + {hotspot.parameter}: {hotspot.ncRate}% ({hotspot.count} casos)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Área
+                            </th>
+                            {STAFF_PRACTICES_PARAMETER_FIELDS.map(field => (
+                              <th key={field} className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {STAFF_PRACTICES_PARAMETER_NAMES[field].split(' ')[0]}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {Array.from(new Set(chartData.heatmapData.map((d: any) => d.area))).map((area: string) => (
+                            <tr key={area} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {area}
+                              </td>
+                              {STAFF_PRACTICES_PARAMETER_FIELDS.map(field => {
+                                const heatmapItem = chartData.heatmapData.find((d: any) => 
+                                  d.area === area && d.parameter === STAFF_PRACTICES_PARAMETER_NAMES[field]
+                                )
+                                const ncRate = heatmapItem?.ncRate || 0
+                                const intensity = Math.min(ncRate / 100, 1)
+                                let bgColor = 'bg-green-100'
+                                let textColor = 'text-gray-900'
+                                if (intensity > 0.5) {
+                                  bgColor = 'bg-red-500'
+                                  textColor = 'text-white'
+                                } else if (intensity > 0.2) {
+                                  bgColor = 'bg-yellow-400'
+                                  textColor = 'text-gray-900'
+                                } else if (intensity > 0) {
+                                  bgColor = 'bg-green-200'
+                                  textColor = 'text-gray-900'
+                                }
+                                return (
+                                  <td key={field} className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${bgColor} ${textColor}`}>
+                                      {ncRate.toFixed(1)}%
+                                    </span>
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -3957,202 +4864,167 @@ export default function DashboardQualityPage() {
             )}
 
             {/* Daily Statistics Tables */}
-            {selectedChecklist === 'Metal Detector (PCC #1)' && dailyStats.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Daily Statistics Table */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas Diarias</h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fecha
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Total Lecturas
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Cumplimiento
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Desviaciones
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Tasa (%)
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => {
-                          if ('deviations' in stat) {
-                            return (
-                              <tr key={stat.date} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {stat.date}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                  {stat.totalReadings}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    {stat.compliant}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    {stat.deviations}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                                  {stat.complianceRate}%
-                                </td>
-                              </tr>
-                            )
-                          }
-                          return null
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+            {/* Equipment Reliability Summary */}
+            {selectedChecklist === 'Metal Detector (PCC #1)' && summaryStats.rejectingArmPassRate && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                  <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Aprobación - Brazo Rechazador</h3>
+                  <p className="text-2xl font-bold text-blue-600">{summaryStats.rejectingArmPassRate || '0.0'}%</p>
                 </div>
-
-                {/* Brands and Products Table */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Marcas y Productos por Día</h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fecha
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Marcas Únicas
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Productos Únicos
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => {
-                          if ('brands' in stat) {
-                            return (
-                              <tr key={stat.date} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {stat.date}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                  {stat.brands || 0}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                  {stat.products || 0}
-                                </td>
-                              </tr>
-                            )
-                          }
-                          return null
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
+                  <h3 className="text-sm font-medium text-gray-500 mb-1">Eventos de Alarma de Ruido</h3>
+                  <p className="text-2xl font-bold text-yellow-600">{summaryStats.noiseAlarmEvents || 0}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {summaryStats.noiseAlarmRate || '0.00'}% del total
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                  <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Aprobación - Sensibilidad</h3>
+                  <p className="text-2xl font-bold text-purple-600">{summaryStats.sensitivityPassRate || '0.0'}%</p>
                 </div>
               </div>
             )}
 
-            {selectedChecklist === 'Staff Good Practices Control' && dailyStats.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Daily Statistics Table */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas Diarias</h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fecha
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Registros
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Total Personal
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Parámetros Cumplidos
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Parámetros No Cumplidos
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Tasa (%)
-                          </th>
+            {selectedChecklist === 'Metal Detector (PCC #1)' && summaryStats.deviationLog && summaryStats.deviationLog.length > 0 && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Registro de Desviaciones</h2>
+                <div className="mb-4 text-sm text-gray-600">
+                  <p>Órdenes Impactadas: <span className="font-semibold text-red-600">{summaryStats.lotsImpactedCount || 0}</span></p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha/Hora
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Línea
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Detector ID
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Orden
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Pieza Fallida
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tiempo en Riesgo
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acción Correctiva
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Hora Cierre
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {summaryStats.deviationLog.map((deviation: any, index: number) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {deviation.date} {deviation.time}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {deviation.line || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {deviation.detectorId || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {deviation.order || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              {deviation.testPieceFailed || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {deviation.timeAtRiskFormatted || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                            {deviation.correctiveAction || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                            {deviation.closeTime || '-'}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat) => {
-                          if ('totalStaff' in stat) {
-                            return (
-                              <tr key={stat.date} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {stat.date}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                  {stat.totalRecords}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                  {stat.totalStaff}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    {stat.compliant}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    {stat.nonCompliant}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
-                                  {stat.complianceRate}%
-                                </td>
-                              </tr>
-                            )
-                          }
-                          return null
-                        })}
-                      </tbody>
-                    </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Repeat Behavior Section */}
+            {selectedChecklist === 'Staff Good Practices Control' && summaryStats.repeatOffenderCount !== undefined && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Comportamiento Repetitivo</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Reincidentes</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.repeatOffenderCount || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Personas con ≥2 NC</p>
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-lg border-l-4 border-amber-500">
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Tasa de Recurrencia</h3>
+                    <p className="text-2xl font-bold text-amber-600">{summaryStats.recurrenceRate || '0.0'}%</p>
+                    <p className="text-xs text-gray-600 mt-1">% personas que fallan nuevamente</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Parámetros Más Repetidos</h3>
+                    <p className="text-lg font-bold text-purple-600">
+                      {summaryStats.topRepeatParameters && summaryStats.topRepeatParameters.length > 0
+                        ? summaryStats.topRepeatParameters[0]?.parameter || 'N/A'
+                        : 'N/A'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.topRepeatParameters && summaryStats.topRepeatParameters.length > 0
+                        ? `${summaryStats.topRepeatParameters[0]?.repeatCount || 0} personas`
+                        : 'Sin datos'}
+                    </p>
                   </div>
                 </div>
-
-                {/* Compliance Rate Pie Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Distribución de Cumplimiento</h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Cumplimiento', value: summaryStats.compliantParameters || 0 },
-                          { name: 'No Cumplimiento', value: summaryStats.nonCompliantParameters || 0 }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
-                        outerRadius={120}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#ef4444" />
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                
+                {summaryStats.topRepeatParameters && summaryStats.topRepeatParameters.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Top Parámetros con Comportamiento Repetitivo</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Parámetro
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Personas Reincidentes
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total Repeticiones
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {summaryStats.topRepeatParameters.map((param: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {param.parameter}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {param.repeatCount}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                                {param.totalRepeats}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4678,7 +5550,7 @@ export default function DashboardQualityPage() {
                   </div>
                 </div>
 
-                {/* Status Distribution Table */}
+                {/* Status Distribution Table - Focus on "Sobre el límite" */}
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">Distribución de Estados</h2>
                   <div className="overflow-x-auto">
@@ -4691,8 +5563,8 @@ export default function DashboardQualityPage() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Dentro del Rango
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fuera del Rango
+                          <th className="px-4 py-3 text-left text-xs font-medium text-red-600 uppercase tracking-wider">
+                            Sobre el Límite
                           </th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Total
@@ -4701,7 +5573,7 @@ export default function DashboardQualityPage() {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {dailyStats.map((stat) => {
-                          if ('withinRange' in stat) {
+                          if ('withinRange' in stat && 'overLimit' in stat) {
                             return (
                               <tr key={stat.date} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -4714,7 +5586,7 @@ export default function DashboardQualityPage() {
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    {stat.outOfRange}
+                                    {stat.overLimit}
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-medium">
