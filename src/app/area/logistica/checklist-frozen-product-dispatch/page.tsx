@@ -1308,7 +1308,7 @@ export default function ChecklistFrozenProductDispatchPage() {
                             <span className="text-sm font-semibold text-blue-700">Editando producto</span>
                             <div className="flex gap-2">
                               <Button 
-                                variant="ghost" 
+                                variant="outline" 
                                 size="sm" 
                                 onClick={cancelEditingProduct}
                                 className="text-gray-600 hover:text-gray-800"
@@ -1398,7 +1398,7 @@ export default function ChecklistFrozenProductDispatchPage() {
                         </div>
                         <div className="flex gap-2">
                           <Button 
-                            variant="ghost" 
+                            variant="outline" 
                             size="sm" 
                             onClick={() => startEditingProduct(product)} 
                             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
@@ -1406,7 +1406,7 @@ export default function ChecklistFrozenProductDispatchPage() {
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button 
-                            variant="ghost" 
+                            variant="outline" 
                             size="sm" 
                             onClick={() => removeProductFromPlan(product.id)} 
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
@@ -1879,7 +1879,7 @@ export default function ChecklistFrozenProductDispatchPage() {
 
             <div className="p-4 border-t bg-gray-50 sm:rounded-b-xl flex gap-3">
               {slots.find(s => s.slot_id === selectedSlotId) && (
-                <Button variant="destructive" onClick={deletePallet} className="px-3">
+                <Button variant="outline" onClick={deletePallet} className="px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300">
                   <Trash2 className="h-5 w-5" />
                 </Button>
               )}

@@ -328,7 +328,7 @@ export const ChecklistRawMaterialQualityPDFDocument: React.FC<ChecklistRawMateri
                   key={box.id}
                   style={[
                     styles.gridTableRow,
-                    boxIdx % 2 === 0 && styles.gridTableRowEven
+                    boxIdx % 2 === 0 ? styles.gridTableRowEven : {}
                   ]}
                 >
                   <Text style={[styles.gridTableCell, { flex: 0.6, fontWeight: 'bold' }]}>
