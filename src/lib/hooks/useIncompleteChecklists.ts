@@ -88,11 +88,23 @@ const CHECKLIST_MAP: Record<string, Omit<IncompleteChecklist, 'storageKey'>> = {
     path: '/area/calidad/checklist-cleanliness-control-packing',
     area: 'calidad'
   },
+  'checklist-raw-material-quality-draft': {
+    id: 'raw-material-quality',
+    name: 'Raw Material Quality Report',
+    path: '/area/calidad/checklist-raw-material-quality',
+    area: 'calidad'
+  },
   'checklist-solicitud-mtto-draft': {
     id: 'solicitud-mtto',
     name: 'Solicitud de Mantenimiento',
     path: '/area/mantencion/checklist/solicitud_mtto',
     area: 'mantencion'
+  },
+  'checklist-frozen-product-dispatch-draft': {
+    id: 'frozen-product-dispatch',
+    name: 'Inspection of Frozen Product in Dispatch',
+    path: '/area/logistica/checklist-frozen-product-dispatch',
+    area: 'logistica'
   }
 }
 

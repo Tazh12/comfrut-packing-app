@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -13,7 +13,7 @@ interface CalidadCard {
   description: string
   storageKey?: string
   colorType?: 'normal' | 'critical' | 'dashboard'
-  category: 'pre-operational' | 'operational' | 'review'
+  category: 'pre-operational' | 'operational' | 'review' | 'inbound-outbound'
 }
 
 // PRE-OPERATIONAL checklists (ordered by workflow)
@@ -132,8 +132,21 @@ const operationalChecklists: CalidadCard[] = [
   }
 ]
 
+// INBOUND/OUTBOUND checklists
+const inboundOutboundChecklists: CalidadCard[] = [
+  {
+    title: 'Raw Material Quality Report / Reporte de calidad materia prima',
+    icon: ClipboardList,
+    href: '/area/calidad/checklist-raw-material-quality',
+    description: 'Reporte de calidad de materia prima.',
+    storageKey: 'checklist-raw-material-quality-draft',
+    colorType: 'normal',
+    category: 'inbound-outbound'
+  }
+]
+
 // All checklists combined
-const allChecklists = [...preOperationalChecklists, ...operationalChecklists]
+const allChecklists = [...preOperationalChecklists, ...operationalChecklists, ...inboundOutboundChecklists]
 
 // Componente de tarjeta reutilizable
 function CalidadCardComponent({ card }: { card: CalidadCard }) {
@@ -269,6 +282,7 @@ function AccordionSection({
 export default function CalidadPage() {
   const [isPreOperationalExpanded, setIsPreOperationalExpanded] = useState(true) // Start expanded
   const [isOperationalExpanded, setIsOperationalExpanded] = useState(true) // Start expanded
+  const [isInboundOutboundExpanded, setIsInboundOutboundExpanded] = useState(false) // Start collapsed
 
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--page-bg)' }}>
@@ -362,6 +376,19 @@ export default function CalidadPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {operationalChecklists.map((card) => (
+                <CalidadCardComponent key={card.title} card={card} />
+              ))}
+            </div>
+          </AccordionSection>
+
+          {/* INBOUND/OUTBOUND Section */}
+          <AccordionSection
+            title="INBOUND/OUTBOUND"
+            isExpanded={isInboundOutboundExpanded}
+            onToggle={() => setIsInboundOutboundExpanded(!isInboundOutboundExpanded)}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {inboundOutboundChecklists.map((card) => (
                 <CalidadCardComponent key={card.title} card={card} />
               ))}
             </div>

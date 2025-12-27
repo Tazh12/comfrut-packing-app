@@ -18,7 +18,8 @@ const STORAGE_KEY_TO_AREA_PATH: Record<string, string> = {
   'checklist-packaging-draft': '/area/produccion',
   'checklist-producto-mix-draft': '/area/calidad',
   'checklist-monoproducto-draft': '/area/calidad',
-  'checklist-solicitud-mtto-draft': '/area/mantencion'
+  'checklist-solicitud-mtto-draft': '/area/mantencion',
+  'checklist-frozen-product-dispatch-draft': '/area/logistica'
 }
 
 export function DeleteDraftButton({ storageKey, checklistName, onDelete, onReset }: DeleteDraftButtonProps) {
