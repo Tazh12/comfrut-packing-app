@@ -299,6 +299,32 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
     return status === 'G' ? 'Approved / Aprobado' : 'Rejected / Rechazado'
   }
 
+  // Helper function to parse temperature and determine indicator
+  const getTemperatureIndicator = (tempStr: string): { type: 'green' | 'yellow' | 'red' | null, value: number | null } => {
+    if (!tempStr) return { type: null, value: null }
+    
+    // Extract number from string (handles formats like "-18°C", "-18", "-18.5", etc.)
+    const match = tempStr.match(/-?\d+\.?\d*/)
+    if (!match) return { type: null, value: null }
+    
+    const value = parseFloat(match[0])
+    
+    // <= -18: green circle
+    if (value <= -18) {
+      return { type: 'green', value }
+    }
+    // > -18 and <= -10: yellow caution sign
+    else if (value > -18 && value <= -10) {
+      return { type: 'yellow', value }
+    }
+    // > -10: red circle
+    else if (value > -10) {
+      return { type: 'red', value }
+    }
+    
+    return { type: null, value }
+  }
+
   const inspectionPoints = [
     { key: 'left_side', label: 'Left Side / Lado Izquierdo' },
     { key: 'doors', label: 'Inside & Outside Doors / Puertas' },
@@ -411,11 +437,47 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
             titleEs="Sección 2 – Inspección del Contenedor"
           />
           <View style={styles.infoBox}>
-            {data.inspectionTemps && (
-              <Text style={styles.infoText}>
-                <Text style={{ fontWeight: 'bold' }}>Temperature / Temperatura:</Text> {data.inspectionTemps}
-              </Text>
-            )}
+            {data.inspectionTemps && (() => {
+              const tempIndicator = getTemperatureIndicator(data.inspectionTemps)
+              return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+                  <Text style={styles.infoText}>
+                    <Text style={{ fontWeight: 'bold' }}>Temperature / Temperatura:</Text> {data.inspectionTemps}
+                  </Text>
+                  {tempIndicator.type === 'green' && (
+                    <View style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: '#10B981',
+                      marginLeft: 8
+                    }} />
+                  )}
+                  {tempIndicator.type === 'yellow' && (
+                    <View style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 2,
+                      backgroundColor: '#F59E0B',
+                      marginLeft: 8,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 8, fontWeight: 'bold' }}>!</Text>
+                    </View>
+                  )}
+                  {tempIndicator.type === 'red' && (
+                    <View style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: '#EF4444',
+                      marginLeft: 8
+                    }} />
+                  )}
+                </View>
+              )
+            })()}
             <Text style={styles.infoText}>
               <Text style={{ fontWeight: 'bold' }}>Result / Resultado:</Text>{' '}
               <Text style={data.inspectionResult === 'Approve' ? styles.statusApproved : styles.statusRejected}>
@@ -502,12 +564,12 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
                 <View key={row} style={styles.truckRow}>
                   <View style={[styles.truckSlot, ...(leftSlot ? [styles.truckSlotFilled] : [])]}>
                     <Text style={styles.truckSlotText}>
-                      {leftSlot ? `#${leftSlot.pallet_id.slice(-4)}` : leftSlotId}
+                      {leftSlot ? `#${leftSlot.pallet_id}` : leftSlotId}
                     </Text>
                   </View>
                   <View style={[styles.truckSlot, ...(rightSlot ? [styles.truckSlotFilled] : [])]}>
                     <Text style={styles.truckSlotText}>
-                      {rightSlot ? `#${rightSlot.pallet_id.slice(-4)}` : rightSlotId}
+                      {rightSlot ? `#${rightSlot.pallet_id}` : rightSlotId}
                     </Text>
                   </View>
                 </View>

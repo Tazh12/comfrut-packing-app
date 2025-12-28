@@ -12,6 +12,7 @@ import { ChecklistLoadingMap, SlotData } from '@/components/ChecklistLoadingMap'
 import PhotoUploadSection from '@/components/PhotoUploadSection'
 import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 import { ChecklistFrozenProductDispatchPDFDocument } from '@/components/ChecklistPDFFrozenProductDispatch'
+import { BarcodeScanner } from '@/components/BarcodeScanner'
 import { uploadChecklistPDF, uploadPhoto } from '@/lib/supabase/checklistFrozenProductDispatch'
 import { pdf } from '@react-pdf/renderer'
 import { Label } from '@/components/ui/label'
@@ -272,6 +273,7 @@ export default function ChecklistFrozenProductDispatchPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [draftId, setDraftId] = useState<string | null>(null)
+  const [showScanner, setShowScanner] = useState(false)
 
   // SECTION 1: Header + Dispatch Plan
   const [header, setHeader] = useState({
@@ -1492,11 +1494,43 @@ export default function ChecklistFrozenProductDispatchPage() {
             <div className="bg-white rounded-xl shadow-sm border p-5">
               <div className="space-y-2 mb-4">
                 <Label>Set Point / Temperatura</Label>
-                <Input 
-                  value={inspectionTemps} 
-                  onChange={e => setInspectionTemps(e.target.value)}
-                  placeholder="-18°C"
-                />
+                <div className="flex items-center gap-2">
+                  <Input 
+                    value={inspectionTemps} 
+                    onChange={e => setInspectionTemps(e.target.value)}
+                    placeholder="-18°C"
+                    className="flex-1"
+                  />
+                  {(() => {
+                    // Helper function to parse temperature and determine indicator
+                    const getTempIndicator = (tempStr: string) => {
+                      if (!tempStr) return null
+                      const match = tempStr.match(/-?\d+\.?\d*/)
+                      if (!match) return null
+                      const value = parseFloat(match[0])
+                      // <= -18: green circle
+                      if (value <= -18) return 'green'
+                      // > -18 and <= -10: yellow caution sign
+                      if (value > -18 && value <= -10) return 'yellow'
+                      // > -10: red circle
+                      if (value > -10) return 'red'
+                      return null
+                    }
+                    const indicator = getTempIndicator(inspectionTemps)
+                    if (!indicator) return null
+                    return (
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                        indicator === 'green' ? 'bg-green-500' :
+                        indicator === 'yellow' ? 'bg-yellow-500 rounded-sm' :
+                        'bg-red-500'
+                      }`}>
+                        {indicator === 'yellow' && (
+                          <span className="text-white text-xs font-bold">!</span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1822,12 +1856,25 @@ export default function ChecklistFrozenProductDispatchPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Pallet ID</Label>
-                  <Input 
-                    autoFocus 
-                    placeholder="Escanear o escribir..." 
-                    value={currentPallet.pallet_id}
-                    onChange={e => setCurrentPallet({...currentPallet, pallet_id: e.target.value})}
-                  />
+                  <div className="flex gap-2">
+                    <Input 
+                      autoFocus 
+                      placeholder="Escanear o escribir..." 
+                      value={currentPallet.pallet_id}
+                      onChange={e => setCurrentPallet({...currentPallet, pallet_id: e.target.value})}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowScanner(true)}
+                      className="shrink-0"
+                      title="Escanear código"
+                    >
+                      <Camera className="h-5 w-5" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Cantidad Cajas</Label>
@@ -1904,6 +1951,18 @@ export default function ChecklistFrozenProductDispatchPage() {
           </div>
         </div>
       )}
+
+      {/* Barcode Scanner */}
+      <BarcodeScanner
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScan={(result) => {
+          setCurrentPallet({...currentPallet, pallet_id: result})
+          setShowScanner(false)
+          toast.success('Código escaneado correctamente')
+        }}
+        title="Escanear Pallet ID"
+      />
     </div>
   )
 }
