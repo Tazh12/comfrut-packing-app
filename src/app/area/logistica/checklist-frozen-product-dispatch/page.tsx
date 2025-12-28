@@ -1867,7 +1867,7 @@ export default function ChecklistFrozenProductDispatchPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      size="icon"
+                      size="sm"
                       onClick={() => setShowScanner(true)}
                       className="shrink-0"
                       title="Escanear código"
