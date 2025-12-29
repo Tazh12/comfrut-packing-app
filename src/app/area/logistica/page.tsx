@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, History, Truck, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, History, Truck, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
 
 // Definición de tipos para los registros
@@ -212,6 +212,24 @@ export default function LogisticaPage() {
               >
                 <History className="h-4 w-4 mr-2" />
                 Historial
+              </Link>
+              <Link
+                href="/area/logistica/dashboard-logistica"
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--card-bg)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--title-text)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                }}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Dashboard de Logística
               </Link>
             </div>
           </div>

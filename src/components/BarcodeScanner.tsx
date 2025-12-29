@@ -128,7 +128,6 @@ export function BarcodeScanner({ isOpen, onClose, onScan, title = 'Escanear Cód
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
           <Button
-            variant="outline"
             size="sm"
             onClick={handleClose}
             className="h-8 w-8 p-0"

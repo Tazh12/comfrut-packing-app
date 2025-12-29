@@ -1494,43 +1494,11 @@ export default function ChecklistFrozenProductDispatchPage() {
             <div className="bg-white rounded-xl shadow-sm border p-5">
               <div className="space-y-2 mb-4">
                 <Label>Set Point / Temperatura</Label>
-                <div className="flex items-center gap-2">
-                  <Input 
-                    value={inspectionTemps} 
-                    onChange={e => setInspectionTemps(e.target.value)}
-                    placeholder="-18°C"
-                    className="flex-1"
-                  />
-                  {(() => {
-                    // Helper function to parse temperature and determine indicator
-                    const getTempIndicator = (tempStr: string) => {
-                      if (!tempStr) return null
-                      const match = tempStr.match(/-?\d+\.?\d*/)
-                      if (!match) return null
-                      const value = parseFloat(match[0])
-                      // <= -18: green circle
-                      if (value <= -18) return 'green'
-                      // > -18 and <= -10: yellow caution sign
-                      if (value > -18 && value <= -10) return 'yellow'
-                      // > -10: red circle
-                      if (value > -10) return 'red'
-                      return null
-                    }
-                    const indicator = getTempIndicator(inspectionTemps)
-                    if (!indicator) return null
-                    return (
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                        indicator === 'green' ? 'bg-green-500' :
-                        indicator === 'yellow' ? 'bg-yellow-500 rounded-sm' :
-                        'bg-red-500'
-                      }`}>
-                        {indicator === 'yellow' && (
-                          <span className="text-white text-xs font-bold">!</span>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
+                <Input 
+                  value={inspectionTemps} 
+                  onChange={e => setInspectionTemps(e.target.value)}
+                  placeholder="-18°C"
+                />
               </div>
 
               <div className="space-y-2">
