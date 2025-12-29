@@ -258,6 +258,7 @@ interface PalletData {
   pallet_id: string
   product_id: string
   cases: number
+  temperature?: string
   checks: PalletChecks
   timestamp: string
 }
@@ -320,11 +321,13 @@ export default function ChecklistFrozenProductDispatchPage() {
     pallet_id: string
     product_id: string
     cases: string
+    temperature: string
     checks: PalletChecks
   }>({
     pallet_id: '',
     product_id: '',
     cases: '',
+    temperature: '',
     checks: {
       case_condition: true,
       pallet_condition: true,
@@ -338,6 +341,7 @@ export default function ChecklistFrozenProductDispatchPage() {
   // Sticky values for speed
   const [stickyProduct, setStickyProduct] = useState<string>('')
   const [stickyCases, setStickyCases] = useState<string>('')
+  const [stickyTemperature, setStickyTemperature] = useState<string>('')
 
   // SECTION 4: Closeout
   const [sealNumber, setSealNumber] = useState('')
@@ -358,14 +362,21 @@ export default function ChecklistFrozenProductDispatchPage() {
           setDispatchPlan(data.dispatchPlan || [])
           setInspection(data.inspection || {})
           setInspectionTemps(data.inspectionTemps || '')
+          setInspectionPhotos(data.inspectionPhotos || [])
           setInspectionResult(data.inspectionResult || null)
+          setInspectorSignature(data.inspectorSignature || '')
           setSlots(data.slots || [])
+          setRowPhotos(data.rowPhotos || {})
+          setSealNumber(data.sealNumber || '')
+          setSealPhotos(data.sealPhotos || [])
+          setCloseoutSignature(data.closeoutSignature || '')
           setEndTime(data.endTime || '')
           // Restore sticky
           if (data.slots && data.slots.length > 0) {
             const last = data.slots[data.slots.length - 1]
             setStickyProduct(last.product_id)
             setStickyCases(String(last.cases))
+            setStickyTemperature(last.temperature || '')
           }
         } catch (e) {
           console.error("Error loading draft", e)
@@ -493,18 +504,60 @@ export default function ChecklistFrozenProductDispatchPage() {
 
   // Save draft on changes
   useEffect(() => {
-    const data = {
-      header,
-      dispatchPlan,
-      inspection,
-      inspectionTemps,
-      inspectionResult,
-      slots,
-      endTime,
-      updatedAt: new Date().toISOString()
+    const saveDraft = () => {
+      try {
+        const data = {
+          header,
+          dispatchPlan,
+          inspection,
+          inspectionTemps,
+          inspectionPhotos,
+          inspectionResult,
+          inspectorSignature,
+          slots,
+          rowPhotos,
+          sealNumber,
+          sealPhotos,
+          closeoutSignature,
+          endTime,
+          updatedAt: new Date().toISOString()
+        }
+        const jsonData = JSON.stringify(data)
+        localStorage.setItem('checklist-frozen-product-dispatch-draft', jsonData)
+        
+        // Dispatch event to notify badge component
+        window.dispatchEvent(new CustomEvent('localStorageChange', {
+          detail: { key: 'checklist-frozen-product-dispatch-draft', value: jsonData }
+        }))
+      } catch (error) {
+        console.error('Error saving draft:', error)
+      }
     }
-    localStorage.setItem('checklist-frozen-product-dispatch-draft', JSON.stringify(data))
-  }, [header, dispatchPlan, inspection, inspectionTemps, inspectionResult, slots, endTime])
+    
+    // Don't save on initial mount if there's no data (to avoid overwriting existing draft)
+    const hasAnyData = 
+      header.po_number || header.client || 
+      dispatchPlan.length > 0 || 
+      Object.keys(inspection).length > 0 ||
+      inspectionTemps ||
+      slots.length > 0 ||
+      sealNumber ||
+      endTime
+    
+    if (hasAnyData) {
+      saveDraft()
+    }
+    
+    // Also save on beforeunload (when user closes tab/navigates away)
+    const handleBeforeUnload = () => {
+      saveDraft()
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [header, dispatchPlan, inspection, inspectionTemps, inspectionPhotos, inspectionResult, inspectorSignature, slots, rowPhotos, sealNumber, sealPhotos, closeoutSignature, endTime])
 
   // --- HANDLERS SECTION 1 ---
 
@@ -702,6 +755,7 @@ export default function ChecklistFrozenProductDispatchPage() {
         pallet_id: existing.pallet_id,
         product_id: existing.product_id,
         cases: String(existing.cases),
+        temperature: existing.temperature || '',
         checks: existing.checks
       })
     } else {
@@ -710,6 +764,7 @@ export default function ChecklistFrozenProductDispatchPage() {
         pallet_id: '',
         product_id: stickyProduct || (dispatchPlan.length === 1 ? dispatchPlan[0].id : ''),
         cases: stickyCases || '',
+        temperature: stickyTemperature || '',
         checks: {
           case_condition: true,
           pallet_condition: true,
@@ -753,6 +808,7 @@ export default function ChecklistFrozenProductDispatchPage() {
       pallet_id: currentPallet.pallet_id,
       product_id: currentPallet.product_id,
       cases: Number(currentPallet.cases),
+      temperature: currentPallet.temperature || undefined,
       checks: currentPallet.checks,
       timestamp: new Date().toISOString()
     }
@@ -760,6 +816,9 @@ export default function ChecklistFrozenProductDispatchPage() {
     // Save sticky
     setStickyProduct(currentPallet.product_id)
     setStickyCases(currentPallet.cases)
+    if (currentPallet.temperature) {
+      setStickyTemperature(currentPallet.temperature)
+    }
 
     setSlots(prev => {
       // Remove existing for this slot if any
@@ -851,6 +910,14 @@ export default function ChecklistFrozenProductDispatchPage() {
 
   // Reset form function for DeleteDraftButton
   const resetForm = () => {
+    // Clear localStorage first to prevent any race conditions
+    localStorage.removeItem('checklist-frozen-product-dispatch-draft')
+    
+    // Dispatch event immediately to notify badge
+    window.dispatchEvent(new CustomEvent('localStorageChange', {
+      detail: { key: 'checklist-frozen-product-dispatch-draft', value: null }
+    }))
+    
     setHeader({
       po_number: '',
       client: '',
@@ -869,6 +936,7 @@ export default function ChecklistFrozenProductDispatchPage() {
     setInspectionTemps('')
     setInspectionPhotos([])
     setInspectionResult(null)
+    setInspectorSignature('')
     setSlots([])
     setRowPhotos({})
     setSealNumber('')
@@ -878,6 +946,29 @@ export default function ChecklistFrozenProductDispatchPage() {
     setCurrentStep(1)
     setStickyProduct('')
     setStickyCases('')
+    setStickyTemperature('')
+    setCurrentPallet({
+      pallet_id: '',
+      product_id: '',
+      cases: '',
+      temperature: '',
+      checks: {
+        case_condition: true,
+        pallet_condition: true,
+        wrap_condition: true,
+        coding_box: true,
+        label: true,
+        additional_label: true
+      }
+    })
+    
+    // Clear localStorage again after state reset to be absolutely sure
+    setTimeout(() => {
+      localStorage.removeItem('checklist-frozen-product-dispatch-draft')
+      window.dispatchEvent(new CustomEvent('localStorageChange', {
+        detail: { key: 'checklist-frozen-product-dispatch-draft', value: null }
+      }))
+    }, 100)
   }
 
   const handleSubmit = async () => {
@@ -945,6 +1036,57 @@ export default function ChecklistFrozenProductDispatchPage() {
         }
       }
       
+      // Helper function to convert image URL to base64
+      const imageUrlToBase64 = async (url: string): Promise<string> => {
+        try {
+          const response = await fetch(url)
+          if (!response.ok) {
+            console.error(`Failed to fetch image: ${url}`, response.statusText)
+            return ''
+          }
+          const blob = await response.blob()
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => {
+              const base64 = reader.result as string
+              resolve(base64)
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+        } catch (error) {
+          console.error(`Error converting image to base64: ${url}`, error)
+          return ''
+        }
+      }
+
+      // Convert all image URLs to base64
+      toast.info('Procesando imágenes...')
+      const inspectionPhotosBase64 = await Promise.all(
+        uploadedInspectionPhotos.map(async (photo) => ({
+          ...photo,
+          url: photo.url ? await imageUrlToBase64(photo.url) : ''
+        }))
+      )
+      
+      const rowPhotosBase64 = await Promise.all(
+        uploadedRowPhotos.map(async (photo) => ({
+          ...photo,
+          url: photo.url ? await imageUrlToBase64(photo.url) : ''
+        }))
+      )
+      
+      const sealPhotosBase64 = await Promise.all(
+        uploadedSealPhotos.map(async (photo) => ({
+          ...photo,
+          url: photo.url ? await imageUrlToBase64(photo.url) : ''
+        }))
+      )
+      
+      const inspectorSignatureBase64 = closeoutSignature 
+        ? await imageUrlToBase64(closeoutSignature)
+        : ''
+
       // 1. Generate PDF
       toast.info('Generando PDF...')
       let pdfBlob: Blob
@@ -971,10 +1113,10 @@ export default function ChecklistFrozenProductDispatchPage() {
               loadingMap: slots,
               sealNumber: sealNumber,
               endTime: endTime,
-              inspectionPhotos: uploadedInspectionPhotos,
-              rowPhotos: uploadedRowPhotos,
-              sealPhotos: uploadedSealPhotos,
-              inspectorSignature: closeoutSignature
+              inspectionPhotos: inspectionPhotosBase64,
+              rowPhotos: rowPhotosBase64,
+              sealPhotos: sealPhotosBase64,
+              inspectorSignature: inspectorSignatureBase64
             }}
           />
         )
@@ -1131,9 +1273,48 @@ export default function ChecklistFrozenProductDispatchPage() {
       {/* HEADER NAV */}
       <div className="bg-white border-b sticky top-0 z-30 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <Link href="/area/logistica" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <button 
+            onClick={() => {
+              // Ensure draft is saved synchronously before navigation
+              try {
+                const data = {
+                  header,
+                  dispatchPlan,
+                  inspection,
+                  inspectionTemps,
+                  inspectionPhotos,
+                  inspectionResult,
+                  inspectorSignature,
+                  slots,
+                  rowPhotos,
+                  sealNumber,
+                  sealPhotos,
+                  closeoutSignature,
+                  endTime,
+                  updatedAt: new Date().toISOString()
+                }
+                const jsonData = JSON.stringify(data)
+                localStorage.setItem('checklist-frozen-product-dispatch-draft', jsonData)
+                
+                // Dispatch event to notify badge component
+                window.dispatchEvent(new CustomEvent('localStorageChange', {
+                  detail: { key: 'checklist-frozen-product-dispatch-draft', value: jsonData }
+                }))
+                
+                // Small delay to ensure localStorage write completes
+                setTimeout(() => {
+                  router.push('/area/logistica')
+                }, 50)
+              } catch (error) {
+                console.error('Error saving draft before navigation:', error)
+                // Still navigate even if save fails
+                router.push('/area/logistica')
+              }
+            }}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Link>
+          </button>
           <div>
             <h1 className="font-semibold text-gray-800">Carga de Congelado</h1>
             <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -1494,11 +1675,27 @@ export default function ChecklistFrozenProductDispatchPage() {
             <div className="bg-white rounded-xl shadow-sm border p-5">
               <div className="space-y-2 mb-4">
                 <Label>Set Point / Temperatura</Label>
-                <Input 
-                  value={inspectionTemps} 
-                  onChange={e => setInspectionTemps(e.target.value)}
-                  placeholder="-18°C"
-                />
+                <div className="relative">
+                  <Input 
+                    value={inspectionTemps} 
+                    onChange={e => setInspectionTemps(e.target.value)}
+                    placeholder="-18°C"
+                    className="pr-10"
+                  />
+                  {inspectionTemps && (() => {
+                    const temp = parseFloat(inspectionTemps)
+                    if (!isNaN(temp)) {
+                      if (temp <= -18) {
+                        return <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-green-500 border-2 border-white"></div>
+                      } else if (temp >= -18 && temp <= -10) {
+                        return <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-yellow-500" />
+                      } else if (temp > -10) {
+                        return <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-red-500 border-2 border-white"></div>
+                      }
+                    }
+                    return null
+                  })()}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -1858,6 +2055,17 @@ export default function ChecklistFrozenProductDispatchPage() {
                      </div>
                   )}
                 </div>
+              </div>
+
+              {/* Temperature */}
+              <div className="space-y-2">
+                <Label>Temperatura / Temperature</Label>
+                <Input 
+                  type="text" 
+                  placeholder="-18°C" 
+                  value={currentPallet.temperature}
+                  onChange={e => setCurrentPallet({...currentPallet, temperature: e.target.value})}
+                />
               </div>
 
               {/* Quick Checks */}

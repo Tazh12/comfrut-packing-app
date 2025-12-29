@@ -4,7 +4,8 @@ import {
   PDFStyles, 
   PDFHeader2Row, 
   PDFFooter, 
-  PDFSectionTitle
+  PDFSectionTitle,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -257,6 +258,7 @@ export interface ChecklistFrozenProductDispatchPDFProps {
       pallet_id: string
       product_id: string
       cases: number
+      temperature?: string
       checks: {
         case_condition: boolean
         pallet_condition: boolean
@@ -458,13 +460,21 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
               {data.inspectionPhotos?.map((photo, idx) => (
                 <View key={`insp-${idx}`} style={styles.photoItem}>
                   <Text style={styles.photoLabel}>Inspection / Inspección {idx + 1}</Text>
-                  {photo.url && (
+                  {photo.url ? (
                     <>
-                      <Image src={photo.url} style={styles.photoImage} />
+                      <Image 
+                        src={photo.url} 
+                        style={styles.photoImage}
+                        cache={false}
+                      />
                       <Link src={photo.url} style={styles.photoLink}>
                         Open Full Size / Abrir Tamaño Completo
                       </Link>
                     </>
+                  ) : (
+                    <Text style={{ fontSize: 7, color: '#9CA3AF', fontStyle: 'italic' }}>
+                      No image available
+                    </Text>
                   )}
                 </View>
               ))}
@@ -535,52 +545,56 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
         {data.loadingMap.length > 0 ? (
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Slot</Text>
-              <Text style={[styles.tableHeaderText, { width: '10%', fontSize: 7 }]}>Pallet ID</Text>
-              <Text style={[styles.tableHeaderText, { width: '20%', fontSize: 7 }]}>Product / Producto</Text>
-              <Text style={[styles.tableHeaderText, { width: '7%', fontSize: 7, textAlign: 'center' }]}>Cases</Text>
-              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7, textAlign: 'center' }]}>Case Cond.</Text>
-              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7, textAlign: 'center' }]}>Pallet Cond.</Text>
-              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Wrap</Text>
-              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7, textAlign: 'center' }]}>Coding</Text>
-              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7, textAlign: 'center' }]}>Label</Text>
-              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7, textAlign: 'center' }]}>Add. Label</Text>
+              <Text style={[styles.tableHeaderText, { width: '7%', fontSize: 7, textAlign: 'center' }]}>Slot</Text>
+              <Text style={[styles.tableHeaderText, { width: '9%', fontSize: 7 }]}>Pallet ID</Text>
+              <Text style={[styles.tableHeaderText, { width: '18%', fontSize: 7 }]}>Product / Producto</Text>
+              <Text style={[styles.tableHeaderText, { width: '6%', fontSize: 7, textAlign: 'center' }]}>Cases</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Case Cond.</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Pallet Cond.</Text>
+              <Text style={[styles.tableHeaderText, { width: '7%', fontSize: 7, textAlign: 'center' }]}>Wrap</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Coding</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Label</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Add. Label</Text>
+              <Text style={[styles.tableHeaderText, { width: '8%', fontSize: 7, textAlign: 'center' }]}>Temp.</Text>
             </View>
             {[...data.loadingMap].sort((a, b) => a.slot_id - b.slot_id).map((slot, idx) => (
               <View key={slot.slot_id} style={[styles.tableRow, ...(idx % 2 === 1 ? [styles.tableRowEven] : [])]}>
-                <Text style={[styles.tableCell, { width: '8%', fontSize: 7, textAlign: 'center' }]}>{slot.slot_id}</Text>
-                <Text style={[styles.tableCell, { width: '10%', fontSize: 7 }]}>{slot.pallet_id}</Text>
-                <Text style={[styles.tableCell, { width: '20%', fontSize: 6, textAlign: 'left' }]}>{getProductName(slot.product_id)}</Text>
-                <Text style={[styles.tableCell, { width: '7%', fontSize: 7, textAlign: 'center' }]}>{slot.cases}</Text>
-                <Text style={[styles.tableCell, { width: '9%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '7%', fontSize: 7, textAlign: 'center' }]}>{slot.slot_id}</Text>
+                <Text style={[styles.tableCell, { width: '9%', fontSize: 7 }]}>{slot.pallet_id}</Text>
+                <Text style={[styles.tableCell, { width: '18%', fontSize: 6, textAlign: 'left' }]}>{getProductName(slot.product_id)}</Text>
+                <Text style={[styles.tableCell, { width: '6%', fontSize: 7, textAlign: 'center' }]}>{slot.cases}</Text>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.case_condition ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.case_condition ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
                 </Text>
-                <Text style={[styles.tableCell, { width: '9%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.pallet_condition ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.pallet_condition ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
                 </Text>
-                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '7%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.wrap_condition ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.wrap_condition ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
                 </Text>
-                <Text style={[styles.tableCell, { width: '9%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.coding_box ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.coding_box ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
                 </Text>
-                <Text style={[styles.tableCell, { width: '9%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.label ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.label ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
                 </Text>
-                <Text style={[styles.tableCell, { width: '9%', fontSize: 6, textAlign: 'center' }]}>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 6, textAlign: 'center' }]}>
                   <Text style={slot.checks.additional_label ? styles.checkComply : styles.checkNoComply}>
                     {slot.checks.additional_label ? 'CUMPLE' : 'NO CUMPLE'}
                   </Text>
+                </Text>
+                <Text style={[styles.tableCell, { width: '8%', fontSize: 7, textAlign: 'center' }]}>
+                  {slot.temperature || '-'}
                 </Text>
               </View>
             ))}
@@ -600,13 +614,21 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
               {data.rowPhotos?.map((photo, idx) => (
                 <View key={`row-${idx}`} style={styles.photoItem}>
                   <Text style={styles.photoLabel}>Row {photo.row} / Fila {photo.row}</Text>
-                  {photo.url && (
+                  {photo.url ? (
                     <>
-                      <Image src={photo.url} style={styles.photoImage} />
+                      <Image 
+                        src={photo.url} 
+                        style={styles.photoImage}
+                        cache={false}
+                      />
                       <Link src={photo.url} style={styles.photoLink}>
                         Open Full Size / Abrir Tamaño Completo
                       </Link>
                     </>
+                  ) : (
+                    <Text style={{ fontSize: 7, color: '#9CA3AF', fontStyle: 'italic' }}>
+                      No image available
+                    </Text>
                   )}
                 </View>
               ))}
@@ -664,7 +686,11 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
                 <Text style={{ fontSize: 9, fontWeight: 'bold', marginBottom: 5 }}>
                   Seal Photo / Foto de Sello:
                 </Text>
-                <Image src={data.sealPhotos[0].url} style={{ width: 150, height: 100, objectFit: 'contain', borderWidth: 1, borderColor: '#E5E7EB' }} />
+                <Image 
+                  src={data.sealPhotos[0].url} 
+                  style={{ width: 150, height: 100, objectFit: 'contain', borderWidth: 1, borderColor: '#E5E7EB' }}
+                  cache={false}
+                />
               </View>
             )}
           </View>
@@ -680,6 +706,12 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
                 .filter(s => s.product_id === product.id)
                 .reduce((sum, s) => sum + s.cases, 0)
               
+              const expectedPallets = product.expected_pallets || 0
+              const expectedCases = (product.expected_pallets || 0) * (product.cases_per_pallet || 0)
+              
+              const palletDiff = productPallets - expectedPallets
+              const caseDiff = productCases - expectedCases
+              
               return (
                 <View key={product.id} style={{ marginBottom: 8, padding: 8, backgroundColor: '#F9FAFB', borderRadius: 4 }}>
                   <Text style={{ fontSize: 9, fontWeight: 'bold', marginBottom: 4 }}>
@@ -688,15 +720,114 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
                   <View style={{ flexDirection: 'row', gap: 20 }}>
                     <Text style={{ fontSize: 8 }}>
                       <Text style={{ fontWeight: 'bold' }}>Pallets:</Text> {productPallets}
+                      {expectedPallets > 0 && (
+                        <Text style={{ color: palletDiff !== 0 ? '#DC2626' : '#059669' }}>
+                          {' '}(Expected / Esperado: {expectedPallets})
+                        </Text>
+                      )}
                     </Text>
                     <Text style={{ fontSize: 8 }}>
                       <Text style={{ fontWeight: 'bold' }}>Cases / Cajas:</Text> {productCases}
+                      {expectedCases > 0 && (
+                        <Text style={{ color: caseDiff !== 0 ? '#DC2626' : '#059669' }}>
+                          {' '}(Expected / Esperado: {expectedCases})
+                        </Text>
+                      )}
                     </Text>
                   </View>
                 </View>
               )
             })}
           </View>
+
+          {/* Observation Section for Mismatches */}
+          {(() => {
+            const mismatches: string[] = []
+            
+            data.dispatchPlan.forEach((product) => {
+              const productPallets = data.loadingMap.filter(s => s.product_id === product.id)
+              const productPalletsCount = productPallets.length
+              const productCases = productPallets.reduce((sum, s) => sum + s.cases, 0)
+              
+              const expectedPallets = product.expected_pallets || 0
+              const expectedCases = (product.expected_pallets || 0) * (product.cases_per_pallet || 0)
+              
+              const palletDiff = productPalletsCount - expectedPallets
+              const caseDiff = productCases - expectedCases
+              
+              if (expectedPallets > 0 && palletDiff !== 0) {
+                const palletIds = productPallets.map(p => p.pallet_id).join(', ')
+                if (palletDiff > 0) {
+                  // More pallets than expected
+                  mismatches.push(
+                    `${product.name}: ${palletDiff} pallet(s) more than expected (Expected: ${expectedPallets}, Actual: ${productPalletsCount}). Extra pallet(s): ${palletIds}`
+                  )
+                } else {
+                  // Fewer pallets than expected
+                  mismatches.push(
+                    `${product.name}: ${Math.abs(palletDiff)} pallet(s) less than expected (Expected: ${expectedPallets}, Actual: ${productPalletsCount}). Loaded pallet(s): ${palletIds || 'None'}`
+                  )
+                }
+              }
+              
+              if (expectedCases > 0 && caseDiff !== 0) {
+                // Find pallets with incorrect case counts
+                const expectedCasesPerPallet = product.cases_per_pallet || 0
+                const incorrectPallets = productPallets.filter(p => p.cases !== expectedCasesPerPallet)
+                
+                if (incorrectPallets.length > 0) {
+                  const palletDetails = incorrectPallets.map(p => 
+                    `Pallet ${p.pallet_id} (${p.cases} cases, expected ${expectedCasesPerPallet})`
+                  ).join('; ')
+                  
+                  mismatches.push(
+                    `${product.name}: Case count mismatch (Expected: ${expectedCases}, Actual: ${productCases}). ${palletDetails}`
+                  )
+                } else {
+                  mismatches.push(
+                    `${product.name}: ${caseDiff > 0 ? '+' : ''}${caseDiff} case(s) ${caseDiff > 0 ? 'more' : 'less'} than expected (Expected: ${expectedCases}, Actual: ${productCases})`
+                  )
+                }
+              }
+            })
+            
+            // Check for products in dispatch plan that have no pallets loaded
+            data.dispatchPlan.forEach((product) => {
+              const productPallets = data.loadingMap.filter(s => s.product_id === product.id)
+              if (productPallets.length === 0 && (product.expected_pallets || 0) > 0) {
+                mismatches.push(
+                  `${product.name}: No pallets loaded (Expected: ${product.expected_pallets})`
+                )
+              }
+            })
+            
+            // Check for pallets loaded that aren't in the dispatch plan
+            const loadedProductIds = new Set(data.loadingMap.map(s => s.product_id))
+            const planProductIds = new Set(data.dispatchPlan.map(p => p.id))
+            loadedProductIds.forEach(productId => {
+              if (!planProductIds.has(productId)) {
+                const productName = getProductName(productId)
+                const unplannedPallets = data.loadingMap.filter(s => s.product_id === productId)
+                const palletIds = unplannedPallets.map(p => p.pallet_id).join(', ')
+                mismatches.push(
+                  `Product not in dispatch plan: ${productName} (${unplannedPallets.length} pallet(s)). Pallet ID(s): ${palletIds}`
+                )
+              }
+            })
+            
+            return mismatches.length > 0 ? (
+              <View style={{ marginTop: 15, padding: 10, backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 4 }}>
+                <Text style={{ fontSize: 10, fontWeight: 'bold', marginBottom: 8, color: '#92400E' }}>
+                  Observations / Observaciones:
+                </Text>
+                {mismatches.map((mismatch, idx) => (
+                  <Text key={idx} style={{ fontSize: 8, marginBottom: 4, color: '#92400E' }}>
+                    • {mismatch}
+                  </Text>
+                ))}
+              </View>
+            ) : null
+          })()}
           
           {/* Inspector Signature */}
           {data.inspectorSignature && (
@@ -708,6 +839,13 @@ export const ChecklistFrozenProductDispatchPDFDocument: React.FC<ChecklistFrozen
             </View>
           )}
         </View>
+
+        {/* Validation Section */}
+        <PDFValidationBlock
+          data={{
+            signature: undefined
+          }}
+        />
 
         <PDFFooter />
       </Page>
