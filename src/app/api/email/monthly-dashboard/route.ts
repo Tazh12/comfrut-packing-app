@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 // Initialize Supabase client with service role for server-side queries
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -368,6 +366,15 @@ export async function POST(request: NextRequest) {
         </body>
       </html>
     `
+    
+    // Initialize Resend client (only at runtime, not at build time)
+    const resendApiKey = process.env.RESEND_API_KEY
+    if (!resendApiKey) {
+      return NextResponse.json({ 
+        error: 'RESEND_API_KEY environment variable is not set' 
+      }, { status: 500 })
+    }
+    const resend = new Resend(resendApiKey)
     
     // Send email via Resend to all recipients
     const emailResults = []
