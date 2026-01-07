@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 
 /**
  * Uploads a PDF file to Supabase Storage bucket 'checklist-raw-material-quality'
@@ -213,18 +214,8 @@ export async function fetchChecklistRawMaterialQualityData(
       .select('*')
       .order('date_utc', { ascending: false })
 
-    // Apply date filters if provided
-    if (startDate) {
-      // Convert YYYY-MM-DD to date_utc range
-      const startUTC = new Date(`${startDate}T00:00:00Z`).toISOString()
-      query = query.gte('date_utc', startUTC)
-    }
-    if (endDate) {
-      // Add one day to include the end date
-      const endDateObj = new Date(`${endDate}T00:00:00Z`)
-      endDateObj.setDate(endDateObj.getDate() + 1)
-      query = query.lt('date_utc', endDateObj.toISOString())
-    }
+    // Note: We filter by date_string in memory because string comparison doesn't work
+    // correctly across months (e.g., "DEC" < "NOV" alphabetically)
 
     const { data, error } = await query
 
@@ -239,7 +230,56 @@ export async function fetchChecklistRawMaterialQualityData(
       throw new Error(`database/fetch-failed: ${error.message}`)
     }
 
-    return data || []
+    let processedData = data || []
+
+    // Filter by date_string (the date the user entered in the checklist)
+    if (startDate || endDate) {
+      const startDateString = startDate ? formatDateMMMDDYYYY(startDate) : null
+      const endDateString = endDate ? formatDateMMMDDYYYY(endDate) : null
+      
+      const MONTH_MAP: { [key: string]: number } = {
+        'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+        'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+      }
+      const parseDateString = (dateStr: string): Date | null => {
+        if (!dateStr) return null
+        try {
+          const parts = dateStr.split('-')
+          if (parts.length === 3) {
+            const month = MONTH_MAP[parts[0].toUpperCase()]
+            const day = parseInt(parts[1])
+            const year = parseInt(parts[2])
+            if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+              return new Date(year, month, day)
+            }
+          }
+          return null
+        } catch {
+          return null
+        }
+      }
+      
+      const startDateObj = startDateString ? parseDateString(startDateString) : null
+      const endDateObj = endDateString ? parseDateString(endDateString) : null
+      
+      processedData = processedData.filter((record: any) => {
+        if (!record.date_string) return false
+        const recordDateObj = parseDateString(record.date_string)
+        if (!recordDateObj) return false
+        const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+        if (startDateObj) {
+          const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+          if (recordDateOnly < startDateOnly) return false
+        }
+        if (endDateObj) {
+          const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+          if (recordDateOnly > endDateOnly) return false
+        }
+        return true
+      })
+    }
+
+    return processedData
   } catch (error) {
     console.error('Error in fetchChecklistRawMaterialQualityData:', error instanceof Error ? {
       message: error.message,

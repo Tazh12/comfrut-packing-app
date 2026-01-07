@@ -203,28 +203,44 @@ export default function DashboardQualityPage() {
       return
     }
     
+    // Validate date format (should be YYYY-MM-DD)
+    const dateFormatRegex = /^\d{4}-\d{2}-\d{2}$/
+    if (!dateFormatRegex.test(startDate) || !dateFormatRegex.test(endDate)) {
+      showToast('Formato de fecha inválido. Use YYYY-MM-DD', 'error')
+      return
+    }
+    
+    // Validate that start date is before end date
+    if (new Date(startDate) > new Date(endDate)) {
+      showToast('La fecha de inicio debe ser anterior a la fecha de fin', 'error')
+      return
+    }
+    
     try {
       setLoading(true)
       
       if (selectedChecklist === 'Process Environmental Temperature Control') {
         const records = await fetchChecklistEnvTempData(startDate, endDate)
-        setData(records)
+        console.log('Dashboard: Received records:', records?.length || 0, 'for dates:', { startDate, endDate })
+        setData(records || [])
 
         // Process data for charts
         const processedData: ChartDataPoint[] = []
-        records.forEach((record: ChecklistRecord) => {
-          record.readings?.forEach((reading) => {
-            processedData.push({
-              date: record.date_string,
-              time: `${record.date_string} ${reading.time}`,
-              averageTemp: reading.averageTemp,
-              digitalTemp: reading.digitalThermometer,
-              wallTemp: reading.wallThermometer,
-              status: reading.status,
-              shift: record.shift
+        if (records && records.length > 0) {
+          records.forEach((record: ChecklistRecord) => {
+            record.readings?.forEach((reading) => {
+              processedData.push({
+                date: record.date_string,
+                time: `${record.date_string} ${reading.time}`,
+                averageTemp: reading.averageTemp,
+                digitalTemp: reading.digitalThermometer,
+                wallTemp: reading.wallThermometer,
+                status: reading.status,
+                shift: record.shift
+              })
             })
           })
-        })
+        }
 
         // Sort by date and time
         processedData.sort((a, b) => {
@@ -3043,6 +3059,13 @@ export default function DashboardQualityPage() {
       showToast('Por favor selecciona un rango de fechas', 'error')
       return
     }
+    
+    // Validate that start date is before end date
+    if (new Date(startDate) > new Date(endDate)) {
+      showToast('La fecha de inicio debe ser anterior a la fecha de fin', 'error')
+      return
+    }
+    
     loadData()
   }
 

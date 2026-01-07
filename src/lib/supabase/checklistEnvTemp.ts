@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
+import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 
 /**
  * Uploads a PDF file to Supabase Storage bucket 'checklist-envtemp'
@@ -194,11 +195,51 @@ const EST_TIMEZONE = 'America/New_York'
  * @returns ISO string in UTC
  */
 function convertESTToUTC(dateStr: string): string {
-  // Create date at midnight EST/EDT (handles DST automatically)
-  // fromZonedTime treats the date as if it's in the given timezone and returns UTC
-  const estDate = new Date(`${dateStr}T00:00:00`)
-  const utcDate = fromZonedTime(estDate, EST_TIMEZONE)
-  return utcDate.toISOString()
+  // Parse date string (YYYY-MM-DD) and create date at midnight EST/EDT
+  // Validate format first
+  if (!dateStr || typeof dateStr !== 'string') {
+    console.error('Invalid date string:', dateStr)
+    throw new Error(`Invalid date string: ${dateStr}`)
+  }
+  
+  const dateParts = dateStr.split('-')
+  if (dateParts.length !== 3) {
+    console.error('Invalid date format, expected YYYY-MM-DD:', dateStr)
+    throw new Error(`Invalid date format: ${dateStr}. Expected YYYY-MM-DD`)
+  }
+  
+  const [year, month, day] = dateParts.map(Number)
+  
+  // Validate numeric values
+  if (isNaN(year) || isNaN(month) || isNaN(day) || year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+    console.error('Invalid date values:', { year, month, day, dateStr })
+    throw new Error(`Invalid date values: ${dateStr}`)
+  }
+  
+  const monthNum = month - 1 // JavaScript months are 0-indexed
+  
+  // Determine if date is in DST period (roughly March to November)
+  // EST: UTC-5, EDT: UTC-4
+  // For 2025: DST starts March 9, ends November 2
+  let offsetHours = -5 // EST default
+  if (monthNum >= 2 && monthNum <= 10) { // March (2) to November (10)
+    // Check more precisely - DST starts 2nd Sunday in March, ends 1st Sunday in November
+    const dateObj = new Date(year, monthNum, day)
+    const marchSecondSunday = new Date(year, 2, 8) // March 8
+    marchSecondSunday.setDate(marchSecondSunday.getDate() + (7 - marchSecondSunday.getDay()))
+    const novFirstSunday = new Date(year, 10, 1) // November 1
+    novFirstSunday.setDate(novFirstSunday.getDate() + (7 - novFirstSunday.getDay()))
+    
+    if (dateObj >= marchSecondSunday && dateObj < novFirstSunday) {
+      offsetHours = -4 // EDT
+    }
+  }
+  
+  // Create date string with explicit offset (format: -05:00 or -04:00)
+  const offsetStr = `${offsetHours >= 0 ? '+' : '-'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
+  const dateWithOffset = `${dateStr}T00:00:00${offsetStr}`
+  const estDate = new Date(dateWithOffset)
+  return estDate.toISOString()
 }
 
 /**
@@ -215,6 +256,33 @@ function convertUTCToEST(utcTimestamp: string): string {
   const month = String(estDate.getMonth() + 1).padStart(2, '0')
   const day = String(estDate.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/**
+ * Parses date_string in format "MMM-DD-YYYY" to a comparable format
+ * @param dateString - Date string in format "MMM-DD-YYYY" (e.g., "NOV-01-2025")
+ * @returns Date object for comparison, or null if invalid
+ */
+function parseDateString(dateString: string): Date | null {
+  if (!dateString) return null
+  try {
+    const MONTH_MAP: { [key: string]: number } = {
+      'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+      'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+    }
+    const parts = dateString.split('-')
+    if (parts.length === 3) {
+      const month = MONTH_MAP[parts[0].toUpperCase()]
+      const day = parseInt(parts[1])
+      const year = parseInt(parts[2])
+      if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+        return new Date(year, month, day)
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -240,19 +308,9 @@ export async function fetchChecklistEnvTempData(
       .select('*')
       .order('date_utc', { ascending: false })
 
-    // Apply date filters if provided
-    // Convert EST dates to UTC for querying
-    if (startDate) {
-      const startUTC = convertESTToUTC(startDate)
-      query = query.gte('date_utc', startUTC)
-    }
-    if (endDate) {
-      // Add one day to include the end date, then convert to UTC
-      const endDateObj = new Date(`${endDate}T00:00:00`)
-      endDateObj.setDate(endDateObj.getDate() + 1)
-      const endUTC = fromZonedTime(endDateObj, EST_TIMEZONE)
-      query = query.lt('date_utc', endUTC.toISOString())
-    }
+    // Note: We don't filter by date_string in the query because string comparison
+    // doesn't work correctly across months (e.g., "DEC" < "NOV" alphabetically)
+    // We'll filter after fetching the data
 
     const { data, error } = await query
 
@@ -268,12 +326,46 @@ export async function fetchChecklistEnvTempData(
     }
 
     // Convert date_utc to EST date_string for compatibility
-    const processedData = (data || []).map((record: any) => {
+    let processedData = (data || []).map((record: any) => {
       if (record.date_utc && !record.date_string) {
         record.date_string = convertUTCToEST(record.date_utc)
       }
       return record
     })
+
+    // Filter by date_string (the date the user entered in the checklist)
+    // date_string format: "MMM-DD-YYYY" (e.g., "NOV-01-2025")
+    if (startDate || endDate) {
+      const startDateString = startDate ? formatDateMMMDDYYYY(startDate) : null
+      const endDateString = endDate ? formatDateMMMDDYYYY(endDate) : null
+      
+      // Parse filter dates for comparison
+      const startDateObj = startDateString ? parseDateString(startDateString) : null
+      const endDateObj = endDateString ? parseDateString(endDateString) : null
+      
+      processedData = processedData.filter((record: any) => {
+        if (!record.date_string) return false
+        
+        const recordDateObj = parseDateString(record.date_string)
+        if (!recordDateObj) return false
+        
+        // Compare dates
+        if (startDateObj && recordDateObj < startDateObj) return false
+        if (endDateObj && recordDateObj > endDateObj) return false
+        
+        return true
+      })
+    }
+
+    // Debug logging
+    if (startDate || endDate) {
+      console.log('Query result:', {
+        startDate,
+        endDate,
+        recordCount: processedData?.length || 0,
+        hasData: (processedData?.length || 0) > 0
+      })
+    }
 
     return processedData
   } catch (error) {

@@ -131,7 +131,7 @@ export default function DashboardLogisticaPage() {
         .from('checklist_frozen_product_dispatch')
         .select('*')
         .gte('date', `${startDate}T00:00:00Z`)
-        .lte('date', `${endDate}T23:59:59Z`)
+        .lt('date', new Date(new Date(`${endDate}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000).toISOString())
         .order('date', { ascending: false })
 
       // Apply filters

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
+import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 
 /**
  * Gets the next available number for PDF filename based on existing files for the same date
@@ -243,9 +244,29 @@ const EST_TIMEZONE = 'America/New_York'
  * @returns ISO string in UTC
  */
 function convertESTToUTC(dateStr: string): string {
-  const estDate = new Date(`${dateStr}T00:00:00`)
-  const utcDate = fromZonedTime(estDate, EST_TIMEZONE)
-  return utcDate.toISOString()
+  // Parse date string (YYYY-MM-DD) and create date at midnight EST/EDT
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const monthNum = month - 1 // JavaScript months are 0-indexed
+  
+  // Determine if date is in DST period
+  let offsetHours = -5 // EST default
+  if (monthNum >= 2 && monthNum <= 10) { // March (2) to November (10)
+    const dateObj = new Date(year, monthNum, day)
+    const marchSecondSunday = new Date(year, 2, 8) // March 8
+    marchSecondSunday.setDate(marchSecondSunday.getDate() + (7 - marchSecondSunday.getDay()))
+    const novFirstSunday = new Date(year, 10, 1) // November 1
+    novFirstSunday.setDate(novFirstSunday.getDate() + (7 - novFirstSunday.getDay()))
+    
+    if (dateObj >= marchSecondSunday && dateObj < novFirstSunday) {
+      offsetHours = -4 // EDT
+    }
+  }
+  
+  // Create date string with explicit offset (format: -05:00 or -04:00)
+  const offsetStr = `${offsetHours >= 0 ? '+' : '-'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
+  const dateWithOffset = `${dateStr}T00:00:00${offsetStr}`
+  const estDate = new Date(dateWithOffset)
+  return estDate.toISOString()
 }
 
 /**
@@ -285,19 +306,8 @@ export async function fetchChecklistMaterialsControlData(
       .select('*')
       .order('date_utc', { ascending: false })
 
-    // Apply date filters if provided
-    // Convert EST dates to UTC for querying
-    if (startDate) {
-      const startUTC = convertESTToUTC(startDate)
-      query = query.gte('date_utc', startUTC)
-    }
-    if (endDate) {
-      // Add one day to include the end date, then convert to UTC
-      const endDateObj = new Date(`${endDate}T00:00:00`)
-      endDateObj.setDate(endDateObj.getDate() + 1)
-      const endUTC = fromZonedTime(endDateObj, EST_TIMEZONE)
-      query = query.lt('date_utc', endUTC.toISOString())
-    }
+    // Note: We filter by date_string in memory because string comparison doesn't work
+    // correctly across months (e.g., "DEC" < "NOV" alphabetically)
 
     const { data, error } = await query
 
@@ -313,12 +323,59 @@ export async function fetchChecklistMaterialsControlData(
     }
 
     // Convert date_utc to EST date_string for compatibility
-    const processedData = (data || []).map((record: any) => {
+    let processedData = (data || []).map((record: any) => {
       if (record.date_utc && !record.date_string) {
         record.date_string = convertUTCToEST(record.date_utc)
       }
       return record
     })
+
+    // Filter by date_string (the date the user entered in the checklist)
+    if (startDate || endDate) {
+      const startDateString = startDate ? formatDateMMMDDYYYY(startDate) : null
+      const endDateString = endDate ? formatDateMMMDDYYYY(endDate) : null
+      
+      const MONTH_MAP: { [key: string]: number } = {
+        'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+        'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+      }
+      const parseDateString = (dateStr: string): Date | null => {
+        if (!dateStr) return null
+        try {
+          const parts = dateStr.split('-')
+          if (parts.length === 3) {
+            const month = MONTH_MAP[parts[0].toUpperCase()]
+            const day = parseInt(parts[1])
+            const year = parseInt(parts[2])
+            if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+              return new Date(year, month, day)
+            }
+          }
+          return null
+        } catch {
+          return null
+        }
+      }
+      
+      const startDateObj = startDateString ? parseDateString(startDateString) : null
+      const endDateObj = endDateString ? parseDateString(endDateString) : null
+      
+      processedData = processedData.filter((record: any) => {
+        if (!record.date_string) return false
+        const recordDateObj = parseDateString(record.date_string)
+        if (!recordDateObj) return false
+        const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+        if (startDateObj) {
+          const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+          if (recordDateOnly < startDateOnly) return false
+        }
+        if (endDateObj) {
+          const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+          if (recordDateOnly > endDateOnly) return false
+        }
+        return true
+      })
+    }
 
     return processedData
   } catch (error) {
