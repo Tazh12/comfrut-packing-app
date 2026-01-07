@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
+import { usePermissions } from '@/context/PermissionsContext'
 import Link from 'next/link'
 import { ArrowLeft, Clock, CheckCircle, User, Calendar } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -21,14 +23,48 @@ export default function MisSolicitudDetallePage() {
   const id = params.id as string
   const router = useRouter()
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const { canAccessMaintenance } = usePermissions()
 
   const [solicitud, setSolicitud] = useState<any>(null)
   const [pdfUrl, setPdfUrl] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
+  const [userFullName, setUserFullName] = useState<string | null>(null)
+
+  // Fetch user's full name from profiles
+  useEffect(() => {
+    if (!user?.id) return
+
+    const fetchUserProfile = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+      
+      if (data?.full_name) {
+        setUserFullName(data.full_name)
+      } else {
+        // Fallback: try to get name from email or user metadata
+        const email = user.email || ''
+        const nameFromEmail = email.split('@')[0]
+        const fullName = user.user_metadata?.full_name || 
+                         user.user_metadata?.name || 
+                         nameFromEmail.split('.').map((n: string) => 
+                           n.charAt(0).toUpperCase() + n.slice(1)
+                         ).join(' ')
+        setUserFullName(fullName)
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   useEffect(() => {
     const fetchSolicitud = async () => {
+      if (!user) return
+      
       setLoading(true)
       try {
         const { data, error } = await supabase
@@ -42,6 +78,18 @@ export default function MisSolicitudDetallePage() {
           router.push('/area/mantencion/solicitudes/mis')
           return
         }
+        
+        // Check if user has permission to view this solicitud
+        const hasGestionPermission = canAccessMaintenance('gestion')
+        if (!hasGestionPermission && userFullName) {
+          // User without gestion permission can only see their own solicitudes
+          if (data.solicitante !== userFullName) {
+            showToast('No tienes permiso para ver esta solicitud', 'error')
+            router.push('/area/mantencion/solicitudes/mis')
+            return
+          }
+        }
+        
         setSolicitud(data)
         
         // Parse timeline from observaciones
@@ -64,8 +112,16 @@ export default function MisSolicitudDetallePage() {
         setLoading(false)
       }
     }
-    fetchSolicitud()
-  }, [id, router, showToast])
+    
+    // Only fetch when we have user info and (if needed) userFullName
+    if (user) {
+      const hasGestionPermission = canAccessMaintenance('gestion')
+      if (hasGestionPermission || userFullName) {
+        fetchSolicitud()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user, userFullName])
 
   const parseTimeline = (sol: any): TimelineEvent[] => {
     const events: TimelineEvent[] = []

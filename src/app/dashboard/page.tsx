@@ -16,7 +16,8 @@ import {
   Sun,
   Moon,
   Monitor,
-  Palette
+  Palette,
+  AlertTriangle
 } from 'lucide-react'
 import { ChecklistStatusBadge } from '@/components/ChecklistStatusBadge'
 import { useTheme } from '@/context/ThemeContext'
@@ -51,6 +52,13 @@ const areas = [
     icon: Settings,
     path: '/area/mantencion',
     areaKey: 'mantencion'
+  },
+  {
+    name: 'Solicitudes de Acciones Preventivas/Correctivas (SAP)',
+    description: 'Gestiona acciones preventivas y correctivas',
+    icon: AlertTriangle,
+    path: '/area/sap',
+    areaKey: 'sap'
   },
   {
     name: 'Historial Global',
@@ -412,7 +420,7 @@ export default function DashboardPage() {
         e.currentTarget.style.borderColor = 'var(--card-border)'
       }}
     >
-      {area.areaKey !== 'historial' && area.areaKey !== 'logistica' && (
+      {area.areaKey !== 'historial' && area.areaKey !== 'logistica' && area.areaKey !== 'sap' && (
         <ChecklistStatusBadge area={area.areaKey} />
       )}
       <div>

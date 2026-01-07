@@ -2,12 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Wrench, ClipboardCheck, BarChart3, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertTriangle, ClipboardCheck, BarChart3, ArrowLeft, ChevronDown, ChevronUp, History, FileText } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
-import { usePermissions } from '@/context/PermissionsContext'
 
 // Definición de tipos para las tarjetas
-interface MantencionCard {
+interface SAPCard {
   title: string
   icon: any
   href: string
@@ -19,67 +18,67 @@ interface MantencionCard {
 }
 
 // Definición de secciones por rol
-interface MantencionSection {
+interface SAPSection {
   title: string
   description: string
-  cards: MantencionCard[]
+  cards: SAPCard[]
 }
 
 // Secciones organizadas por rol y flujo
-const mantencionSections: MantencionSection[] = [
+const sapSections: SAPSection[] = [
   {
     title: 'Solicitudes',
     description: 'Para todos los usuarios',
     cards: [
       {
-        title: 'Nueva solicitud',
-        icon: Wrench,
-        href: '/area/mantencion/checklist/solicitud_mtto',
-        description: 'Crea una nueva solicitud de mantenimiento.',
-        storageKey: 'checklist-solicitud-mtto-draft',
+        title: 'Nueva solicitud SAP',
+        icon: AlertTriangle,
+        href: '/area/sap/solicitudes/nueva',
+        description: 'Crea una nueva solicitud de acción preventiva o correctiva.',
+        storageKey: 'checklist-sap-nueva-draft',
         colorType: 'normal'
       },
       {
         title: 'Mis solicitudes',
         icon: ClipboardCheck,
-        href: '/area/mantencion/solicitudes/mis',
-        description: 'Revisa el estado de tus solicitudes.',
+        href: '/area/sap/solicitudes/mis',
+        description: 'Revisa el estado de tus solicitudes SAP.',
         colorType: 'normal'
       }
     ]
   },
   {
     title: 'Gestión',
-    description: 'Para planificadores y supervisores',
+    description: 'Para gerentes de QA y gerentes de planta',
     cards: [
       {
         title: 'Gestión de solicitudes',
         icon: ClipboardCheck,
-        href: '/area/mantencion/evaluacion_solicitudes',
-        description: 'Bandeja, asignación y validación de trabajos.',
+        href: '/area/sap/gestion',
+        description: 'Asigna áreas responsables y envía notificaciones por email.',
         colorType: 'normal',
-        badge: 'Planificador'
+        badge: 'Gestor'
       }
     ]
   },
   {
-    title: 'Técnicos',
-    description: 'Para personal de mantenimiento',
+    title: 'Respuestas',
+    description: 'Para personal asignado',
     cards: [
       {
-        title: 'Mis trabajos',
-        icon: Wrench,
-        href: '/area/mantencion/tecnico/mis-trabajos',
-        description: 'Trabajos asignados: programados y en ejecución.',
+        title: 'Mis asignaciones',
+        icon: FileText,
+        href: '/area/sap/respuestas/mis',
+        description: 'SAP asignadas que requieren respuesta.',
         colorType: 'normal',
-        badge: 'Técnico'
+        badge: 'Asignado'
       }
     ]
   }
 ]
 
 // Componente de tarjeta reutilizable
-function MantencionCardComponent({ card, disabled }: { card: MantencionCard; disabled?: boolean }) {
+function SAPCardComponent({ card }: { card: SAPCard }) {
   const Icon = card.icon
   const colorType = card.colorType || 'normal'
   
@@ -103,8 +102,7 @@ function MantencionCardComponent({ card, disabled }: { card: MantencionCard; dis
   
   const iconStyles = getIconStyles()
   
-  const handleCardMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
-    if (disabled) return
+  const handleCardMouseEnter = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.currentTarget.style.boxShadow = '0 10px 24px rgba(15, 23, 42, 0.10)'
     e.currentTarget.style.borderColor = iconStyles.hoverCircleBg
     // Update icon circle on card hover
@@ -116,8 +114,7 @@ function MantencionCardComponent({ card, disabled }: { card: MantencionCard; dis
     }
   }
   
-  const handleCardMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
-    if (disabled) return
+  const handleCardMouseLeave = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.currentTarget.style.boxShadow = '0 8px 18px rgba(15, 23, 42, 0.06)'
     e.currentTarget.style.borderColor = '#E2E8F0'
     // Reset icon circle on card leave
@@ -129,9 +126,10 @@ function MantencionCardComponent({ card, disabled }: { card: MantencionCard; dis
     }
   }
   
-  const cardContent = (
-    <div
-      className={`group relative p-8 rounded-lg transition-all duration-200 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer transform hover:scale-[1.01]'} focus:outline-none focus:ring-2`}
+  return (
+    <Link
+      href={card.href}
+      className="group relative p-8 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
       style={{
         backgroundColor: '#FFFFFF',
         border: '1px solid #E2E8F0',
@@ -175,16 +173,6 @@ function MantencionCardComponent({ card, disabled }: { card: MantencionCard; dis
           {card.description}
         </p>
       </div>
-    </div>
-  )
-  
-  if (disabled) {
-    return cardContent
-  }
-  
-  return (
-    <Link href={card.href}>
-      {cardContent}
     </Link>
   )
 }
@@ -240,12 +228,11 @@ function AccordionSection({
   )
 }
 
-export default function MantencionPage() {
-  const { canAccessMaintenance } = usePermissions()
+export default function SAPPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'Solicitudes': true,
     'Gestión': true,
-    'Técnicos': true
+    'Respuestas': true
   })
 
   const toggleSection = (sectionTitle: string) => {
@@ -253,21 +240,6 @@ export default function MantencionPage() {
       ...prev,
       [sectionTitle]: !prev[sectionTitle]
     }))
-  }
-
-  // Determine which cards should be disabled based on permissions
-  const getCardDisabled = (sectionTitle: string, cardTitle: string): boolean => {
-    if (sectionTitle === 'Solicitudes') {
-      // Both cards in Solicitudes require maintenance_ticket permission
-      return !canAccessMaintenance('ticket')
-    } else if (sectionTitle === 'Gestión') {
-      // Gestión section requires maintenance_gestion permission
-      return !canAccessMaintenance('gestion')
-    } else if (sectionTitle === 'Técnicos') {
-      // Técnicos section requires maintenance_tecnicos permission
-      return !canAccessMaintenance('tecnicos')
-    }
-    return false
   }
 
   return (
@@ -290,17 +262,35 @@ export default function MantencionPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <h1 className="text-2xl font-semibold mb-2" style={{ color: '#111827' }}>
-                Área de mantención
+                Solicitudes de Acciones Preventivas/Correctivas (SAP)
               </h1>
               <p className="text-sm" style={{ color: '#6B7280' }}>
-                Gestiona solicitudes de mantenimiento correctivo y su estado.
+                Gestiona acciones preventivas y correctivas asignadas a diferentes áreas.
               </p>
             </div>
             
-            {/* Dashboard button - only show if user has ticket permission */}
-            {canAccessMaintenance('ticket') && (
+            {/* Header buttons */}
+            <div className="flex gap-2">
               <Link
-                href="/area/mantencion/historial"
+                href="/area/sap/historial"
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#111827'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#F9FAFB'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#FFFFFF'
+                }}
+              >
+                <History className="h-4 w-4 mr-2" />
+                Historial
+              </Link>
+              <Link
+                href="/area/sap/dashboard"
                 className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
                 style={{
                   backgroundColor: '#FFFFFF',
@@ -315,15 +305,15 @@ export default function MantencionPage() {
                 }}
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
-                Dashboard de Solicitudes
+                Dashboard
               </Link>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Accordion Sections */}
         <div className="space-y-4">
-          {mantencionSections.map((section) => (
+          {sapSections.map((section) => (
             <AccordionSection
               key={section.title}
               title={section.title}
@@ -333,11 +323,7 @@ export default function MantencionPage() {
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {section.cards.map((card) => (
-                  <MantencionCardComponent 
-                    key={card.title} 
-                    card={card} 
-                    disabled={getCardDisabled(section.title, card.title)}
-                  />
+                  <SAPCardComponent key={card.title} card={card} />
                 ))}
               </div>
             </AccordionSection>
@@ -346,4 +332,6 @@ export default function MantencionPage() {
       </div>
     </div>
   )
-} 
+}
+
+

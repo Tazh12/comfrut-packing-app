@@ -175,6 +175,10 @@ export default function DashboardQualityPage() {
   const [availableProducts, setAvailableProducts] = useState<string[]>([])
   const [availableSkus, setAvailableSkus] = useState<string[]>([])
   const [selectedSku, setSelectedSku] = useState('')
+  // Filters for Cleanliness Control
+  const [filterNoComply, setFilterNoComply] = useState<boolean | null>(null)
+  const [filterCaution, setFilterCaution] = useState<boolean | null>(null)
+  const [filterReject, setFilterReject] = useState<boolean | null>(null)
 
   // Set default date range to last 30 days
   useEffect(() => {
@@ -185,6 +189,13 @@ export default function DashboardQualityPage() {
     setEndDate(today.toISOString().split('T')[0])
     setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
   }, [])
+
+  // Reset filters when checklist changes
+  useEffect(() => {
+    setFilterNoComply(null)
+    setFilterCaution(null)
+    setFilterReject(null)
+  }, [selectedChecklist])
 
   // Load data function
   const loadData = useCallback(async () => {
@@ -670,6 +681,19 @@ export default function DashboardQualityPage() {
           ? ((noiseAlarmEvents / totalReadings) * 100).toFixed(2)
           : '0.00'
         
+        // Noise alarm pass rate (percentage of 'Ok' readings)
+        const noiseAlarmTests = processedData.filter(p => p.noiseAlarm === 'Ok' || p.noiseAlarm === 'No comply')
+        const noiseAlarmPassed = noiseAlarmTests.filter(p => p.noiseAlarm === 'Ok').length
+        const noiseAlarmPassRate = noiseAlarmTests.length > 0
+          ? ((noiseAlarmPassed / noiseAlarmTests.length) * 100).toFixed(1)
+          : '0.0'
+        
+        // Deviation count and percentage
+        const deviationCount = deviationData.length
+        const deviationPercentage = totalReadings > 0
+          ? ((deviationCount / totalReadings) * 100).toFixed(1)
+          : '0.0'
+        
         // Sensitivity setting tracking (would need actual numeric values, using pass/fail for now)
         const sensitivityTests = processedData.filter(p => p.sensitivity === 'Ok' || p.sensitivity === 'No comply')
         const sensitivityPassed = sensitivityTests.filter(p => p.sensitivity === 'Ok').length
@@ -740,10 +764,86 @@ export default function DashboardQualityPage() {
         const failureTrendData = Array.from(failureTrendMap.values())
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         
+        // Failures by product
+        const productFailureMap = new Map<string, { product: string, total: number, failures: number }>()
+        processedData.forEach((point) => {
+          const product = point.product || 'Unknown'
+          if (!productFailureMap.has(product)) {
+            productFailureMap.set(product, { product, total: 0, failures: 0 })
+          }
+          const stats = productFailureMap.get(product)!
+          stats.total++
+          if (point.hasDeviation) {
+            stats.failures++
+          }
+        })
+        
+        const productFailureData = Array.from(productFailureMap.values())
+          .map(({ product, total, failures }) => ({
+            product,
+            total,
+            failures,
+            passRate: total > 0 ? (((total - failures) / total) * 100).toFixed(1) : '0.0',
+            failureRate: total > 0 ? ((failures / total) * 100).toFixed(1) : '0.0'
+          }))
+          .sort((a, b) => b.failures - a.failures)
+        
+        // Failures over time (daily aggregation)
+        const dailyFailureMap = new Map<string, { date: string, total: number, failures: number }>()
+        processedData.forEach((point) => {
+          const date = point.date || 'Unknown'
+          if (!dailyFailureMap.has(date)) {
+            dailyFailureMap.set(date, { date, total: 0, failures: 0 })
+          }
+          const stats = dailyFailureMap.get(date)!
+          stats.total++
+          if (point.hasDeviation) {
+            stats.failures++
+          }
+        })
+        
+        const dailyFailureData = Array.from(dailyFailureMap.values())
+          .map(({ date, total, failures }) => ({
+            date,
+            total,
+            failures,
+            passRate: total > 0 ? (((total - failures) / total) * 100).toFixed(1) : '0.0'
+          }))
+          .sort((a, b) => {
+            // Sort by date - format is "MMM-DD-YYYY" (e.g., "NOV-17-2025")
+            try {
+              const monthMap: { [key: string]: string } = {
+                'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+                'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+                'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+              }
+              const datePartsA = a.date.split('-')
+              const datePartsB = b.date.split('-')
+              if (datePartsA.length === 3 && datePartsB.length === 3) {
+                const monthA = monthMap[datePartsA[0].toUpperCase()] || '01'
+                const dayA = datePartsA[1].padStart(2, '0')
+                const yearA = datePartsA[2]
+                const isoDateA = `${yearA}-${monthA}-${dayA}`
+                
+                const monthB = monthMap[datePartsB[0].toUpperCase()] || '01'
+                const dayB = datePartsB[1].padStart(2, '0')
+                const yearB = datePartsB[2]
+                const isoDateB = `${yearB}-${monthB}-${dayB}`
+                
+                return new Date(isoDateA).getTime() - new Date(isoDateB).getTime()
+              }
+              return 0
+            } catch {
+              return 0
+            }
+          })
+        
         setChartData({
           testPiecePerformance: testPieceChartData,
           failureTrend: failureTrendData,
-          detectorFailureRates: detectorFailureRates
+          detectorFailureRates: detectorFailureRates,
+          productFailureData: productFailureData,
+          dailyFailureData: dailyFailureData
         })
         
         setDailyStats([]) // Not using daily stats table for Metal Detector anymore
@@ -775,8 +875,14 @@ export default function DashboardQualityPage() {
           rejectingArmPassRate: rejectingArmPassRate,
           noiseAlarmEvents: noiseAlarmEvents,
           noiseAlarmRate: noiseAlarmRate,
+          noiseAlarmPassRate: noiseAlarmPassRate,
           sensitivityPassRate: sensitivityPassRate,
           detectorFailureRates: detectorFailureRates,
+          
+          // Deviation metrics
+          deviationCount: deviationCount,
+          deviationPercentage: deviationPercentage,
+          totalReadings: totalReadings,
           
           // Legacy (for compatibility)
           totalRecords: finalRecords.length,
@@ -1653,6 +1759,7 @@ export default function DashboardQualityPage() {
         const elementTypeMap = new Map<string, number>()
         const productCodeMap = new Map<string, number>()
         const brandMap = new Map<string, { total: number, withFindings: number }>()
+        const skuMap = new Map<string, number>() // Track findings by SKU (using product field)
         
         let totalFindings = 0
         let totalRecords = filteredRecords.length
@@ -1685,7 +1792,7 @@ export default function DashboardQualityPage() {
             totalFindings += findingsCount
             dayData.totalFindings += findingsCount
             
-            // Count element types
+            // Count element types and track SKU findings
             record.findings?.forEach((finding: any) => {
               const elementType = finding.elementType === 'other' 
                 ? finding.otherElementType || 'Other'
@@ -1697,6 +1804,12 @@ export default function DashboardQualityPage() {
                 productCodeMap.set(finding.productCode, (productCodeMap.get(finding.productCode) || 0) + 1)
               }
             })
+            
+            // Track findings by SKU (using product field)
+            if (record.product) {
+              const currentCount = skuMap.get(record.product) || 0
+              skuMap.set(record.product, currentCount + (record.findings?.length || 0))
+            }
           }
           
           // Brand stats
@@ -1750,8 +1863,9 @@ export default function DashboardQualityPage() {
           .sort((a, b) => b.count - a.count)
           .slice(0, 10)
 
-        // Brand findings summary
+        // Brand findings summary - only brands with findings
         const brandFindingsArray = Array.from(brandMap.entries())
+          .filter(([_, data]) => data.withFindings > 0) // Only brands with findings
           .map(([brand, data]) => ({
             brand,
             total: data.total,
@@ -1761,6 +1875,15 @@ export default function DashboardQualityPage() {
               : '0.0'
           }))
           .sort((a, b) => b.withFindings - a.withFindings)
+
+        // SKU findings summary - only SKUs with findings
+        const skuFindingsArray = Array.from(skuMap.entries())
+          .filter(([_, count]) => count > 0) // Only SKUs with findings
+          .map(([sku, count]) => ({
+            sku,
+            count
+          }))
+          .sort((a, b) => b.count - a.count)
 
         setSummaryStats({
           totalRecords,
@@ -1773,6 +1896,7 @@ export default function DashboardQualityPage() {
           elementTypes: elementTypeArray,
           productCodes: productCodeArray,
           brandFindings: brandFindingsArray,
+          skuFindings: skuFindingsArray,
           topElementType: elementTypeArray[0] || { name: 'N/A', count: 0 },
           topProductCode: productCodeArray[0] || { code: 'N/A', count: 0 }
         })
@@ -3126,26 +3250,33 @@ export default function DashboardQualityPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {selectedChecklist === 'Metal Detector (PCC #1)' ? (
                 <>
+                  {/* Equipment Reliability KPIs - Moved to top */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa aprobación brazo rechazador</h3>
+                    <p className="text-2xl font-bold text-blue-600">{summaryStats.rejectingArmPassRate || '0.0'}%</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa aprobación alarma de ruido</h3>
+                    <p className="text-2xl font-bold text-yellow-600">{summaryStats.noiseAlarmPassRate || '0.0'}%</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de aprobación Sensibilidad</h3>
+                    <p className="text-2xl font-bold text-purple-600">{summaryStats.sensitivityPassRate || '0.0'}%</p>
+                  </div>
+                  
                   {/* CCP Protection KPIs */}
                   <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">% Lecturas Aprobadas</h3>
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">% de monitoreos aprobados</h3>
                     <p className="text-2xl font-bold text-green-600">{summaryStats.readingsPassRate || '0.0'}%</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {summaryStats.totalReadings || 0} lecturas totales
                     </p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Brecha Más Larga</h3>
-                    <p className="text-2xl font-bold text-orange-600">{summaryStats.longestGapFormatted || 'N/A'}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Entre verificaciones (SOP: 1h ±10min)
-                    </p>
-                  </div>
                   <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Corridas Incompletas</h3>
-                    <p className="text-2xl font-bold text-red-600">{summaryStats.runsIncompleteCount || 0}</p>
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Cantidad de desviaciones</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.deviationCount || 0}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {summaryStats.runsIncompletePercentage || '0.0'}% del total
+                      {summaryStats.deviationPercentage || '0.0'}% del total
                     </p>
                   </div>
                 </>
@@ -3243,6 +3374,13 @@ export default function DashboardQualityPage() {
                     <p className="text-2xl font-bold text-red-700">{summaryStats.totalFindings || 0}</p>
                     <p className="text-xs text-gray-600 mt-1">
                       {summaryStats.topElementType?.name || 'N/A'} más común
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-orange-700 mb-1">Hallazgo más común (tipo de elemento)</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.topElementType?.name || 'N/A'}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {summaryStats.topElementType?.count || 0} hallazgo(s)
                     </p>
                   </div>
                 </>
@@ -3615,6 +3753,77 @@ export default function DashboardQualityPage() {
                     </ResponsiveContainer>
                   </div>
                 )}
+
+                {/* Failures Over Time */}
+                {chartData.dailyFailureData && chartData.dailyFailureData.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Fallos por Fecha
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.dailyFailureData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="failures" fill="#ef4444" name="Fallos" />
+                        <Bar dataKey="total" fill="#e5e7eb" name="Total Lecturas" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Failures by Product */}
+                {chartData.productFailureData && chartData.productFailureData.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Fallos por Producto
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.productFailureData.slice(0, 10)} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis
+                          dataKey="product"
+                          type="category"
+                          stroke="#6b7280"
+                          width={150}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: any, name: string) => {
+                            if (name === 'failures') {
+                              return [`${value} fallos`, 'Fallos']
+                            }
+                            return [value, name]
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="failures" fill="#ef4444" name="Fallos" />
+                        <Bar dataKey="total" fill="#e5e7eb" name="Total Lecturas" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </>
             )}
 
@@ -3897,37 +4106,48 @@ export default function DashboardQualityPage() {
             {selectedChecklist === 'Foreign Material Findings Record' && (
               <>
                 {/* Findings Trend Chart - Highlighting Bad Things */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    Tendencia de Hallazgos / Findings Trend
-                    <span className="text-sm font-normal text-red-600 ml-2">⚠️ Hallazgos son críticos</span>
-                  </h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos (Crítico)" />
-                      <Bar dataKey="noFindings" fill="#10b981" name="Sin Hallazgos" />
-                      <Bar dataKey="totalFindings" fill="#dc2626" name="Total Hallazgos" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {summaryStats.totalFindings > 0 ? (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Tendencia de Hallazgos / Findings Trend
+                      <span className="text-sm font-normal text-red-600 ml-2">⚠️ Hallazgos son críticos</span>
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos (Crítico)" />
+                        <Bar dataKey="noFindings" fill="#10b981" name="Sin Hallazgos" />
+                        <Bar dataKey="totalFindings" fill="#dc2626" name="Total Hallazgos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Tendencia de Hallazgos / Findings Trend
+                    </h2>
+                    <div className="flex items-center justify-center h-96 text-gray-500 text-lg">
+                      Sin hallazgos con filtro seleccionado
+                    </div>
+                  </div>
+                )}
 
                 {/* Element Type Distribution */}
                 {summaryStats.elementTypes && summaryStats.elementTypes.length > 0 && (
@@ -4009,7 +4229,7 @@ export default function DashboardQualityPage() {
                 )}
 
                 {/* Brand Findings Summary */}
-                {summaryStats.brandFindings && summaryStats.brandFindings.length > 0 && (
+                {summaryStats.brandFindings && summaryStats.brandFindings.length > 0 ? (
                   <div className="bg-white p-6 rounded-lg shadow">
                     <h2 className="text-xl font-bold text-gray-900 mb-4">
                       Hallazgos por Marca / Findings by Brand
@@ -4038,6 +4258,56 @@ export default function DashboardQualityPage() {
                         <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
                       </BarChart>
                     </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Hallazgos por Marca / Findings by Brand
+                    </h2>
+                    <div className="flex items-center justify-center h-96 text-gray-500 text-lg">
+                      Sin hallazgos con filtro seleccionado
+                    </div>
+                  </div>
+                )}
+
+                {/* SKU Findings Summary */}
+                {summaryStats.skuFindings && summaryStats.skuFindings.length > 0 ? (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Hallazgos por SKU / Findings by SKU
+                    </h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={summaryStats.skuFindings}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="sku"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="count" fill="#ef4444" name="Cantidad de Hallazgos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Hallazgos por SKU / Findings by SKU
+                    </h2>
+                    <div className="flex items-center justify-center h-96 text-gray-500 text-lg">
+                      Sin hallazgos con filtro seleccionado
+                    </div>
                   </div>
                 )}
               </>
@@ -4867,26 +5137,6 @@ export default function DashboardQualityPage() {
             )}
 
             {/* Daily Statistics Tables */}
-            {/* Equipment Reliability Summary */}
-            {selectedChecklist === 'Metal Detector (PCC #1)' && summaryStats.rejectingArmPassRate && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
-                  <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Aprobación - Brazo Rechazador</h3>
-                  <p className="text-2xl font-bold text-blue-600">{summaryStats.rejectingArmPassRate || '0.0'}%</p>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-yellow-500">
-                  <h3 className="text-sm font-medium text-gray-500 mb-1">Eventos de Alarma de Ruido</h3>
-                  <p className="text-2xl font-bold text-yellow-600">{summaryStats.noiseAlarmEvents || 0}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {summaryStats.noiseAlarmRate || '0.00'}% del total
-                  </p>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
-                  <h3 className="text-sm font-medium text-gray-500 mb-1">Tasa de Aprobación - Sensibilidad</h3>
-                  <p className="text-2xl font-bold text-purple-600">{summaryStats.sensitivityPassRate || '0.0'}%</p>
-                </div>
-              </div>
-            )}
 
             {selectedChecklist === 'Metal Detector (PCC #1)' && summaryStats.deviationLog && summaryStats.deviationLog.length > 0 && (
               <div className="bg-white p-6 rounded-lg shadow">
@@ -5139,163 +5389,138 @@ export default function DashboardQualityPage() {
 
             {selectedChecklist === 'Cleanliness Control Packing' && dailyStats.length > 0 && (
               <div className="space-y-6">
-                {/* Compliance Over Time Chart */}
+                {/* Compliance Distribution Pie Chart */}
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    Cumplimiento por Fecha / Compliance by Date
+                    Distribución de Cumplimiento / Compliance Distribution
                   </h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="compliantParts"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        name="Cumplen / Comply"
-                        dot={{ r: 4 }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="nonCompliantParts"
-                        stroke="#ef4444"
-                        strokeWidth={2}
-                        name="No Cumplen / Not Comply"
-                        dot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Bioluminescence Results Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    Resultados de Bioluminescence por Fecha / Bioluminescence Results by Date
-                  </h2>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#6b7280"
-                        angle={-45}
-                        textAnchor="end"
-                        height={100}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis stroke="#6b7280" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px'
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="acceptTests" fill="#10b981" name="ACCEPT" />
-                      <Bar dataKey="cautionTests" fill="#f59e0b" name="CAUTION" />
-                      <Bar dataKey="rejectTests" fill="#ef4444" name="REJECTS" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Daily Statistics Table */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    Estadísticas Diarias / Daily Statistics
-                  </h2>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fecha / Date
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Registros / Records
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Áreas / Areas
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Partes / Parts
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Cumplen / Comply
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            No Cumplen / Not Comply
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Pruebas RLU / RLU Tests
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Tasa Cumplimiento / Compliance Rate
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyStats.map((stat: any) => (
-                          <tr key={stat.date} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {stat.date}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalRecords || 0}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalAreas || 0}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              {stat.totalParts || 0}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {stat.compliantParts || 0}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                {stat.nonCompliantParts || 0}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                              ACCEPT: {stat.acceptTests || 0} | CAUTION: {stat.cautionTests || 0} | REJECTS: {stat.rejectTests || 0}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                parseFloat(stat.complianceRate || '0') >= 95 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : parseFloat(stat.complianceRate || '0') >= 80
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {stat.complianceRate || '0.0'}%
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="flex items-center gap-6">
+                    <div className="flex-1">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Cumplen / Comply', value: summaryStats.compliantParts || 0 },
+                              { name: 'No Cumplen / Not Comply', value: summaryStats.nonCompliantParts || 0 }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={false}
+                            outerRadius={120}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            <Cell fill="#10b981" />
+                            <Cell fill="#ef4444" />
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <div className="space-y-4 p-4 border border-gray-200 rounded-lg bg-gray-50 min-w-[200px]">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }}></div>
+                            <span className="text-sm font-medium text-gray-700">Cumplen / Comply</span>
+                          </div>
+                          <p className="text-lg font-bold text-gray-900 ml-6">
+                            {summaryStats.compliantParts && summaryStats.nonCompliantParts 
+                              ? (((summaryStats.compliantParts || 0) / ((summaryStats.compliantParts || 0) + (summaryStats.nonCompliantParts || 0))) * 100).toFixed(1)
+                              : '0.0'}%
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
+                            <span className="text-sm font-medium text-gray-700">No Cumplen / Not Comply</span>
+                          </div>
+                          <p className="text-lg font-bold text-gray-900 ml-6">
+                            {summaryStats.compliantParts && summaryStats.nonCompliantParts 
+                              ? (((summaryStats.nonCompliantParts || 0) / ((summaryStats.compliantParts || 0) + (summaryStats.nonCompliantParts || 0))) * 100).toFixed(1)
+                              : '0.0'}%
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Bioluminescence Distribution Pie Chart */}
+                {summaryStats.totalBioluminescenceTests > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">
+                      Distribución de Resultados de Bioluminescence / Bioluminescence Results Distribution
+                    </h2>
+                    <div className="flex items-center gap-6">
+                      <div className="flex-1">
+                        <ResponsiveContainer width="100%" height={400}>
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'ACCEPT', value: summaryStats.acceptTests || 0 },
+                                { name: 'CAUTION', value: summaryStats.cautionTests || 0 },
+                                { name: 'REJECTS', value: summaryStats.rejectTests || 0 }
+                              ]}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={false}
+                              outerRadius={120}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              <Cell fill="#10b981" />
+                              <Cell fill="#f59e0b" />
+                              <Cell fill="#ef4444" />
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <div className="space-y-4 p-4 border border-gray-200 rounded-lg bg-gray-50 min-w-[200px]">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }}></div>
+                              <span className="text-sm font-medium text-gray-700">ACCEPT</span>
+                            </div>
+                            <p className="text-lg font-bold text-gray-900 ml-6">
+                              {summaryStats.totalBioluminescenceTests > 0
+                                ? (((summaryStats.acceptTests || 0) / (summaryStats.totalBioluminescenceTests || 1)) * 100).toFixed(1)
+                                : '0.0'}%
+                            </p>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#f59e0b' }}></div>
+                              <span className="text-sm font-medium text-gray-700">CAUTION</span>
+                            </div>
+                            <p className="text-lg font-bold text-gray-900 ml-6">
+                              {summaryStats.totalBioluminescenceTests > 0
+                                ? (((summaryStats.cautionTests || 0) / (summaryStats.totalBioluminescenceTests || 1)) * 100).toFixed(1)
+                                : '0.0'}%
+                            </p>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }}></div>
+                              <span className="text-sm font-medium text-gray-700">REJECTS</span>
+                            </div>
+                            <p className="text-lg font-bold text-gray-900 ml-6">
+                              {summaryStats.totalBioluminescenceTests > 0
+                                ? (((summaryStats.rejectTests || 0) / (summaryStats.totalBioluminescenceTests || 1)) * 100).toFixed(1)
+                                : '0.0'}%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Area Comparison Table */}
                 {summaryStats.areaComparison && summaryStats.areaComparison.length > 0 && (
@@ -5339,7 +5564,11 @@ export default function DashboardQualityPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  (area.nonCompliantParts || 0) > 0 
+                                    ? 'bg-red-100 text-red-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
                                   {area.nonCompliantParts || 0}
                                 </span>
                               </td>
@@ -5362,138 +5591,178 @@ export default function DashboardQualityPage() {
                   </div>
                 )}
 
-                {/* Monitor Comparison Table */}
-                {summaryStats.monitorComparison && summaryStats.monitorComparison.length > 0 && (
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">
-                      Cumplimiento por Monitor / Compliance by Monitor
-                    </h2>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Monitor
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Registros / Records
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Total Partes / Total Parts
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Cumplen / Comply
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              No Cumplen / Not Comply
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Tasa / Rate
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {summaryStats.monitorComparison.map((monitor: any, index: number) => (
-                            <tr key={index} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {monitor.monitor}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                {monitor.totalRecords || 0}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                                {monitor.totalParts || 0}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  {monitor.compliantParts || 0}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                  {monitor.nonCompliantParts || 0}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  parseFloat(monitor.complianceRate || '0') >= 95 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : parseFloat(monitor.complianceRate || '0') >= 80
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {monitor.complianceRate || '0.0'}%
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Compliance Distribution Pie Chart */}
+                {/* Bioluminescence Results Chart */}
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    Distribución de Cumplimiento / Compliance Distribution
+                    Resultados de Bioluminescence por Fecha / Bioluminescence Results by Date
                   </h2>
                   <ResponsiveContainer width="100%" height={400}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Cumplen / Comply', value: summaryStats.compliantParts || 0 },
-                          { name: 'No Cumplen / Not Comply', value: summaryStats.nonCompliantParts || 0 }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
-                        outerRadius={120}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#ef4444" />
-                      </Pie>
-                      <Tooltip />
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#6b7280"
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis stroke="#6b7280" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px'
+                        }}
+                      />
                       <Legend />
-                    </PieChart>
+                      <Bar dataKey="acceptTests" fill="#10b981" name="ACCEPT" />
+                      <Bar dataKey="cautionTests" fill="#f59e0b" name="CAUTION" />
+                      <Bar dataKey="rejectTests" fill="#ef4444" name="REJECTS" />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
 
-                {/* Bioluminescence Distribution Pie Chart */}
-                {summaryStats.totalBioluminescenceTests > 0 && (
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">
-                      Distribución de Resultados de Bioluminescence / Bioluminescence Results Distribution
+                {/* Daily Statistics Table */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900">
+                      Estadísticas Diarias / Daily Statistics
                     </h2>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: 'ACCEPT', value: summaryStats.acceptTests || 0 },
-                            { name: 'CAUTION', value: summaryStats.cautionTests || 0 },
-                            { name: 'REJECTS', value: summaryStats.rejectTests || 0 }
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
-                          outerRadius={120}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          <Cell fill="#10b981" />
-                          <Cell fill="#f59e0b" />
-                          <Cell fill="#ef4444" />
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setFilterNoComply(filterNoComply === true ? null : true)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          filterNoComply === true
+                            ? 'bg-red-100 text-red-800 border-2 border-red-500'
+                            : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
+                        }`}
+                      >
+                        No Cumple
+                      </button>
+                      <button
+                        onClick={() => setFilterCaution(filterCaution === true ? null : true)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          filterCaution === true
+                            ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-500'
+                            : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
+                        }`}
+                      >
+                        Caution
+                      </button>
+                      <button
+                        onClick={() => setFilterReject(filterReject === true ? null : true)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          filterReject === true
+                            ? 'bg-red-100 text-red-800 border-2 border-red-500'
+                            : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:bg-gray-200'
+                        }`}
+                      >
+                        Reject
+                      </button>
+                    </div>
                   </div>
-                )}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fecha / Date
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Registros / Records
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Áreas / Areas
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Partes / Parts
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Cumplen / Comply
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            No Cumplen / Not Comply
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Pruebas RLU / RLU Tests
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Tasa Cumplimiento / Compliance Rate
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {dailyStats.filter((stat: any) => {
+                          // Apply filters
+                          if (filterNoComply === true && (stat.nonCompliantParts || 0) === 0) {
+                            return false
+                          }
+                          if (filterCaution === true && (stat.cautionTests || 0) === 0) {
+                            return false
+                          }
+                          if (filterReject === true && (stat.rejectTests || 0) === 0) {
+                            return false
+                          }
+                          return true
+                        }).map((stat: any) => (
+                          <tr key={stat.date} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {stat.date}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalRecords || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalAreas || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                              {stat.totalParts || 0}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {stat.compliantParts || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                (stat.nonCompliantParts || 0) > 0 
+                                  ? 'bg-red-100 text-red-800' 
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {stat.nonCompliantParts || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-gray-700">ACCEPT: {stat.acceptTests || 0}</span>
+                                <span className="text-gray-400">|</span>
+                                <span className={`${(stat.cautionTests || 0) > 0 ? 'font-semibold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded' : 'text-gray-700'}`}>
+                                  CAUTION: {stat.cautionTests || 0}
+                                </span>
+                                <span className="text-gray-400">|</span>
+                                <span className={`${(stat.rejectTests || 0) > 0 ? 'font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded' : 'text-gray-700'}`}>
+                                  REJECTS: {stat.rejectTests || 0}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                parseFloat(stat.complianceRate || '0') >= 95 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : parseFloat(stat.complianceRate || '0') >= 80
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {stat.complianceRate || '0.0'}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -3,6 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import { SupabaseProvider } from '@/components/providers/SupabaseProvider'
 import { AuthProvider } from '@/context/AuthContext'
+import { PermissionsProvider } from '@/context/PermissionsContext'
 import { ToastProvider } from '@/context/ToastContext'
 import ToastUI from '@/components/ToastUI'
 import { ChecklistProvider } from '@/context/ChecklistContext'
@@ -52,15 +53,17 @@ export default function RootLayout({
         <ThemeProvider>
           <SupabaseProvider>
             <AuthProvider>
-              <ToastProvider>
-                <ChecklistProvider>
-                  <div className="min-h-screen flex flex-col">
-                    {children}
-                    <Footer />
-                  </div>
-                </ChecklistProvider>
-                <ToastUI />
-              </ToastProvider>
+              <PermissionsProvider>
+                <ToastProvider>
+                  <ChecklistProvider>
+                    <div className="min-h-screen flex flex-col">
+                      {children}
+                      <Footer />
+                    </div>
+                  </ChecklistProvider>
+                  <ToastUI />
+                </ToastProvider>
+              </PermissionsProvider>
             </AuthProvider>
           </SupabaseProvider>
         </ThemeProvider>

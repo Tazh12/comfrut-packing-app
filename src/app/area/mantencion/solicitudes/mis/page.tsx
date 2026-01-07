@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
+import { usePermissions } from '@/context/PermissionsContext'
 import Link from 'next/link'
 import { ArrowLeft, Search, X, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
@@ -25,9 +27,12 @@ type EstadoFilter = 'todos' | 'pendiente' | 'en_proceso' | 'validacion' | 'cerra
 
 export default function MisSolicitudesPage() {
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const { canAccessMaintenance } = usePermissions()
   const [allSolicitudes, setAllSolicitudes] = useState<Solicitud[]>([])
   const [results, setResults] = useState<Solicitud[]>([])
   const [loading, setLoading] = useState<boolean>(false)
+  const [userFullName, setUserFullName] = useState<string | null>(null)
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState('')
@@ -35,14 +40,53 @@ export default function MisSolicitudesPage() {
   const [criticidadFilter, setCriticidadFilter] = useState('todos')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
+  // Fetch user's full name from profiles
+  useEffect(() => {
+    if (!user?.id) return
+
+    const fetchUserProfile = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+      
+      if (data?.full_name) {
+        setUserFullName(data.full_name)
+      } else {
+        // Fallback: try to get name from email or user metadata
+        const email = user.email || ''
+        const nameFromEmail = email.split('@')[0]
+        const fullName = user.user_metadata?.full_name || 
+                         user.user_metadata?.name || 
+                         nameFromEmail.split('.').map((n: string) => 
+                           n.charAt(0).toUpperCase() + n.slice(1)
+                         ).join(' ')
+        setUserFullName(fullName)
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
+
   const fetchMisSolicitudes = async () => {
     setLoading(true)
     try {
-      // TODO: Replace with actual user from auth context
-      // For now, we'll fetch all solicitudes and filter by solicitante
-      const { data, error } = await supabase
+      // Check if user has gestion permission
+      const hasGestionPermission = canAccessMaintenance('gestion')
+      
+      // Build query
+      let query = supabase
         .from('solicitudes_mantenimiento')
         .select('id, ticket_id, fecha, hora, solicitante, zona, estado, nivel_riesgo, equipo_afectado, descripcion, observaciones')
+      
+      // If user doesn't have gestion permission, filter by their solicitante name
+      if (!hasGestionPermission && userFullName) {
+        query = query.eq('solicitante', userFullName)
+      }
+      
+      // Order by date and time
+      const { data, error } = await query
         .order('fecha', { ascending: false })
         .order('hora', { ascending: false })
 
@@ -110,8 +154,17 @@ export default function MisSolicitudesPage() {
   }
 
   useEffect(() => {
-    fetchMisSolicitudes()
-  }, [])
+    // Only fetch when we have user info and (if needed) userFullName
+    if (user) {
+      // If user has gestion permission, we can fetch immediately
+      // Otherwise, wait for userFullName to be set
+      const hasGestionPermission = canAccessMaintenance('gestion')
+      if (hasGestionPermission || userFullName) {
+        fetchMisSolicitudes()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userFullName])
 
   useEffect(() => {
     applyFilters(allSolicitudes)

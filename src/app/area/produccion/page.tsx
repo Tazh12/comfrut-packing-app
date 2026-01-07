@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { FileText, History, ArrowLeft, BarChart3, ChevronDown, ChevronUp } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
+import { usePermissions } from '@/context/PermissionsContext'
 
 // Definición de tipos para los registros
 interface RegistroCard {
@@ -31,7 +32,7 @@ const operationalChecklists: RegistroCard[] = [
 ]
 
 // Componente de tarjeta reutilizable
-function ProduccionCardComponent({ card }: { card: RegistroCard }) {
+function ProduccionCardComponent({ card, disabled }: { card: RegistroCard; disabled?: boolean }) {
   const Icon = card.icon
   const colorType = card.colorType || 'normal'
   
@@ -61,21 +62,20 @@ function ProduccionCardComponent({ card }: { card: RegistroCard }) {
   
   const iconStyles = getIconStyles()
   
-  return (
-    <Link
-      href={card.href}
-      className="group relative p-6 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
+  const cardContent = (
+    <div
+      className={`group relative p-6 rounded-lg transition-all duration-200 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer transform hover:scale-[1.01]'} focus:outline-none focus:ring-2`}
       style={{
         backgroundColor: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
         boxShadow: '0 8px 18px var(--card-shadow)',
         '--tw-ring-color': 'var(--card-hover-border)'
       } as React.CSSProperties}
-      onMouseEnter={(e) => {
+      onMouseEnter={disabled ? undefined : (e) => {
         e.currentTarget.style.boxShadow = '0 10px 24px var(--card-shadow-hover)'
         e.currentTarget.style.borderColor = 'var(--card-hover-border)'
       }}
-      onMouseLeave={(e) => {
+      onMouseLeave={disabled ? undefined : (e) => {
         e.currentTarget.style.boxShadow = '0 8px 18px var(--card-shadow)'
         e.currentTarget.style.borderColor = 'var(--card-border)'
       }}
@@ -88,12 +88,12 @@ function ProduccionCardComponent({ card }: { card: RegistroCard }) {
         <div 
           className="w-14 h-14 rounded-full flex items-center justify-center mb-2.5 transition-colors"
           style={{ backgroundColor: iconStyles.circleBg }}
-          onMouseEnter={(e) => {
+          onMouseEnter={disabled ? undefined : (e) => {
             e.currentTarget.style.backgroundColor = iconStyles.hoverCircleBg
             const icon = e.currentTarget.querySelector('svg')
             if (icon) icon.style.color = '#FFFFFF'
           }}
-          onMouseLeave={(e) => {
+          onMouseLeave={disabled ? undefined : (e) => {
             e.currentTarget.style.backgroundColor = iconStyles.circleBg
             const icon = e.currentTarget.querySelector('svg')
             if (icon) icon.style.color = iconStyles.iconColor
@@ -113,6 +113,16 @@ function ProduccionCardComponent({ card }: { card: RegistroCard }) {
           {card.description}
         </p>
       </div>
+    </div>
+  )
+  
+  if (disabled) {
+    return cardContent
+  }
+  
+  return (
+    <Link href={card.href}>
+      {cardContent}
     </Link>
   )
 }
@@ -162,7 +172,11 @@ function AccordionSection({
 }
 
 export default function ProduccionPage() {
+  const { canAccessChecklist, canAccessDashboard } = usePermissions()
   const [isOperationalExpanded, setIsOperationalExpanded] = useState(true) // Start expanded
+
+  const canAccessProductionChecklist = canAccessChecklist('production')
+  const canAccessProductionDashboard = canAccessDashboard('production')
 
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--page-bg)' }}>
@@ -192,44 +206,46 @@ export default function ProduccionPage() {
             </div>
             
             {/* Header buttons */}
-            <div className="flex gap-2">
-              <Link
-                href="/area/produccion/historial"
-                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)',
-                  color: 'var(--title-text)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
-                }}
-              >
-                <History className="h-4 w-4 mr-2" />
-                Historial
-              </Link>
-              <Link
-                href="/area/produccion/dashboard-production"
-                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)',
-                  color: 'var(--title-text)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
-                }}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Dashboard de Producción
-              </Link>
-            </div>
+            {canAccessProductionDashboard && (
+              <div className="flex gap-2">
+                <Link
+                  href="/area/produccion/historial"
+                  className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: 'var(--card-bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--title-text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                  }}
+                >
+                  <History className="h-4 w-4 mr-2" />
+                  Historial
+                </Link>
+                <Link
+                  href="/area/produccion/dashboard-production"
+                  className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: 'var(--card-bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--title-text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                  }}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Dashboard de Producción
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -243,7 +259,11 @@ export default function ProduccionPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {operationalChecklists.map((card) => (
-                <ProduccionCardComponent key={card.title} card={card} />
+                <ProduccionCardComponent 
+                  key={card.title} 
+                  card={card} 
+                  disabled={!canAccessProductionChecklist}
+                />
               ))}
             </div>
           </AccordionSection>

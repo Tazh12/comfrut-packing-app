@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { PackageCheck, FlaskConical, History, ArrowLeft, BarChart3, Search, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react'
 import { ChecklistCardStatusBadge } from '@/components/ChecklistCardStatusBadge'
+import { usePermissions } from '@/context/PermissionsContext'
 
 // Definición de tipos para los registros
 interface CalidadCard {
@@ -149,7 +150,7 @@ const inboundOutboundChecklists: CalidadCard[] = [
 const allChecklists = [...preOperationalChecklists, ...operationalChecklists, ...inboundOutboundChecklists]
 
 // Componente de tarjeta reutilizable
-function CalidadCardComponent({ card }: { card: CalidadCard }) {
+function CalidadCardComponent({ card, disabled }: { card: CalidadCard; disabled?: boolean }) {
   const Icon = card.icon
   const colorType = card.colorType || 'normal'
   
@@ -179,21 +180,20 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
   
   const iconStyles = getIconStyles()
   
-  return (
-    <Link
-      href={card.href}
-      className="group relative p-6 rounded-lg transition-all duration-200 cursor-pointer transform hover:scale-[1.01] focus:outline-none focus:ring-2"
+  const cardContent = (
+    <div
+      className={`group relative p-6 rounded-lg transition-all duration-200 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer transform hover:scale-[1.01]'} focus:outline-none focus:ring-2`}
       style={{
         backgroundColor: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
         boxShadow: '0 8px 18px var(--card-shadow)',
         '--tw-ring-color': 'var(--card-hover-border)'
       } as React.CSSProperties}
-      onMouseEnter={(e) => {
+      onMouseEnter={disabled ? undefined : (e) => {
         e.currentTarget.style.boxShadow = '0 10px 24px var(--card-shadow-hover)'
         e.currentTarget.style.borderColor = 'var(--card-hover-border)'
       }}
-      onMouseLeave={(e) => {
+      onMouseLeave={disabled ? undefined : (e) => {
         e.currentTarget.style.boxShadow = '0 8px 18px var(--card-shadow)'
         e.currentTarget.style.borderColor = 'var(--card-border)'
       }}
@@ -206,12 +206,12 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
         <div 
           className="w-14 h-14 rounded-full flex items-center justify-center mb-2.5 transition-colors"
           style={{ backgroundColor: iconStyles.circleBg }}
-          onMouseEnter={(e) => {
+          onMouseEnter={disabled ? undefined : (e) => {
             e.currentTarget.style.backgroundColor = iconStyles.hoverCircleBg
             const icon = e.currentTarget.querySelector('svg')
             if (icon) icon.style.color = '#FFFFFF'
           }}
-          onMouseLeave={(e) => {
+          onMouseLeave={disabled ? undefined : (e) => {
             e.currentTarget.style.backgroundColor = iconStyles.circleBg
             const icon = e.currentTarget.querySelector('svg')
             if (icon) icon.style.color = iconStyles.iconColor
@@ -231,6 +231,16 @@ function CalidadCardComponent({ card }: { card: CalidadCard }) {
           {card.description}
         </p>
       </div>
+    </div>
+  )
+  
+  if (disabled) {
+    return cardContent
+  }
+  
+  return (
+    <Link href={card.href}>
+      {cardContent}
     </Link>
   )
 }
@@ -280,9 +290,13 @@ function AccordionSection({
 }
 
 export default function CalidadPage() {
+  const { canAccessChecklist, canAccessDashboard } = usePermissions()
   const [isPreOperationalExpanded, setIsPreOperationalExpanded] = useState(true) // Start expanded
   const [isOperationalExpanded, setIsOperationalExpanded] = useState(true) // Start expanded
   const [isInboundOutboundExpanded, setIsInboundOutboundExpanded] = useState(false) // Start collapsed
+
+  const canAccessQualityChecklist = canAccessChecklist('quality')
+  const canAccessQualityDashboard = canAccessDashboard('quality')
 
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--page-bg)' }}>
@@ -312,44 +326,46 @@ export default function CalidadPage() {
             </div>
             
             {/* Header buttons */}
-            <div className="flex gap-2">
-              <Link
-                href="/area/calidad/historial"
-                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)',
-                  color: 'var(--title-text)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
-                }}
-              >
-                <History className="h-4 w-4 mr-2" />
-                Historial
-              </Link>
-              <Link
-                href="/area/calidad/dashboard-quality"
-                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)',
-                  color: 'var(--title-text)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--card-bg)'
-                }}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Dashboard de Calidad
-              </Link>
-            </div>
+            {canAccessQualityDashboard && (
+              <div className="flex gap-2">
+                <Link
+                  href="/area/calidad/historial"
+                  className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: 'var(--card-bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--title-text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                  }}
+                >
+                  <History className="h-4 w-4 mr-2" />
+                  Historial
+                </Link>
+                <Link
+                  href="/area/calidad/dashboard-quality"
+                  className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: 'var(--card-bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--title-text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-hover-bg, rgba(0,0,0,0.05))'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--card-bg)'
+                  }}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Dashboard de Calidad
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -363,7 +379,11 @@ export default function CalidadPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {preOperationalChecklists.map((card) => (
-                <CalidadCardComponent key={card.title} card={card} />
+                <CalidadCardComponent 
+                  key={card.title} 
+                  card={card} 
+                  disabled={!canAccessQualityChecklist}
+                />
               ))}
             </div>
           </AccordionSection>
@@ -376,7 +396,11 @@ export default function CalidadPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {operationalChecklists.map((card) => (
-                <CalidadCardComponent key={card.title} card={card} />
+                <CalidadCardComponent 
+                  key={card.title} 
+                  card={card} 
+                  disabled={!canAccessQualityChecklist}
+                />
               ))}
             </div>
           </AccordionSection>
@@ -389,7 +413,11 @@ export default function CalidadPage() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {inboundOutboundChecklists.map((card) => (
-                <CalidadCardComponent key={card.title} card={card} />
+                <CalidadCardComponent 
+                  key={card.title} 
+                  card={card} 
+                  disabled={!canAccessQualityChecklist}
+                />
               ))}
             </div>
           </AccordionSection>
