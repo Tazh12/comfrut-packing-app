@@ -886,7 +886,6 @@ export default function DashboardQualityPage() {
           
           // Legacy (for compatibility)
           totalRecords: finalRecords.length,
-          totalReadings: totalReadings,
           totalDeviations: deviationData.length
         })
         
