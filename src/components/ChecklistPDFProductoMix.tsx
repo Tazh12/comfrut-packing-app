@@ -490,7 +490,7 @@ export const ChecklistPDFProductoMixDocument = ({ pallets, metadata }: Checklist
                       {sortedItems.map((item, itemIdx) => {
                         const isEven = itemIdx % 2 === 0
                         return (
-                          <View key={item} style={[styles.fruitTableRow, isEven && styles.fruitTableRowEven]}>
+                          <View key={item} style={[styles.fruitTableRow, isEven ? styles.fruitTableRowEven : {}]}>
                             <Text style={styles.fruitTableCellFirst}>
                               {formatFieldLabel(item, '')}
                             </Text>
