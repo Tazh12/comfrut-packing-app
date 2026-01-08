@@ -214,10 +214,10 @@ function SignatureCanvas({ value, onChange, onClear, label }: SignatureCanvasPro
 interface MetalDetectorReading {
   id: number
   hour: string
-  bf: string
-  bnf: string
-  bss: string
-  sensitivity: string
+  bf: string[] // Array of 3 BF values
+  bnf: string[] // Array of 3 B.NF values
+  bss: string[] // Array of 3 B.S.S values
+  sensitivity: string // Numeric value
   noiseAlarm: string
   rejectingArm: string
   observation: string
@@ -269,7 +269,7 @@ export default function ChecklistMetalDetectorPage() {
   // Section 1: Basic Info
   const [date, setDate] = useState('')
   const [processLine, setProcessLine] = useState('')
-  const [metalDetectorId, setMetalDetectorId] = useState('')
+  const [metalDetectorId, setMetalDetectorId] = useState('CEIATHS/MS21')
   const [metalDetectorStartTime, setMetalDetectorStartTime] = useState('')
   const [metalDetectorFinishTime, setMetalDetectorFinishTime] = useState('')
   const [orden, setOrden] = useState('')
@@ -287,9 +287,9 @@ export default function ChecklistMetalDetectorPage() {
     {
       id: Date.now(),
       hour: '',
-      bf: '',
-      bnf: '',
-      bss: '',
+      bf: ['', '', ''],
+      bnf: ['', '', ''],
+      bss: ['', '', ''],
       sensitivity: '',
       noiseAlarm: '',
       rejectingArm: '',
@@ -332,7 +332,7 @@ export default function ChecklistMetalDetectorPage() {
     const today = new Date().toISOString().split('T')[0]
     setDate(today)
     setProcessLine('')
-    setMetalDetectorId('')
+    setMetalDetectorId('CEIATHS/MS21')
     setMetalDetectorStartTime('')
     setMetalDetectorFinishTime('')
     setOrden('')
@@ -340,7 +340,7 @@ export default function ChecklistMetalDetectorPage() {
     setMonitorSignature('')
     setSelectedBrand('')
     setSelectedProduct('')
-    setReadings([{ id: Date.now(), hour: '', bf: '', bnf: '', bss: '', sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+    setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
     setIsInitialSubmitted(false)
     setPdfUrl(null)
   }
@@ -362,11 +362,23 @@ export default function ChecklistMetalDetectorPage() {
       if (data.selectedBrand) setSelectedBrand(data.selectedBrand)
       if (data.selectedProduct) setSelectedProduct(data.selectedProduct)
       if (data.readings && data.readings.length > 0) {
-        setReadings(data.readings)
+        // Migrate old format to new format if needed
+        const migratedReadings = data.readings.map((r: any) => {
+          if (typeof r.bf === 'string') {
+            return {
+              ...r,
+              bf: Array.isArray(r.bf) ? r.bf : [r.bf || '', '', ''],
+              bnf: Array.isArray(r.bnf) ? r.bnf : [r.bnf || '', '', ''],
+              bss: Array.isArray(r.bss) ? r.bss : [r.bss || '', '', '']
+            }
+          }
+          return r
+        })
+        setReadings(migratedReadings)
       } else {
         const today = new Date().toISOString().split('T')[0]
         setDate(today)
-        setReadings([{ id: Date.now(), hour: '', bf: '', bnf: '', bss: '', sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+        setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
       }
     }
   )
@@ -407,8 +419,11 @@ export default function ChecklistMetalDetectorPage() {
       const today = new Date().toISOString().split('T')[0]
       setDate(today)
     }
+    if (!metalDetectorId) {
+      setMetalDetectorId('CEIATHS/MS21')
+    }
     if (readings.length === 0) {
-      setReadings([{ id: Date.now(), hour: '', bf: '', bnf: '', bss: '', sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+      setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
     }
   }, [])
 
@@ -419,9 +434,9 @@ export default function ChecklistMetalDetectorPage() {
       {
         id: Date.now(),
         hour: '',
-        bf: '',
-        bnf: '',
-        bss: '',
+        bf: ['', '', ''],
+        bnf: ['', '', ''],
+        bss: ['', '', ''],
         sensitivity: '',
         noiseAlarm: '',
         rejectingArm: '',
@@ -433,10 +448,10 @@ export default function ChecklistMetalDetectorPage() {
 
   // Check if reading has ND or No comply
   const hasDeviation = (reading: MetalDetectorReading): boolean => {
-    return reading.bf === 'ND' || 
-           reading.bnf === 'ND' || 
-           reading.bss === 'ND' || 
-           reading.sensitivity === 'No comply' || 
+    const hasBFND = reading.bf.some(val => val === 'ND')
+    const hasBNFND = reading.bnf.some(val => val === 'ND')
+    const hasBSSND = reading.bss.some(val => val === 'ND')
+    return hasBFND || hasBNFND || hasBSSND || 
            reading.noiseAlarm === 'No comply' || 
            reading.rejectingArm === 'No comply'
   }
@@ -453,6 +468,18 @@ export default function ChecklistMetalDetectorPage() {
     setReadings(readings.map(r => {
       if (r.id === id) {
         return { ...r, [field]: value }
+      }
+      return r
+    }))
+  }
+
+  // Update array field (for BF, BNF, BSS)
+  const handleArrayFieldChange = (id: number, field: 'bf' | 'bnf' | 'bss', index: number, value: string) => {
+    setReadings(readings.map(r => {
+      if (r.id === id) {
+        const newArray = [...r[field]]
+        newArray[index] = value
+        return { ...r, [field]: newArray }
       }
       return r
     }))
@@ -882,108 +909,132 @@ export default function ChecklistMetalDetectorPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Hour (indicated in equipment) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="time"
-                      value={reading.hour}
-                      onChange={(e) => handleReadingChange(reading.id, 'hour', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
+                <div className="space-y-4">
+                  {/* Hour and Sensitivity Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Hour (indicated in equipment) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={reading.hour}
+                        onChange={(e) => handleReadingChange(reading.id, 'hour', e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Sensitivity / Sensibilidad
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={reading.sensitivity}
+                        onChange={(e) => handleReadingChange(reading.id, 'sensitivity', e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter sensitivity value"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      BF
-                    </label>
-                    <select
-                      value={reading.bf}
-                      onChange={(e) => handleReadingChange(reading.id, 'bf', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="D">D</option>
-                      <option value="ND">ND</option>
-                    </select>
+                  {/* Table for BF, B.NF, B.S.S */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-300 px-3 py-2 text-left text-sm font-semibold">Test</th>
+                          <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">1</th>
+                          <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">2</th>
+                          <th className="border border-gray-300 px-3 py-2 text-center text-sm font-semibold">3</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="border border-gray-300 px-3 py-2 text-sm font-medium">BF</td>
+                          {[0, 1, 2].map((idx) => (
+                            <td key={idx} className="border border-gray-300 px-3 py-2">
+                              <select
+                                value={reading.bf[idx] || ''}
+                                onChange={(e) => handleArrayFieldChange(reading.id, 'bf', idx, e.target.value)}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="">Select</option>
+                                <option value="D">D</option>
+                                <option value="ND">ND</option>
+                              </select>
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="bg-gray-50">
+                          <td className="border border-gray-300 px-3 py-2 text-sm font-medium">B.NF</td>
+                          {[0, 1, 2].map((idx) => (
+                            <td key={idx} className="border border-gray-300 px-3 py-2">
+                              <select
+                                value={reading.bnf[idx] || ''}
+                                onChange={(e) => handleArrayFieldChange(reading.id, 'bnf', idx, e.target.value)}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="">Select</option>
+                                <option value="D">D</option>
+                                <option value="ND">ND</option>
+                              </select>
+                            </td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 px-3 py-2 text-sm font-medium">B.S.S</td>
+                          {[0, 1, 2].map((idx) => (
+                            <td key={idx} className="border border-gray-300 px-3 py-2">
+                              <select
+                                value={reading.bss[idx] || ''}
+                                onChange={(e) => handleArrayFieldChange(reading.id, 'bss', idx, e.target.value)}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="">Select</option>
+                                <option value="D">D</option>
+                                <option value="ND">ND</option>
+                              </select>
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      B.NF
-                    </label>
-                    <select
-                      value={reading.bnf}
-                      onChange={(e) => handleReadingChange(reading.id, 'bnf', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="D">D</option>
-                      <option value="ND">ND</option>
-                    </select>
-                  </div>
+                  {/* Noise Alarm and Rejecting Arm */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Noise Alarm / Alarma sonora
+                      </label>
+                      <select
+                        value={reading.noiseAlarm}
+                        onChange={(e) => handleReadingChange(reading.id, 'noiseAlarm', e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select</option>
+                        <option value="Ok">Ok</option>
+                        <option value="No comply">No comply</option>
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      B.S.S
-                    </label>
-                    <select
-                      value={reading.bss}
-                      onChange={(e) => handleReadingChange(reading.id, 'bss', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="D">D</option>
-                      <option value="ND">ND</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sensivity / Sensibilidad
-                    </label>
-                    <select
-                      value={reading.sensitivity}
-                      onChange={(e) => handleReadingChange(reading.id, 'sensitivity', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="Ok">Ok</option>
-                      <option value="No comply">No comply</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Noise Alarm / Alarma sonora
-                    </label>
-                    <select
-                      value={reading.noiseAlarm}
-                      onChange={(e) => handleReadingChange(reading.id, 'noiseAlarm', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="Ok">Ok</option>
-                      <option value="No comply">No comply</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Rejecting arm / Brazo rechazado
-                    </label>
-                    <select
-                      value={reading.rejectingArm}
-                      onChange={(e) => handleReadingChange(reading.id, 'rejectingArm', e.target.value)}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select</option>
-                      <option value="Ok">Ok</option>
-                      <option value="No comply">No comply</option>
-                    </select>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Rejecting arm / Brazo rechazado
+                      </label>
+                      <select
+                        value={reading.rejectingArm}
+                        onChange={(e) => handleReadingChange(reading.id, 'rejectingArm', e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select</option>
+                        <option value="Ok">Ok</option>
+                        <option value="No comply">No comply</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

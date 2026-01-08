@@ -13,7 +13,8 @@ import {
   PDFStyles, 
   PDFHeader2Row, 
   PDFMetaInfo, 
-  PDFFooter
+  PDFFooter,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -42,6 +43,18 @@ const styles = StyleSheet.create({
     color: '#374151',
     textTransform: 'uppercase'
   },
+  commonFieldsContainer: {
+    flexDirection: 'row',
+    marginBottom: 10
+  },
+  commonFieldsColumn: {
+    flex: 1,
+    paddingRight: 8
+  },
+  commonFieldsColumnRight: {
+    flex: 1,
+    paddingLeft: 8
+  },
   fieldRow: {
     flexDirection: 'row',
     marginBottom: 4,
@@ -50,95 +63,96 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 8,
     fontWeight: 'bold',
-    width: '40%',
+    width: '50%',
     color: '#4B5563'
   },
   fieldValue: {
     fontSize: 8,
-    width: '60%',
+    width: '50%',
     color: '#111827'
   },
-  fruitSection: {
+  fruitTable: {
     marginTop: 10,
-    marginBottom: 8,
-    padding: 8,
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 4,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden'
   },
-  fruitTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 6,
-    color: '#1F2937',
+  fruitTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#005F9E',
+    padding: 6
+  },
+  fruitTableHeaderItem: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 2
+  },
+  fruitTableHeaderItemFirst: {
+    width: '30%',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 4,
+    paddingVertical: 2
+  },
+  fruitTableRow: {
+    flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    paddingBottom: 4
+    padding: 5,
+    minHeight: 18
   },
-  fruitFieldRow: {
-    flexDirection: 'row',
-    marginBottom: 3,
-    paddingVertical: 1
+  fruitTableRowEven: {
+    backgroundColor: '#F9FAFB'
   },
-  fruitFieldLabel: {
+  fruitTableCell: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 2
+  },
+  fruitTableCellFirst: {
     fontSize: 7,
-    width: '50%',
-    color: '#6B7280'
+    color: '#111827',
+    width: '30%',
+    textAlign: 'left',
+    fontWeight: 'bold',
+    paddingLeft: 4
   },
-  fruitFieldValue: {
+  fruitTableCellNA: {
     fontSize: 7,
-    width: '50%',
+    color: '#9CA3AF'
+  },
+  pesoFrutaCell: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  pesoFrutaValue: {
+    fontSize: 7,
     color: '#111827',
     fontWeight: 'bold'
+  },
+  pesoFrutaPercentage: {
+    fontSize: 6,
+    fontWeight: 'bold',
+    marginTop: 2
+  },
+  percentageGreen: {
+    color: '#059669'
+  },
+  percentageRed: {
+    color: '#DC2626'
+  },
+  percentageGray: {
+    color: '#6B7280'
   },
   expectedBadge: {
     fontSize: 7,
     color: '#6B7280',
     marginLeft: 4
-  },
-  percentageBadge: {
-    fontSize: 7,
-    fontWeight: 'bold',
-    marginLeft: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 2
-  },
-  table: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 4,
-    marginBottom: 15
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#005F9E',
-    padding: 8,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4
-  },
-  tableHeaderText: {
-    fontSize: 8,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    flex: 1
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    padding: 6,
-    minHeight: 20
-  },
-  tableRowEven: {
-    backgroundColor: '#F9FAFB'
-  },
-  tableCell: {
-    fontSize: 7,
-    color: '#111827',
-    flex: 1
   },
   signatureBox: {
     marginTop: 10,
@@ -217,6 +231,37 @@ const formatFieldLabel = (campo: string, unidad: string): string => {
   return displayUnidad ? `${displayCampo} (${displayUnidad})` : displayCampo
 }
 
+// Helper to identify common field category
+const getCommonFieldCategory = (campo: string): 'left' | 'right' | null => {
+  const campoLower = campo.toLowerCase()
+  if (campoLower.includes('hora')) return 'left'
+  if (campoLower.includes('temperatura pulpa') || campoLower.includes('temp de la pulpa')) return 'left'
+  if (campoLower.includes('brix')) return 'left'
+  if (campoLower.includes('codigo pallet') || campoLower.includes('código pallet') || campoLower.includes('código barra pallet')) return 'left'
+  if (campoLower.includes('observaciones')) return 'left'
+  if (campoLower.includes('peso bolsa') || campoLower.includes('peso caja')) return 'right'
+  if (campoLower === 'ph' || campoLower.includes('ph')) return 'right'
+  if (campoLower.includes('codigo caja') || campoLower.includes('código caja')) return 'right'
+  return null
+}
+
+// Helper to get order priority for common fields
+const getCommonFieldOrder = (campo: string, category: 'left' | 'right'): number => {
+  const campoLower = campo.toLowerCase()
+  if (category === 'left') {
+    if (campoLower.includes('hora')) return 1
+    if (campoLower.includes('temperatura pulpa') || campoLower.includes('temp de la pulpa')) return 2
+    if (campoLower.includes('brix')) return 3
+    if (campoLower.includes('codigo pallet') || campoLower.includes('código pallet') || campoLower.includes('código barra pallet')) return 4
+    if (campoLower.includes('observaciones')) return 5
+  } else if (category === 'right') {
+    if (campoLower.includes('peso bolsa') || campoLower.includes('peso caja')) return 1
+    if (campoLower === 'ph' || campoLower.includes('ph')) return 2
+    if (campoLower.includes('codigo caja') || campoLower.includes('código caja')) return 3
+  }
+  return 999 // Unknown fields go to the end
+}
+
 export const ChecklistPDFProductoMixDocument = ({ pallets, metadata }: ChecklistPDFProductoMixProps) => {
   if (!pallets || pallets.length === 0) return null
 
@@ -282,109 +327,204 @@ export const ChecklistPDFProductoMixDocument = ({ pallets, metadata }: Checklist
             {group.map((pallet, palletIndex) => {
               const globalPalletIndex = pageIndex * palletsPerPage + palletIndex
               
+              // Separate common fields into left and right columns and sort them
+              const leftCommonFields = pallet.commonFields
+                .filter((f: any) => !f.campo.includes('Temperatura Sala') && getCommonFieldCategory(f.campo) === 'left')
+                .sort((a: any, b: any) => {
+                  const orderA = getCommonFieldOrder(a.campo, 'left')
+                  const orderB = getCommonFieldOrder(b.campo, 'left')
+                  return orderA - orderB
+                })
+              const rightCommonFields = pallet.commonFields
+                .filter((f: any) => !f.campo.includes('Temperatura Sala') && getCommonFieldCategory(f.campo) === 'right')
+                .sort((a: any, b: any) => {
+                  const orderA = getCommonFieldOrder(a.campo, 'right')
+                  const orderB = getCommonFieldOrder(b.campo, 'right')
+                  return orderA - orderB
+                })
+              
+              // Get all fruits (up to 5)
+              const fruits = Object.keys(pallet.fieldsByFruit).slice(0, 5)
+              
+              // Collect all unique items/defects across all fruits
+              const allItems = new Set<string>()
+              fruits.forEach(fruit => {
+                const fields = pallet.fieldsByFruit[fruit] || []
+                fields.forEach((f: any) => {
+                  allItems.add(f.campo)
+                })
+              })
+              const sortedItems = Array.from(allItems).sort()
+              
+              // Calculate percentages for each fruit
+              const pesoBolsa = pallet.values['Peso Bolsa (gr)'] || pallet.values['Peso Bolsa']
+              const fruitPercentages: Record<string, { percentage: number | null; isValid: boolean | null; expected: number | null }> = {}
+              
+              fruits.forEach(fruit => {
+                const expectedPercentage = pallet.expectedCompositions?.[fruit]
+                const pesoFrutaKey = `Peso Fruta ${fruit}`
+                const pesoFruta = pallet.values[pesoFrutaKey]
+                
+                let percentage: number | null = null
+                let isValid: boolean | null = null
+                
+                if (pesoBolsa && pesoFruta) {
+                  const pesoBolsaNum = parseFloat(pesoBolsa.toString().replace(/[^\d.]/g, ''))
+                  const pesoFrutaNum = parseFloat(pesoFruta.toString().replace(/[^\d.]/g, ''))
+                  if (!isNaN(pesoBolsaNum) && !isNaN(pesoFrutaNum) && pesoBolsaNum > 0) {
+                    percentage = (pesoFrutaNum / pesoBolsaNum) * 100
+                  }
+                }
+                
+                if (percentage !== null && expectedPercentage !== null && expectedPercentage !== undefined) {
+                  const expectedPct = expectedPercentage * 100
+                  isValid = Math.abs(percentage - expectedPct) <= 5
+                }
+                
+                fruitPercentages[fruit] = {
+                  percentage,
+                  isValid,
+                  expected: expectedPercentage !== null && expectedPercentage !== undefined ? expectedPercentage * 100 : null
+                }
+              })
+              
               return (
                 <View key={pallet.id} style={styles.palletSection}>
                   <Text style={styles.palletTitle}>Pallet #{globalPalletIndex + 1}</Text>
                   
-                  {/* Common Fields */}
-                  {pallet.commonFields && pallet.commonFields.length > 0 && (
+                  {/* Common Fields - Two Columns */}
+                  {(leftCommonFields.length > 0 || rightCommonFields.length > 0) && (
                     <View style={{ marginBottom: 10 }}>
                       <Text style={styles.commonFieldsTitle}>Campos Comunes</Text>
-                      {pallet.commonFields
-                        .filter((f: any) => !f.campo.includes('Temperatura Sala'))
-                        .map((f: any, i: number) => {
-                          const value = pallet.values[f.campo] || ''
-                          const label = formatFieldLabel(f.campo, f.unidad || '')
-                          return (
-                            <View key={i} style={styles.fieldRow}>
-                              <Text style={styles.fieldLabel}>{label}:</Text>
-                              <Text style={styles.fieldValue}>{value}</Text>
-                            </View>
-                          )
-                        })}
+                      <View style={styles.commonFieldsContainer}>
+                        {/* Left Column */}
+                        <View style={styles.commonFieldsColumn}>
+                          {leftCommonFields.map((f: any, i: number) => {
+                            const value = pallet.values[f.campo] || ''
+                            const label = formatFieldLabel(f.campo, f.unidad || '')
+                            return (
+                              <View key={i} style={styles.fieldRow}>
+                                <Text style={styles.fieldLabel}>{label}:</Text>
+                                <Text style={styles.fieldValue}>{value}</Text>
+                              </View>
+                            )
+                          })}
+                        </View>
+                        
+                        {/* Right Column */}
+                        <View style={styles.commonFieldsColumnRight}>
+                          {rightCommonFields.map((f: any, i: number) => {
+                            const value = pallet.values[f.campo] || ''
+                            const label = formatFieldLabel(f.campo, f.unidad || '')
+                            return (
+                              <View key={i} style={styles.fieldRow}>
+                                <Text style={styles.fieldLabel}>{label}:</Text>
+                                <Text style={styles.fieldValue}>{value}</Text>
+                              </View>
+                            )
+                          })}
+                        </View>
+                      </View>
                     </View>
                   )}
 
-                  {/* Fruit Sections */}
-                  {Object.entries(pallet.fieldsByFruit).map(([agrupacion, fields]) => {
-                    const expectedPercentage = pallet.expectedCompositions?.[agrupacion]
-                    const pesoFrutaKey = `Peso Fruta ${agrupacion}`
-                    const pesoFruta = pallet.values[pesoFrutaKey]
-                    const pesoBolsa = pallet.values['Peso Bolsa (gr)'] || pallet.values['Peso Bolsa']
-                    
-                    // Calculate percentage
-                    let percentage: number | null = null
-                    let isValid: boolean | null = null
-                    if (pesoBolsa && pesoFruta) {
-                      const pesoBolsaNum = parseFloat(pesoBolsa.toString().replace(/[^\d.]/g, ''))
-                      const pesoFrutaNum = parseFloat(pesoFruta.toString().replace(/[^\d.]/g, ''))
-                      if (!isNaN(pesoBolsaNum) && !isNaN(pesoFrutaNum) && pesoBolsaNum > 0) {
-                        percentage = (pesoFrutaNum / pesoBolsaNum) * 100
-                      }
-                    }
-                    if (percentage !== null && expectedPercentage !== null && expectedPercentage !== undefined) {
-                      // expectedPercentage comes as decimal (e.g., 0.35)
-                      const expectedPct = expectedPercentage * 100
-                      isValid = Math.abs(percentage - expectedPct) <= 5
-                    }
-
-                    return (
-                      <View key={agrupacion} style={styles.fruitSection}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                          <Text style={styles.fruitTitle}>{agrupacion}</Text>
-                          {expectedPercentage !== null && (
-                            <Text style={styles.expectedBadge}>
-                              (Esperado: {(expectedPercentage * 100).toFixed(1)}%)
-                            </Text>
-                          )}
+                  {/* Fruits Table */}
+                  {fruits.length > 0 && (
+                    <View style={styles.fruitTable}>
+                      {/* Table Header */}
+                      <View style={styles.fruitTableHeader}>
+                        <View style={styles.fruitTableHeaderItemFirst}>
+                          <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#FFFFFF' }}>Item</Text>
                         </View>
-                        
-                        {/* Peso Fruta */}
-                        {pesoFruta && (
-                          <View style={styles.fruitFieldRow}>
-                            <Text style={styles.fruitFieldLabel}>Peso Fruta (gr):</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={styles.fruitFieldValue}>{pesoFruta}</Text>
-                              {percentage !== null && (
-                                <Text
-                                  style={[
-                                    styles.percentageBadge,
-                                    {
-                                      color:
-                                        isValid === null
-                                          ? '#6B7280' // gray when no expected %
-                                          : isValid
-                                            ? '#059669' // green
-                                            : '#DC2626' // red
-                                    }
-                                  ]}
-                                >
-                                  {percentage.toFixed(1)}%
-                                </Text>
-                              )}
-                            </View>
+                        {fruits.map((fruit, idx) => (
+                          <View key={idx} style={styles.fruitTableHeaderItem}>
+                            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center' }}>
+                              {fruit}
+                            </Text>
+                            {fruitPercentages[fruit]?.expected !== null && (
+                              <Text style={{ fontSize: 6, fontWeight: 'normal', color: '#FFFFFF', textAlign: 'center', marginTop: 2 }}>
+                                (Esp: {fruitPercentages[fruit]?.expected?.toFixed(1)}%)
+                              </Text>
+                            )}
                           </View>
-                        )}
-                        
-                        {/* Other fruit fields */}
-                        {(fields as any[]).map((f: any, i: number) => {
-                          const fieldKey = `${agrupacion}-${f.campo}`
-                          const value = pallet.values[fieldKey] || ''
-                          const label = formatFieldLabel(f.campo, f.unidad || '')
+                        ))}
+                      </View>
+                      
+                      {/* Peso Fruta Row */}
+                      <View style={[styles.fruitTableRow, styles.fruitTableRowEven]}>
+                        <Text style={styles.fruitTableCellFirst}>Peso Fruta (gr)</Text>
+                        {fruits.map((fruit, idx) => {
+                          const pesoFrutaKey = `Peso Fruta ${fruit}`
+                          const pesoFruta = pallet.values[pesoFrutaKey]
+                          const pctInfo = fruitPercentages[fruit]
+                          
                           return (
-                            <View key={i} style={styles.fruitFieldRow}>
-                              <Text style={styles.fruitFieldLabel}>{label}:</Text>
-                              <Text style={styles.fruitFieldValue}>{value}</Text>
+                            <View key={idx} style={styles.fruitTableCell}>
+                              {pesoFruta ? (
+                                <View style={styles.pesoFrutaCell}>
+                                  <Text style={styles.pesoFrutaValue}>{pesoFruta}</Text>
+                                  {pctInfo?.percentage !== null && (
+                                    <Text
+                                      style={[
+                                        styles.pesoFrutaPercentage,
+                                        pctInfo.isValid === null
+                                          ? styles.percentageGray
+                                          : pctInfo.isValid
+                                            ? styles.percentageGreen
+                                            : styles.percentageRed
+                                      ]}
+                                    >
+                                      {pctInfo.percentage.toFixed(1)}%
+                                    </Text>
+                                  )}
+                                </View>
+                              ) : (
+                                <Text style={styles.fruitTableCellNA}>N/A</Text>
+                              )}
                             </View>
                           )
                         })}
                       </View>
-                    )
-                  })}
+                      
+                      {/* Other Items Rows */}
+                      {sortedItems.map((item, itemIdx) => {
+                        const isEven = itemIdx % 2 === 0
+                        return (
+                          <View key={item} style={[styles.fruitTableRow, isEven && styles.fruitTableRowEven]}>
+                            <Text style={styles.fruitTableCellFirst}>
+                              {formatFieldLabel(item, '')}
+                            </Text>
+                            {fruits.map((fruit, fruitIdx) => {
+                              const fieldKey = `${fruit}-${item}`
+                              const value = pallet.values[fieldKey] || ''
+                              return (
+                                <View key={fruitIdx} style={styles.fruitTableCell}>
+                                  {value ? (
+                                    <Text style={{ fontSize: 7, color: '#111827' }}>{value}</Text>
+                                  ) : (
+                                    <Text style={styles.fruitTableCellNA}>N/A</Text>
+                                  )}
+                                </View>
+                              )
+                            })}
+                          </View>
+                        )
+                      })}
+                    </View>
+                  )}
                 </View>
               )
             })}
           </View>
+
+          {/* Validation Section - Only on last page */}
+          {pageIndex === palletGroups.length - 1 && (
+            <PDFValidationBlock
+              data={{
+                signature: undefined
+              }}
+            />
+          )}
 
           <PDFFooter 
             pageNumber={pageIndex + 1} 

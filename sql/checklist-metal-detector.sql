@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS public.checklist_metal_detector (
     [
       {
         "hour": "08:30",
-        "bf": "D" or "ND",
-        "bnf": "D" or "ND",
-        "bss": "D" or "ND",
-        "sensitivity": "Ok" or "No comply",
+        "bf": ["D" or "ND", "D" or "ND", "D" or "ND"], // Array of 3 BF values
+        "bnf": ["D" or "ND", "D" or "ND", "D" or "ND"], // Array of 3 B.NF values
+        "bss": ["D" or "ND", "D" or "ND", "D" or "ND"], // Array of 3 B.S.S values
+        "sensitivity": "Numeric value", // Numeric sensitivity value
         "noiseAlarm": "Ok" or "No comply",
         "rejectingArm": "Ok" or "No comply",
         "observation": "Text description if deviation",

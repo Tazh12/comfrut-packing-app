@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
 import { Plus, Pencil } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { ChecklistPDFMonoproductoLink } from '@/components/ChecklistPDFMonoproducto'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistPDFMonoproductoDocument } from '@/components/ChecklistPDFMonoproducto'
 import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
 import { DeleteDraftButton } from '@/components/DeleteDraftButton'
+import { uploadChecklistPDF, insertChecklistMonoproducto } from '@/lib/supabase/checklistMonoproducto'
+import { formatDateMMMDDYYYY, formatDateForFilename } from '@/lib/date-utils'
 
 export default function MonoproductoChecklistPage() {
   // Campos de formulario
@@ -34,13 +34,13 @@ export default function MonoproductoChecklistPage() {
   // Pallets dynamic fields and forms
   const [fields, setFields] = useState<{ campo: string; unidad: string }[]>([])
   const [pallets, setPallets] = useState<
-    { id: number; collapsed: boolean; values: Record<string, string> }[]
+    { id: number; collapsed: boolean; values: Record<string, string>; hour: string }[]
   >([])
 
-  const [finalized, setFinalized] = useState(false)
-  const [pdfGenerated, setPdfGenerated] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
 
-  const router = useRouter()
   // Refs para inputs dinámicos de pallets
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -56,8 +56,8 @@ export default function MonoproductoChecklistPage() {
     setPallets([])
     setFields([])
     setErrorMessage('')
-    setFinalized(false)
-    setPdfGenerated(false)
+    setIsSubmitted(false)
+    setPdfUrl(null)
   }
 
   // Persistence hook
@@ -71,9 +71,9 @@ export default function MonoproductoChecklistPage() {
       selectedBrand, 
       selectedMaterial, 
       selectedSku,
-      pallets: pallets.map(p => ({ id: p.id, collapsed: p.collapsed, values: p.values }))
+      pallets: pallets.map(p => ({ id: p.id, collapsed: p.collapsed, values: p.values, hour: p.hour }))
     },
-    finalized,
+    isSubmitted,
     (data) => {
       if (data.orderNumber) setOrderNumber(data.orderNumber)
       if (data.date) setDate(data.date)
@@ -84,7 +84,8 @@ export default function MonoproductoChecklistPage() {
       if (data.selectedSku) setSelectedSku(data.selectedSku)
       if (data.pallets && Array.isArray(data.pallets)) {
         // Restore pallets - note: fields will be reloaded based on SKU
-        setPallets(data.pallets)
+        // Ensure hour field exists for each pallet
+        setPallets(data.pallets.map((p: any) => ({ ...p, hour: p.hour || '' })))
       }
     }
   )
@@ -179,12 +180,40 @@ export default function MonoproductoChecklistPage() {
 
   const addPallet = () => {
     if (!selectedSku || pallets.length >= 50) return
+    // Get current time in HH:MM format
+    const now = new Date()
+    const currentHour = now.getHours().toString().padStart(2, '0')
+    const currentMinute = now.getMinutes().toString().padStart(2, '0')
+    const presetHour = `${currentHour}:${currentMinute}`
+    
     const newPallet = {
       id: Date.now(),
       collapsed: false,
       values: fields.reduce((acc, f) => ({ ...acc, [f.campo]: '' }), {} as Record<string, string>),
+      hour: presetHour,
     }
     setPallets(prev => [...prev, newPallet])
+  }
+
+
+  const handleFieldChange = (id: number, campo: string, value: string) => {
+    setPallets(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, values: { ...p.values, [campo]: value } }
+          : p
+      )
+    )
+  }
+
+  const handleHourChange = (id: number, hour: string) => {
+    setPallets(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, hour }
+          : p
+      )
+    )
   }
 
   const finalizePallet = (id: number) => {
@@ -199,22 +228,46 @@ export default function MonoproductoChecklistPage() {
     )
   }
 
-  const handleFieldChange = (id: number, campo: string, value: string) => {
-    setPallets(prev =>
-      prev.map(p =>
-        p.id === id
-          ? { ...p, values: { ...p.values, [campo]: value } }
-          : p
-      )
-    )
+  // Check if pallet is complete
+  const isPalletComplete = (pallet: typeof pallets[0]): boolean => {
+    if (!pallet.hour?.trim()) return false
+    for (const field of fields) {
+      if (!pallet.values[field.campo]?.trim()) {
+        return false
+      }
+    }
+    return true
   }
 
-  const handleFinalizeAll = async () => {
-    // Limpiar errores previos en header y pallets
+  // Get pallet identifier (codigo_barra or codigo_caja)
+  const getPalletIdentifier = (pallet: typeof pallets[0]): string => {
+    // Check all possible variations of the identifier fields
+    const possibleFields = [
+      'Código Barra Pallet',
+      'codigo_barra',
+      'Código Caja',
+      'codigo_caja',
+      'Código Barra',
+      'codigo barra pallet',
+      'Código caja'
+    ]
+    
+    for (const field of possibleFields) {
+      if (pallet.values[field]?.trim()) {
+        return pallet.values[field].trim()
+      }
+    }
+    
+    return ''
+  }
+
+  // Validate form - following footbath control pattern
+  const validateForm = (): boolean => {
     setErrorMessage('')
     Object.values(headerRefs.current).forEach(el => el?.classList.remove('border-red-500'))
     Object.values(inputRefs.current).forEach(el => el?.classList.remove('border-red-500'))
-    // 1. Validar campos del encabezado
+
+    // Validate header fields
     const headerValues: Record<string, string> = {
       orderNumber,
       date,
@@ -236,14 +289,30 @@ export default function MonoproductoChecklistPage() {
         const msg = 'Por favor completa todos los campos del encabezado.'
         setErrorMessage(msg)
         showToast(msg, 'error')
-        return
+        return false
       }
     }
-    // 2. Validar campos de todos los pallets
+
+    // Validate pallets exist
+    if (pallets.length === 0) {
+      const msg = 'Debes agregar al menos un pallet.'
+      setErrorMessage(msg)
+      showToast(msg, 'error')
+      return false
+    }
+
+    // Validate all pallet fields
     let firstPalletIndex = -1
     let missingField = ''
     for (let i = 0; i < pallets.length; i++) {
       const p = pallets[i]
+      // Check hour
+      if (!p.hour?.trim()) {
+        firstPalletIndex = i
+        missingField = 'hora'
+        break
+      }
+      // Check all fields
       for (const field of fields) {
         if (!p.values[field.campo]?.trim()) {
           firstPalletIndex = i
@@ -254,8 +323,13 @@ export default function MonoproductoChecklistPage() {
       if (firstPalletIndex !== -1) break
     }
     if (firstPalletIndex !== -1) {
-      expandPallet(pallets[firstPalletIndex].id)
-      const key = `${pallets[firstPalletIndex].id}-${missingField}`
+      // Expand the pallet if it's collapsed
+      if (pallets[firstPalletIndex].collapsed) {
+        expandPallet(pallets[firstPalletIndex].id)
+      }
+      const key = missingField === 'hora' 
+        ? `hour-${pallets[firstPalletIndex].id}`
+        : `${pallets[firstPalletIndex].id}-${missingField}`
       const inputEl = inputRefs.current[key]
       if (inputEl) {
         inputEl.classList.add('border-red-500')
@@ -265,10 +339,10 @@ export default function MonoproductoChecklistPage() {
       const msg = 'Falta completar campos en los pallets.'
       setErrorMessage(msg)
       showToast(msg, 'error')
-      return
+      return false
     }
-    // 3. Finalización: habilitar generación de PDF
-    setFinalized(true)
+
+    return true
   }
 
   const handleDownloadPDF = async () => {
@@ -330,6 +404,10 @@ export default function MonoproductoChecklistPage() {
         doc.setFontSize(10)
         doc.text(`Pallet #${p + i + 1}`, x + 5, by)
         by += 14
+        // Hour field first
+        const hour = pl.hour || ''
+        doc.text(`Hora: ${hour}`, x + 5, by)
+        by += 12
         // Campos del pallet: código de barra y caja primero
         const ordered = ['codigo_barra', 'codigo_caja', ...fields.map(f => f.campo).filter(c => c !== 'codigo_barra' && c !== 'codigo_caja')]
         ordered.forEach(f => {
@@ -356,6 +434,10 @@ export default function MonoproductoChecklistPage() {
     palletsData.forEach((pallet, idx) => {
       doc.text(`Pallet #${idx + 1}`, 10, y)
       y += 6
+      // Hour field first
+      const hour = pallet.hour || ''
+      doc.text(`Hora: ${hour}`, 10, y)
+      y += 6
       fields.forEach(field => {
         const val = pallet.values[field.campo]
         doc.text(`${field.campo}: ${val}`, 10, y)
@@ -370,99 +452,78 @@ export default function MonoproductoChecklistPage() {
   // Función para sanear textos para filenames
   const sanitize = (text: string) => text.replace(/[^a-zA-Z0-9_-]/g, '_')
 
-  const handleExit = async () => {
+  // Handle form submission - following footbath control pattern
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+
+    if (!validateForm()) {
+      return
+    }
+
+    setIsSubmitting(true)
+
     try {
-      // 1. Generar y validar PDF Blob usando nuevo componente
-      const blob = await pdf(
+      // Prepare form data for PDF
+      const formData = {
+        pallets: pallets.map(p => ({
+          id: p.id,
+          hour: p.hour || '',
+          values: p.values
+        })),
+        metadata: pdfMetadata
+      }
+
+      // Generate PDF
+      showToast('Generating PDF...', 'info')
+      const pdfBlob = await pdf(
         <ChecklistPDFMonoproductoDocument pallets={pallets} metadata={pdfMetadata} />
       ).toBlob()
-      if (!(blob instanceof Blob) || blob.size === 0) {
-        const msg = 'Error al generar PDF.'
-        setErrorMessage(msg)
-        showToast(msg, 'error')
-        return
-      }
-      const pdfBlob = blob
-      // Validar enlace de descarga
-      const testLink = document.createElement('a')
-      testLink.href = URL.createObjectURL(pdfBlob)
-      testLink.download = 'test.pdf'
-      if (!testLink.href) {
-        const msg = 'No se pudo crear enlace de descarga.'
-        setErrorMessage(msg)
-        showToast(msg, 'error')
-        return
-      }
-      // 2. Subir PDF a nuevo bucket 'checklistcalidad'
-      // Usar la fecha ingresada por el usuario (date) como base, con fallback a fecha del sistema
-      const dateStr = date || new Date().toISOString().split('T')[0]
-      const fileName = `${sanitize(dateStr)}-${sanitize(selectedMaterial)}-${sanitize(orderNumber)}.pdf`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('checklistcalidad')
-        .upload(fileName, pdfBlob, {
-          contentType: 'application/pdf',
-          upsert: true,
-        })
-      if (uploadError) {
-        console.error('Error uploading PDF:', uploadError?.message || uploadError)
-        console.error('uploadError.message:', uploadError.message)
-        console.error('uploadError.statusCode:', (uploadError as any).statusCode)
-        console.error('uploadError.name:', uploadError.name)
-        console.error('uploadError full object:', uploadError)
-        alert('No se pudo subir el PDF.')
-        return
-      }
-      const { data: urlData } = supabase.storage.from('checklistcalidad').getPublicUrl(fileName)
-      const url_pdf = urlData?.publicUrl ?? ''
 
-      // 4. Verificar autenticación antes de guardar
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) {
-        console.error('User not authenticated, aborting save:', authError)
-        alert('Usuario no autenticado. Por favor inicia sesión.')
-        return
-      }
-      // 5. Insertar cada pallet en Supabase con datos validados
-      for (const pallet of pallets) {
-        // Excluir collapsed y extraer valores de fields
-        const { collapsed, values, id: pallet_id } = pallet
-        const dataToInsert = {
-          orden_fabricacion: orderNumber,
-          fecha: date,
-          jefe_linea: lineManager,
-          control_calidad: qualityControl,
-          cliente: selectedBrand,
-          producto: selectedMaterial,
-          sku: selectedSku,
-          pallet_id,
-          ...values,
-          url_pdf,
-        }
-        console.log('Data to insert:', dataToInsert)
-        // Filtrar campos no existentes en la tabla
-        const { url_pdf: _urlPdf, ...filteredData } = dataToInsert
-        console.log('Filtered data for insert:', filteredData)
-        const { data: insertData, error: insertError } = await supabase
-          .from('checklist_calidad_monoproducto')
-          .insert([filteredData])
-        if (insertError) {
-          console.error('Error saving record:', {
-            message: insertError.message,
-            code: insertError.code,
-            details: insertError.details,
-            hint: insertError.hint,
-            error: insertError
-          })
-          alert(`Error saving record: ${insertError.message}`)
-          return
-        }
+      // Create filename
+      const dateForFilename = formatDateForFilename(date, false)
+      const now = new Date()
+      const hours = now.getHours().toString().padStart(2, '0')
+      const minutes = now.getMinutes().toString().padStart(2, '0')
+      const seconds = now.getSeconds().toString().padStart(2, '0')
+      const timeStr = `${hours}${minutes}${seconds}`
+      const filename = `${dateForFilename}-${timeStr}-Mono-Product-${sanitize(orderNumber)}.pdf`
+
+      // Upload PDF to Supabase Storage
+      showToast('Uploading PDF to storage...', 'info')
+      const uploadedPdfUrl = await uploadChecklistPDF(pdfBlob, filename)
+
+      // Prepare data for database - store all pallets in single record as JSONB
+      const dbData = {
+        date_string: formatDateMMMDDYYYY(date),
+        orden_fabricacion: orderNumber,
+        jefe_linea: lineManager,
+        control_calidad: qualityControl,
+        cliente: selectedBrand,
+        producto: selectedMaterial,
+        sku: selectedSku,
+        pallets: formData.pallets,
+        pdf_url: uploadedPdfUrl
       }
 
-      // 6. Redirigir al dashboard
-      router.push('/dashboard')
-    } catch (err) {
-      console.error('Unexpected error in handleExit:', err)
-      alert('Hubo un error inesperado. Revisa consola.')
+      // Save to Supabase database
+      showToast('Saving to database...', 'info')
+      await insertChecklistMonoproducto(dbData)
+
+      // Set PDF URL for viewing
+      setPdfUrl(uploadedPdfUrl)
+      setIsSubmitted(true)
+
+      // Clear localStorage after successful submission
+      clearDraft()
+
+      showToast('Checklist submitted successfully!', 'success')
+    } catch (error) {
+      console.error('Error submitting checklist:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      showToast(`Error submitting checklist: ${errorMessage}`, 'error')
+      alert(`Error submitting checklist: ${errorMessage}`)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -478,214 +539,318 @@ export default function MonoproductoChecklistPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* Botón Volver al Dashboard y Delete */}
-        <div className="flex justify-between items-start mb-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <span className="mr-2">←</span>
-            <span>Volver</span>
-          </Link>
-          <DeleteDraftButton 
-            storageKey="checklist-monoproducto-draft"
-            checklistName="Checklist Monoproducto"
-            onReset={resetForm}
-          />
-        </div>
-        {/* Título principal */}
-        <h1 className="text-2xl font-semibold text-gray-900 text-center">
-          Quality control of freezing fruit process / Control de calidad del proceso de congelado de frutas
-        </h1>
-        {/* Subtítulo con código de checklist */}
-        <p className="text-sm text-gray-600 text-center mb-6">CF/PC-PG-ASC-006-RG001</p>
-        {/* Mensaje de error visible */}
-        {errorMessage && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
-            <p className="text-red-500 text-sm">{errorMessage}</p>
-          </div>
-        )}
-        {/* Orden de fabricación */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Orden de fabricación</label>
-          <input
-            ref={el => { headerRefs.current['orderNumber'] = el }}
-            type="text"
-            value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Fecha */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Fecha</label>
-          <input
-            ref={el => { headerRefs.current['date'] = el }}
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Jefe de línea */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Jefe de línea</label>
-          <input
-            ref={el => { headerRefs.current['lineManager'] = el }}
-            type="text"
-            value={lineManager}
-            onChange={(e) => setLineManager(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Control de calidad */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Control de calidad</label>
-          <input
-            ref={el => { headerRefs.current['qualityControl'] = el }}
-            type="text"
-            value={qualityControl}
-            onChange={(e) => setQualityControl(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Cliente (Brand) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Cliente</label>
-          <select
-            ref={el => { headerRefs.current['selectedBrand'] = el }}
-            value={selectedBrand}
-            onChange={(e) => setSelectedBrand(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">Selecciona un cliente</option>
-            {brands.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Producto (Material) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Producto</label>
-          <select
-            value={selectedMaterial}
-            onChange={(e) => setSelectedMaterial(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
-            disabled={!selectedBrand}
-          >
-            <option value="">Selecciona un producto</option>
-            {materials.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* SKU */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">SKU</label>
-          <input
-            type="text"
-            value={selectedSku}
-            readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md"
-          />
-        </div>
-
-        {/* Agregar Pallet */}
-        <button
-          onClick={addPallet}
-          disabled={pallets.length >= 50}
-          className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar Pallet
-        </button>
-
-        {/* Formularios de pallets */}
-        {pallets.map((pallet, index) => (
-          <div id={`pallet-${index}`} key={pallet.id} className="border p-4 rounded-md mb-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-medium">Pallet #{index + 1}</h2>
-              {pallet.collapsed && (
-                <button
-                  onClick={() => expandPallet(pallet.id)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <Pencil className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-            {!pallet.collapsed && (
-              <>
-                <div className="mt-4 grid grid-cols-1 gap-4">
-                  {fields.map((field) => (
-                    <div key={field.campo}>
-                      <label className="block text-sm font-medium text-gray-700">
-                        {field.campo}
-                      </label>
-                      <div className="mt-1 flex">
-                        <input
-                          ref={(el) => { inputRefs.current[`${pallet.id}-${field.campo}`] = el }}
-                          type="text"
-                          value={pallet.values[field.campo] || ''}
-                          onChange={(e) =>
-                            handleFieldChange(pallet.id, field.campo, e.target.value)
-                          }
-                          className="block w-full px-3 py-2 border border-gray-300 rounded-md"
-                          placeholder={field.unidad}
-                        />
-                        <span className="ml-2 text-gray-500">{field.unidad}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 text-right">
-                  <button
-                    onClick={() => finalizePallet(pallet.id)}
-                    className="text-sm text-blue-500 hover:underline"
-                  >
-                    Finalizar pallet
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-
-        {/* Botón Finalizar total */}
-        {!finalized && pallets.length > 0 && (
-          <div className="mt-6">
-            {errorMessage && <p className="text-red-600 mb-2">{errorMessage}</p>}
-            <button
-              onClick={handleFinalizeAll}
-              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex flex-col items-center"
-            >
-              <span>Finalize</span>
-              <span className="text-xs opacity-90">Finalizar</span>
-            </button>
-          </div>
-        )}
+    <div className="max-w-4xl mx-auto py-8 px-4">
+      <div className="mb-4 flex justify-between items-start">
+        <Link href="/area/calidad" className="inline-flex items-center text-gray-600 hover:text-gray-900">
+          <span className="mr-2">←</span>
+          Volver
+        </Link>
+        <DeleteDraftButton 
+          storageKey="checklist-monoproducto-draft"
+          checklistName="Checklist Monoproducto"
+          onReset={resetForm}
+        />
       </div>
 
+      <h1 className="text-3xl font-bold mb-2 text-center">
+        Quality control of freezing fruit process / Control de calidad del proceso de congelado de frutas
+      </h1>
+      <p className="text-center text-sm text-gray-500 mb-6">CF/PC-PG-ASC-006-RG001</p>
+
+      {!isSubmitted && (
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Section 1: Basic Info */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">🧩 Section 1 – Basic Info / Información Básica</h2>
+          {/* Mensaje de error visible */}
+          {errorMessage && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+              <p className="text-red-500 text-sm">{errorMessage}</p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Orden de fabricación */}
+            <div>
+              <label htmlFor="orderNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                Orden de fabricación <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="orderNumber"
+                ref={el => { headerRefs.current['orderNumber'] = el }}
+                type="text"
+                value={orderNumber}
+                onChange={(e) => setOrderNumber(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="date"
+                ref={el => { headerRefs.current['date'] = el }}
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+
+            {/* Jefe de línea */}
+            <div>
+              <label htmlFor="lineManager" className="block text-sm font-medium text-gray-700 mb-1">
+                Jefe de línea <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="lineManager"
+                ref={el => { headerRefs.current['lineManager'] = el }}
+                type="text"
+                value={lineManager}
+                onChange={(e) => setLineManager(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+
+            {/* Control de calidad */}
+            <div>
+              <label htmlFor="qualityControl" className="block text-sm font-medium text-gray-700 mb-1">
+                Control de calidad <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="qualityControl"
+                ref={el => { headerRefs.current['qualityControl'] = el }}
+                type="text"
+                value={qualityControl}
+                onChange={(e) => setQualityControl(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+
+            {/* Cliente (Brand) */}
+            <div>
+              <label htmlFor="selectedBrand" className="block text-sm font-medium text-gray-700 mb-1">
+                Cliente <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="selectedBrand"
+                ref={el => { headerRefs.current['selectedBrand'] = el }}
+                value={selectedBrand}
+                onChange={(e) => setSelectedBrand(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Selecciona un cliente</option>
+                {brands.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Producto (Material) */}
+            <div>
+              <label htmlFor="selectedMaterial" className="block text-sm font-medium text-gray-700 mb-1">
+                Producto <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="selectedMaterial"
+                value={selectedMaterial}
+                onChange={(e) => setSelectedMaterial(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={!selectedBrand}
+                required
+              >
+                <option value="">Selecciona un producto</option>
+                {materials.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* SKU */}
+            <div>
+              <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
+                SKU <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="sku"
+                type="text"
+                value={selectedSku}
+                readOnly
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md shadow-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Pallets */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">📦 Section 2 – Pallets / Pallets</h2>
+            <button
+              type="button"
+              onClick={addPallet}
+              disabled={pallets.length >= 50}
+              className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar Pallet
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {pallets.map((pallet, index) => {
+              const isComplete = isPalletComplete(pallet)
+              const identifier = getPalletIdentifier(pallet)
+              const palletTitle = identifier 
+                ? `Pallet #${index + 1} - ${identifier}`
+                : `Pallet #${index + 1}`
+              
+              return (
+                <div key={pallet.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Collapsed Header */}
+                  {pallet.collapsed ? (
+                    <div
+                      className="flex justify-between items-center p-4 cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+                      onClick={() => expandPallet(pallet.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-medium text-gray-700">
+                          {palletTitle}
+                          {!isComplete && (
+                            <span className="ml-2 text-amber-600 text-sm font-normal">⚠ Incompleto</span>
+                          )}
+                        </h3>
+                        {pallet.hour && (
+                          <span className="text-sm text-gray-500">Hora: {pallet.hour}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          expandPallet(pallet.id)
+                        }}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <Pencil className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-white">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-medium text-gray-700">
+                          {palletTitle}
+                          {!isComplete && (
+                            <span className="ml-2 text-amber-600 text-sm font-normal">⚠ Incompleto</span>
+                          )}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium text-gray-700">Hora:</label>
+                          <input
+                            ref={(el) => { inputRefs.current[`hour-${pallet.id}`] = el }}
+                            type="time"
+                            value={pallet.hour || ''}
+                            onChange={(e) => handleHourChange(pallet.id, e.target.value)}
+                            className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        {fields.map((field) => (
+                          <div key={field.campo}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.campo} <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex">
+                              <input
+                                ref={(el) => { inputRefs.current[`${pallet.id}-${field.campo}`] = el }}
+                                type="text"
+                                value={pallet.values[field.campo] || ''}
+                                onChange={(e) =>
+                                  handleFieldChange(pallet.id, field.campo, e.target.value)
+                                }
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                placeholder={field.unidad}
+                                required
+                              />
+                              {field.unidad && (
+                                <span className="ml-2 text-gray-500 self-center">{field.unidad}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => finalizePallet(pallet.id)}
+                          className="text-sm text-blue-500 hover:text-blue-700 hover:underline"
+                        >
+                          Finalizar pallet
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex flex-col items-center"
+          >
+            {isSubmitting ? (
+              'Submitting...'
+            ) : (
+              <>
+                <span>Submit Checklist</span>
+                <span className="text-xs opacity-90">Enviar Checklist</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+      )}
+
       {/* Success Message */}
-      {finalized && (
+      {isSubmitted && pdfUrl && (
         <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
           <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex flex-col items-center">
-              <ChecklistPDFMonoproductoLink pallets={pallets} metadata={pdfMetadata} />
-            </div>
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
+            </a>
+            <a
+              href={pdfUrl}
+              download
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
+            </a>
             <Link
               href="/area/calidad"
-              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center justify-center"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
             >
               <span>Back to Quality</span>
               <span className="text-xs opacity-90">Volver a Calidad</span>

@@ -499,8 +499,15 @@ export default function DashboardQualityPage() {
         
         finalRecords.forEach((record: any) => {
           record.readings?.forEach((reading: any, readingIndex: number) => {
-            const hasDeviation = reading.bf === 'ND' || reading.bnf === 'ND' || reading.bss === 'ND' ||
-                                 reading.sensitivity === 'No comply' || reading.noiseAlarm === 'No comply' ||
+            // Handle both old format (string) and new format (array)
+            const bfArray = Array.isArray(reading.bf) ? reading.bf : [reading.bf || '']
+            const bnfArray = Array.isArray(reading.bnf) ? reading.bnf : [reading.bnf || '']
+            const bssArray = Array.isArray(reading.bss) ? reading.bss : [reading.bss || '']
+            
+            const hasDeviation = bfArray.some((val: string) => val === 'ND') || 
+                                 bnfArray.some((val: string) => val === 'ND') || 
+                                 bssArray.some((val: string) => val === 'ND') ||
+                                 reading.noiseAlarm === 'No comply' ||
                                  reading.rejectingArm === 'No comply'
             
             // Parse datetime for gap calculations
@@ -532,13 +539,18 @@ export default function DashboardQualityPage() {
               }
             }
             
+            // Format arrays for display
+            const bfDisplay = Array.isArray(reading.bf) ? reading.bf.join(', ') : (reading.bf || '')
+            const bnfDisplay = Array.isArray(reading.bnf) ? reading.bnf.join(', ') : (reading.bnf || '')
+            const bssDisplay = Array.isArray(reading.bss) ? reading.bss.join(', ') : (reading.bss || '')
+            
             const readingData = {
               date: record.date_string,
               hour: reading.hour || '',
               datetime: readingDateTime,
-              bf: reading.bf || '',
-              bnf: reading.bnf || '',
-              bss: reading.bss || '',
+              bf: bfDisplay,
+              bnf: bnfDisplay,
+              bss: bssDisplay,
               sensitivity: reading.sensitivity || '',
               noiseAlarm: reading.noiseAlarm || '',
               rejectingArm: reading.rejectingArm || '',
@@ -562,9 +574,9 @@ export default function DashboardQualityPage() {
             if (hasDeviation) {
               // Determine which test piece failed
               let testPieceFailed = 'Other'
-              if (reading.bf === 'ND') testPieceFailed = 'BF'
-              else if (reading.bnf === 'ND') testPieceFailed = 'B.NF'
-              else if (reading.bss === 'ND') testPieceFailed = 'B.S.S'
+              if (bfArray.some((val: string) => val === 'ND')) testPieceFailed = 'BF'
+              else if (bnfArray.some((val: string) => val === 'ND')) testPieceFailed = 'B.NF'
+              else if (bssArray.some((val: string) => val === 'ND')) testPieceFailed = 'B.S.S'
               
               deviationData.push({
                 ...readingData,

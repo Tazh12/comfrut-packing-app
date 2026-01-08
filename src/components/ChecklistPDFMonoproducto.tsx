@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
 })
 
 interface ChecklistPDFMonoproductoProps {
-  pallets: { id: number; values: Record<string, string> }[]
+  pallets: { id: number; values: Record<string, string>; hour?: string }[]
   metadata: {
     date: string
     ordenFabricacion: string
@@ -133,6 +133,15 @@ export const ChecklistPDFMonoproductoDocument = ({ pallets, metadata }: Checklis
               {group.map((_, idx) => (
                 <Text style={styles.colPallet} key={idx}>
                   Pallet #{pageIndex * 3 + idx + 1}
+                </Text>
+              ))}
+            </View>
+            {/* Hour row - first row */}
+            <View style={[styles.tableRow, styles.tableRowEven]}>
+              <Text style={[styles.colItemHeader, { color: '#111827', fontWeight: 'bold' }]}>Hora</Text>
+              {group.map((p, ci) => (
+                <Text style={styles.colPalletValue} key={ci}>
+                  {p.hour || ''}
                 </Text>
               ))}
             </View>

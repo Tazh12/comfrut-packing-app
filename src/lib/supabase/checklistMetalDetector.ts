@@ -94,10 +94,10 @@ export interface ChecklistMetalDetectorData {
   monitor_signature: string
   readings: Array<{
     hour: string
-    bf: string
-    bnf: string
-    bss: string
-    sensitivity: string
+    bf: string | string[] // Can be string (old format) or array of 3 values (new format)
+    bnf: string | string[] // Can be string (old format) or array of 3 values (new format)
+    bss: string | string[] // Can be string (old format) or array of 3 values (new format)
+    sensitivity: string // Numeric value
     noiseAlarm: string
     rejectingArm: string
     observation: string

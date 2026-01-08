@@ -79,15 +79,15 @@ const styles = StyleSheet.create({
     fontSize: 7
   },
   cellBF: {
-    width: 40,
+    width: 80,
     fontSize: 7
   },
   cellBNF: {
-    width: 45,
+    width: 80,
     fontSize: 7
   },
   cellBSS: {
-    width: 45,
+    width: 80,
     fontSize: 7
   },
   cellSensitivity: {
@@ -162,10 +162,10 @@ export interface ChecklistMetalDetectorPDFProps {
     section2: {
       readings: Array<{
         hour: string
-        bf: string
-        bnf: string
-        bss: string
-        sensitivity: string
+        bf: string[] // Array of 3 BF values
+        bnf: string[] // Array of 3 B.NF values
+        bss: string[] // Array of 3 B.S.S values
+        sensitivity: string // Numeric value
         noiseAlarm: string
         rejectingArm: string
         observation: string
@@ -231,17 +231,28 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
           <View style={styles.table}>
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderText, styles.cellHour]}>Hour</Text>
-              <Text style={[styles.tableHeaderText, styles.cellBF]}>BF</Text>
-              <Text style={[styles.tableHeaderText, styles.cellBNF]}>B.NF</Text>
-              <Text style={[styles.tableHeaderText, styles.cellBSS]}>B.S.S</Text>
+              <Text style={[styles.tableHeaderText, styles.cellBF]}>BF (1, 2, 3)</Text>
+              <Text style={[styles.tableHeaderText, styles.cellBNF]}>B.NF (1, 2, 3)</Text>
+              <Text style={[styles.tableHeaderText, styles.cellBSS]}>B.S.S (1, 2, 3)</Text>
               <Text style={[styles.tableHeaderText, styles.cellSensitivity]}>Sensitivity</Text>
               <Text style={[styles.tableHeaderText, styles.cellNoiseAlarm]}>Noise Alarm</Text>
               <Text style={[styles.tableHeaderText, styles.cellRejectingArm]}>Rejecting Arm</Text>
             </View>
             {data.section2.readings.map((reading, index) => {
-              const hasDeviation = reading.bf === 'ND' || reading.bnf === 'ND' || reading.bss === 'ND' || 
-                                   reading.sensitivity === 'No comply' || reading.noiseAlarm === 'No comply' || 
+              // Migrate old format to new format if needed
+              const bfArray = Array.isArray(reading.bf) ? reading.bf : [reading.bf || '', '', '']
+              const bnfArray = Array.isArray(reading.bnf) ? reading.bnf : [reading.bnf || '', '', '']
+              const bssArray = Array.isArray(reading.bss) ? reading.bss : [reading.bss || '', '', '']
+              
+              const hasDeviation = bfArray.some(val => val === 'ND') || 
+                                   bnfArray.some(val => val === 'ND') || 
+                                   bssArray.some(val => val === 'ND') || 
+                                   reading.noiseAlarm === 'No comply' || 
                                    reading.rejectingArm === 'No comply'
+              
+              const bfDisplay = bfArray.filter(Boolean).length > 0 ? bfArray.join(', ') : '-'
+              const bnfDisplay = bnfArray.filter(Boolean).length > 0 ? bnfArray.join(', ') : '-'
+              const bssDisplay = bssArray.filter(Boolean).length > 0 ? bssArray.join(', ') : '-'
               
               return (
                 <React.Fragment key={index}>
@@ -250,9 +261,9 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
                     index % 2 === 0 ? styles.tableRowEven : {}
                   ]}>
                     <Text style={[styles.tableCell, styles.cellHour]}>{reading.hour || '-'}</Text>
-                    <Text style={[styles.tableCell, styles.cellBF]}>{reading.bf || '-'}</Text>
-                    <Text style={[styles.tableCell, styles.cellBNF]}>{reading.bnf || '-'}</Text>
-                    <Text style={[styles.tableCell, styles.cellBSS]}>{reading.bss || '-'}</Text>
+                    <Text style={[styles.tableCell, styles.cellBF]}>{bfDisplay}</Text>
+                    <Text style={[styles.tableCell, styles.cellBNF]}>{bnfDisplay}</Text>
+                    <Text style={[styles.tableCell, styles.cellBSS]}>{bssDisplay}</Text>
                     <Text style={[styles.tableCell, styles.cellSensitivity]}>{reading.sensitivity || '-'}</Text>
                     <Text style={[styles.tableCell, styles.cellNoiseAlarm]}>{reading.noiseAlarm || '-'}</Text>
                     <Text style={[styles.tableCell, styles.cellRejectingArm]}>{reading.rejectingArm || '-'}</Text>
