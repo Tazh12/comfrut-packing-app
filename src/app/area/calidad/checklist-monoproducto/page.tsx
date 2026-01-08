@@ -419,7 +419,6 @@ export default function MonoproductoChecklistPage() {
     }
     // 4. Descargar PDF
     doc.save('checklist_monoproducto.pdf')
-    setPdfGenerated(true)
     clearDraft()
   }
 
