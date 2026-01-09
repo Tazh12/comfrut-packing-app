@@ -143,18 +143,37 @@ export default function MonoproductoChecklistPage() {
   useEffect(() => {
     if (selectedSku) {
       const fetchFields = async () => {
-        console.log('Consultando agrupación para SKU:', selectedSku.trim())
-        const { data: compData, error: compError } = await supabase
+        const skuTrimmed = selectedSku.trim()
+        console.log('Consultando agrupación para SKU:', skuTrimmed)
+        
+        // Try exact match first
+        let { data: compData, error: compError } = await supabase
           .from('composicion_productos')
           .select('agrupacion')
-          .ilike('sku', `%${selectedSku.trim()}%`)
+          .eq('sku', skuTrimmed)
+        
+        // If no exact match, try partial match
+        if (!compData || compData.length === 0) {
+          const { data: compDataPartial, error: compErrorPartial } = await supabase
+            .from('composicion_productos')
+            .select('agrupacion')
+            .ilike('sku', `%${skuTrimmed}%`)
+          
+          if (!compErrorPartial && compDataPartial && compDataPartial.length > 0) {
+            compData = compDataPartial
+            compError = compErrorPartial
+          }
+        }
+        
         if (compError) {
           console.error('Error fetching agrupacion', compError)
+          showToast('Error al buscar la agrupación del producto', 'error')
           setFields([])
           return
         }
         if (!compData || !Array.isArray(compData) || compData.length === 0) {
-          console.error('No agrupacion found', compData)
+          console.error('No agrupacion found for SKU:', skuTrimmed)
+          showToast(`No se encontró agrupación para el SKU: ${skuTrimmed}. Verifica que el producto esté configurado correctamente.`, 'error')
           setFields([])
           return
         }
@@ -166,6 +185,7 @@ export default function MonoproductoChecklistPage() {
           .eq('agrupacion', agrupacion)
         if (camposError || !camposData) {
           console.error('Error fetching campos', camposError)
+          showToast('Error al cargar los campos del producto', 'error')
           setFields([])
           return
         }
@@ -176,10 +196,17 @@ export default function MonoproductoChecklistPage() {
       setFields([])
       setPallets([])
     }
-  }, [selectedSku])
+  }, [selectedSku, showToast])
 
   const addPallet = () => {
     if (!selectedSku || pallets.length >= 50) return
+    
+    // Check if fields are loaded
+    if (!fields || fields.length === 0) {
+      showToast('No se pueden agregar pallets. Los campos del producto no están disponibles. Verifica que el SKU tenga una agrupación configurada.', 'error')
+      return
+    }
+    
     // Get current time in HH:MM format
     const now = new Date()
     const currentHour = now.getHours().toString().padStart(2, '0')
