@@ -593,11 +593,91 @@ export default function HistorialPage() {
           return
         }
         
+        // Expand pallets into separate rows - one row per pallet
+        const allRows: any[][] = []
+        const allFieldNames = new Set<string>()
+        
+        // First pass: collect all possible field names from all pallets
+        data.forEach((record: any) => {
+          if (Array.isArray(record.pallets)) {
+            record.pallets.forEach((pallet: any) => {
+              if (pallet.values && typeof pallet.values === 'object') {
+                Object.keys(pallet.values).forEach(key => allFieldNames.add(key))
+              }
+            })
+          }
+        })
+        
+        // Build headers: metadata columns + pallet hour + all pallet fields
+        const headers = [
+          'id',
+          'fecha',
+          'date_string',
+          'orden_fabricacion',
+          'jefe_linea',
+          'control_calidad',
+          'cliente',
+          'producto',
+          'sku',
+          'pallet_id',
+          'hora',
+          ...Array.from(allFieldNames).sort()
+        ]
+        allRows.push(headers)
+        
+        // Second pass: create one row per pallet
+        data.forEach((record: any) => {
+          const pallets = Array.isArray(record.pallets) ? record.pallets : []
+          
+          if (pallets.length === 0) {
+            // No pallets - add one row with metadata only
+            const row = [
+              record.id || '',
+              record.fecha || record.date_string || '',
+              record.date_string || '',
+              record.orden_fabricacion || '',
+              record.jefe_linea || '',
+              record.control_calidad || '',
+              record.cliente || '',
+              record.producto || '',
+              record.sku || '',
+              '', // pallet_id
+              '', // hora
+              ...Array.from(allFieldNames).map(() => '') // Empty values for all pallet fields
+            ]
+            allRows.push(row)
+          } else {
+            // One row per pallet
+            pallets.forEach((pallet: any) => {
+              const palletId = pallet.id || ''
+              const palletHour = pallet.hour || ''
+              const palletValues = pallet.values || {}
+              
+              // Build row: metadata + pallet hour + pallet values
+              const row = [
+                record.id || '',
+                record.fecha || record.date_string || '',
+                record.date_string || '',
+                record.orden_fabricacion || '',
+                record.jefe_linea || '',
+                record.control_calidad || '',
+                record.cliente || '',
+                record.producto || '',
+                record.sku || '',
+                palletId,
+                palletHour,
+                ...Array.from(allFieldNames).map(fieldName => palletValues[fieldName] || '')
+              ]
+              allRows.push(row)
+            })
+          }
+        })
+        
         const fileName = selected === 'Checklist Monoproducto' 
           ? `checklist_monoproducto_${orden}`
           : `checklist_mix_${orden}`
         
-        exportToFile(data, fileName, format, 'Checklist')
+        exportToFile(allRows, fileName, format, 'Checklist')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       } else if (selected === 'Foreign Material Findings Record') {
         // Export Foreign Material Findings Record data
@@ -1107,22 +1187,88 @@ export default function HistorialPage() {
       const allRows: any[][] = []
       let readingCounter = 1 // Global counter for reading numbers across all records
       
+      // Pre-process: Collect all field names for Monoproducto/Mix Producto before processing
+      let monoproductoFieldNames: string[] = []
+      if (selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') {
+        const allFieldNames = new Set<string>()
+        results.forEach((r: any) => {
+          if (Array.isArray(r.pallets)) {
+            r.pallets.forEach((pallet: any) => {
+              if (pallet.values && typeof pallet.values === 'object') {
+                Object.keys(pallet.values).forEach(key => allFieldNames.add(key))
+              }
+            })
+          }
+        })
+        monoproductoFieldNames = Array.from(allFieldNames).sort()
+        
+        // Build headers: metadata columns + pallet hour + all pallet fields
+        const headers = [
+          'id',
+          'fecha',
+          'date_string',
+          'orden_fabricacion',
+          'jefe_linea',
+          'control_calidad',
+          'cliente',
+          'producto',
+          'sku',
+          'pallet_id',
+          'hora',
+          ...monoproductoFieldNames
+        ]
+        allRows.push(headers)
+      }
+      
       // Process each result based on checklist type - using same logic as handleExportData
       for (const record of results) {
         if (selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') {
-          // Simple record export - use all fields
-          if (allRows.length === 0) {
-            // Add headers on first iteration
-            const headers = Object.keys(record)
-            allRows.push(headers)
+          // Expand pallets into separate rows - one row per pallet
+          const pallets = Array.isArray(record.pallets) ? record.pallets : []
+          
+          // Create one row per pallet
+          if (pallets.length === 0) {
+            // No pallets - add one row with metadata only
+            const row = [
+              record.id || '',
+              record.fecha || record.date_string || '',
+              record.date_string || '',
+              record.orden_fabricacion || '',
+              record.jefe_linea || '',
+              record.control_calidad || '',
+              record.cliente || '',
+              record.producto || '',
+              record.sku || '',
+              '', // pallet_id
+              '', // hora
+              ...monoproductoFieldNames.map(() => '') // Empty values for all pallet fields
+            ]
+            allRows.push(row)
+          } else {
+            // One row per pallet
+            pallets.forEach((pallet: any) => {
+              const palletId = pallet.id || ''
+              const palletHour = pallet.hour || ''
+              const palletValues = pallet.values || {}
+              
+              // Build row: metadata + pallet hour + pallet values
+              const row = [
+                record.id || '',
+                record.fecha || record.date_string || '',
+                record.date_string || '',
+                record.orden_fabricacion || '',
+                record.jefe_linea || '',
+                record.control_calidad || '',
+                record.cliente || '',
+                record.producto || '',
+                record.sku || '',
+                palletId,
+                palletHour,
+                ...monoproductoFieldNames.map(fieldName => palletValues[fieldName] || '')
+              ]
+              allRows.push(row)
+            })
           }
-          const row = Object.keys(record).map(key => {
-            const value = record[key]
-            if (value === null || value === undefined) return ''
-            if (typeof value === 'object') return JSON.stringify(value)
-            return value
-          })
-          allRows.push(row)
         } else if (selected === 'Process Environmental Temperature Control') {
           // Export Temp Checklist data - one row per reading
           if (allRows.length === 0) {

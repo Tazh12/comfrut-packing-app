@@ -82,6 +82,7 @@ export async function uploadChecklistPDF(
  */
 export interface ChecklistMonoproductoData {
   date_string: string // Format: MMM-DD-YYYY
+  date_utc?: string // ISO timestamp string (YYYY-MM-DDTHH:mm:ss.sssZ) - optional, will be calculated from date_string if not provided
   orden_fabricacion: string
   jefe_linea: string
   control_calidad: string
@@ -117,8 +118,38 @@ export async function insertChecklistMonoproducto(
       throw new Error('database/empty-data: Data is empty or undefined')
     }
 
+    // Convert date_string (MMM-DD-YYYY) to UTC timestamp if date_utc is not provided
+    let dateUtc = data.date_utc
+    if (!dateUtc && data.date_string) {
+      try {
+        // Parse MMM-DD-YYYY format
+        const monthMap: Record<string, string> = {
+          'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+          'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+        }
+        const parts = data.date_string.split('-')
+        if (parts.length === 3) {
+          const [month, day, year] = parts
+          const monthNum = monthMap[month.toUpperCase()] || '01'
+          // Create date at midnight UTC
+          const dateStr = `${year}-${monthNum}-${day.padStart(2, '0')}T00:00:00.000Z`
+          dateUtc = new Date(dateStr).toISOString()
+        }
+      } catch (error) {
+        console.error('Error converting date_string to date_utc:', error)
+        // Fallback to current time if conversion fails
+        dateUtc = new Date().toISOString()
+      }
+    }
+    
+    // If still no date_utc, use current time as fallback
+    if (!dateUtc) {
+      dateUtc = new Date().toISOString()
+    }
+
     console.log('Inserting checklist_calidad_monoproducto record:', {
       date_string: data.date_string,
+      date_utc: dateUtc,
       orden_fabricacion: data.orden_fabricacion,
       cliente: data.cliente,
       producto: data.producto,
@@ -130,6 +161,7 @@ export async function insertChecklistMonoproducto(
     // Insert record - store pallets as JSONB
     const insertData: any = {
       date_string: data.date_string,
+      date_utc: dateUtc,
       orden_fabricacion: data.orden_fabricacion,
       jefe_linea: data.jefe_linea,
       control_calidad: data.control_calidad,

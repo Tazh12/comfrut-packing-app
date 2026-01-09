@@ -491,9 +491,14 @@ export default function MonoproductoChecklistPage() {
       showToast('Uploading PDF to storage...', 'info')
       const uploadedPdfUrl = await uploadChecklistPDF(pdfBlob, filename)
 
+      // Convert user's date (YYYY-MM-DD) to UTC timestamp at midnight
+      // This ensures the date filter works correctly based on the user's selected date
+      const dateUtc = date ? new Date(`${date}T00:00:00.000Z`).toISOString() : new Date().toISOString()
+
       // Prepare data for database - store all pallets in single record as JSONB
       const dbData = {
         date_string: formatDateMMMDDYYYY(date),
+        date_utc: dateUtc,
         orden_fabricacion: orderNumber,
         jefe_linea: lineManager,
         control_calidad: qualityControl,

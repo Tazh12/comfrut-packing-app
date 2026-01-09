@@ -918,17 +918,55 @@ export default function DashboardQualityPage() {
         })
         
       } else if (selectedChecklist === 'Checklist Monoproducto') {
+        // Fetch all records first, then filter by date_string since that's what the user entered
+        // This ensures we filter by the actual date the user selected, not the insertion timestamp
         let query = supabase.from('checklist_calidad_monoproducto').select('*')
-        if (startDate) query = query.gte('fecha', startDate)
-        if (endDate) query = query.lte('fecha', endDate)
         
-        const { data: records, error } = await query
+        const { data: rawRecords, error } = await query
         if (error) throw error
+
+        // Convert date_string (MMM-DD-YYYY) to YYYY-MM-DD for proper date handling and filtering
+        const monthMap: Record<string, string> = {
+          'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+          'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+        }
+
+        const records = (rawRecords || []).map((r: any) => {
+          let fecha = ''
+          if (r?.date_string) {
+            // Parse MMM-DD-YYYY format
+            const parts = r.date_string.split('-')
+            if (parts.length === 3) {
+              const [month, day, year] = parts
+              fecha = `${year}-${monthMap[month.toUpperCase()] || '01'}-${day.padStart(2, '0')}`
+            }
+          }
+          if (!fecha && r?.date_utc) {
+            fecha = new Date(r.date_utc).toISOString().split('T')[0]
+          }
+          // Fallback to fecha if it exists
+          if (!fecha && r?.fecha) {
+            fecha = r.fecha
+          }
+          return {
+            ...r,
+            fecha
+          }
+        }).filter((r: any) => {
+          // Filter by the converted fecha field (which represents the user's selected date)
+          if (!r.fecha) return false
+          
+          if (startDate && r.fecha < startDate) return false
+          if (endDate && r.fecha > endDate) return false
+          
+          return true
+        })
         
         // Cascading filter logic for Monoproducto
         let availableOrdens = Array.from(new Set(records?.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort()
         let availableBrands = Array.from(new Set(records?.map((r: any) => r.cliente).filter(Boolean))).sort()
         let availableProducts = Array.from(new Set(records?.map((r: any) => r.producto).filter(Boolean))).sort()
+        let availableSkus = Array.from(new Set(records?.map((r: any) => r.sku).filter(Boolean))).sort()
         
         // Apply cascading: if orden selected, limit brands and products
         if (selectedOrden) {
@@ -937,11 +975,15 @@ export default function DashboardQualityPage() {
           ) || []
           availableBrands = Array.from(new Set(ordenRecords.map((r: any) => r.cliente).filter(Boolean))).sort()
           availableProducts = Array.from(new Set(ordenRecords.map((r: any) => r.producto).filter(Boolean))).sort()
+          availableSkus = Array.from(new Set(ordenRecords.map((r: any) => r.sku).filter(Boolean))).sort()
           if (selectedBrand && !availableBrands.includes(selectedBrand)) {
             setSelectedBrand('')
           }
           if (selectedProduct && !availableProducts.includes(selectedProduct)) {
             setSelectedProduct('')
+          }
+          if (selectedSku && !availableSkus.includes(selectedSku)) {
+            setSelectedSku('')
           }
         }
         
@@ -952,11 +994,15 @@ export default function DashboardQualityPage() {
           ) || []
           availableOrdens = Array.from(new Set(brandRecords.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort()
           availableProducts = Array.from(new Set(brandRecords.map((r: any) => r.producto).filter(Boolean))).sort()
+          availableSkus = Array.from(new Set(brandRecords.map((r: any) => r.sku).filter(Boolean))).sort()
           if (selectedOrden && !availableOrdens.some(o => o.toLowerCase().includes(selectedOrden.toLowerCase()))) {
             setSelectedOrden('')
           }
           if (selectedProduct && !availableProducts.includes(selectedProduct)) {
             setSelectedProduct('')
+          }
+          if (selectedSku && !availableSkus.includes(selectedSku)) {
+            setSelectedSku('')
           }
         }
         
@@ -967,11 +1013,34 @@ export default function DashboardQualityPage() {
           ) || []
           availableOrdens = Array.from(new Set(productRecords.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort()
           availableBrands = Array.from(new Set(productRecords.map((r: any) => r.cliente).filter(Boolean))).sort()
+          availableSkus = Array.from(new Set(productRecords.map((r: any) => r.sku).filter(Boolean))).sort()
           if (selectedOrden && !availableOrdens.some(o => o.toLowerCase().includes(selectedOrden.toLowerCase()))) {
             setSelectedOrden('')
           }
           if (selectedBrand && !availableBrands.includes(selectedBrand)) {
             setSelectedBrand('')
+          }
+          if (selectedSku && !availableSkus.includes(selectedSku)) {
+            setSelectedSku('')
+          }
+        }
+
+        // Apply cascading: if SKU selected, limit ordens, brands, and products
+        if (selectedSku) {
+          const skuRecords = records?.filter((r: any) => 
+            r.sku?.toLowerCase().includes(selectedSku.toLowerCase())
+          ) || []
+          availableOrdens = Array.from(new Set(skuRecords.map((r: any) => r.orden_fabricacion).filter(Boolean))).sort()
+          availableBrands = Array.from(new Set(skuRecords.map((r: any) => r.cliente).filter(Boolean))).sort()
+          availableProducts = Array.from(new Set(skuRecords.map((r: any) => r.producto).filter(Boolean))).sort()
+          if (selectedOrden && !availableOrdens.some(o => o.toLowerCase().includes(selectedOrden.toLowerCase()))) {
+            setSelectedOrden('')
+          }
+          if (selectedBrand && !availableBrands.includes(selectedBrand)) {
+            setSelectedBrand('')
+          }
+          if (selectedProduct && !availableProducts.includes(selectedProduct)) {
+            setSelectedProduct('')
           }
         }
         
@@ -992,34 +1061,88 @@ export default function DashboardQualityPage() {
             r.producto?.toLowerCase().includes(selectedProduct.toLowerCase())
           )
         }
+        if (selectedSku) {
+          finalRecords = finalRecords.filter((r: any) => 
+            r.sku?.toLowerCase().includes(selectedSku.toLowerCase())
+          )
+        }
         
         setData(finalRecords)
         setAvailableOrdens(availableOrdens)
         setAvailableBrands(availableBrands)
         setAvailableProducts(availableProducts)
+        setAvailableSkus(availableSkus)
         
         // Process data for charts - group by date
         const dateMap = new Map<string, any>()
+        const brandMap = new Map<string, number>()
+        const productMap = new Map<string, number>()
+        let totalPallets = 0
+        
         finalRecords?.forEach((record: any) => {
-          const date = record.fecha
-          if (!dateMap.has(date)) {
-            dateMap.set(date, { date, count: 0, orders: new Set() })
+          const date = record.fecha || record.date_string || ''
+          if (date) {
+            if (!dateMap.has(date)) {
+              dateMap.set(date, { date, count: 0, orders: new Set(), pallets: 0 })
+            }
+            const dayData = dateMap.get(date)!
+            dayData.count++
+            dayData.orders.add(record.orden_fabricacion)
+            // Count pallets
+            if (record.pallets && Array.isArray(record.pallets)) {
+              dayData.pallets += record.pallets.length
+              totalPallets += record.pallets.length
+            }
           }
-          const dayData = dateMap.get(date)!
-          dayData.count++
-          dayData.orders.add(record.orden_fabricacion)
+          
+          // Track brands
+          if (record.cliente) {
+            brandMap.set(record.cliente, (brandMap.get(record.cliente) || 0) + 1)
+          }
+          
+          // Track products
+          if (record.producto) {
+            productMap.set(record.producto, (productMap.get(record.producto) || 0) + 1)
+          }
         })
         
         const chartDataArray = Array.from(dateMap.values()).map(d => ({
           date: d.date,
           registros: d.count,
-          ordenes: d.orders.size
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          ordenes: d.orders.size,
+          pallets: d.pallets
+        })).sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0
+          const dateB = b.date ? new Date(b.date).getTime() : 0
+          return dateA - dateB
+        })
         
-        setChartData(chartDataArray)
+        // Top brands chart data
+        const topBrands = Array.from(brandMap.entries())
+          .map(([brand, count]) => ({ brand, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+        
+        // Top products chart data
+        const topProducts = Array.from(productMap.entries())
+          .map(([product, count]) => ({ product, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+        
+        setChartData({
+          daily: chartDataArray,
+          topBrands,
+          topProducts
+        })
+        
         setSummaryStats({
           totalRecords: finalRecords?.length || 0,
           totalOrders: new Set(finalRecords?.map((r: any) => r.orden_fabricacion)).size,
+          totalBrands: brandMap.size,
+          totalProducts: productMap.size,
+          totalSkus: new Set(finalRecords?.map((r: any) => r.sku).filter(Boolean)).size,
+          totalPallets: totalPallets,
+          avgPalletsPerRecord: finalRecords?.length > 0 ? (totalPallets / finalRecords.length).toFixed(1) : '0',
           dateRange: chartDataArray.length > 0 ? `${chartDataArray[0].date} - ${chartDataArray[chartDataArray.length - 1].date}` : '-'
         })
         
@@ -3086,6 +3209,9 @@ export default function DashboardQualityPage() {
     setSelectedBrand('')
     setSelectedProduct('')
     setSelectedSku('')
+    setFilterNoComply(null)
+    setFilterCaution(null)
+    setFilterReject(null)
     // Reset dates to default (last 30 days)
     const today = new Date()
     const thirtyDaysAgo = new Date()
@@ -3182,7 +3308,7 @@ export default function DashboardQualityPage() {
           </div>
           
           {/* Additional Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+          <div className={`grid grid-cols-1 ${selectedChecklist === 'Checklist Monoproducto' ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 border-t pt-4`}>
             <div>
               <label htmlFor="orden" className="block text-sm font-medium text-gray-700 mb-1">
                 Orden
@@ -3267,6 +3393,28 @@ export default function DashboardQualityPage() {
                 ))}
               </select>
             </div>
+
+            {selectedChecklist === 'Checklist Monoproducto' && (
+              <div>
+                <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
+                  SKU
+                </label>
+                <select
+                  id="sku"
+                  value={selectedSku}
+                  onChange={(e) => setSelectedSku(e.target.value)}
+                  disabled={availableSkus.length === 0}
+                  className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">Todos los SKUs</option>
+                  {availableSkus.map((sku) => (
+                    <option key={sku} value={sku}>
+                      {sku}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -3274,7 +3422,7 @@ export default function DashboardQualityPage() {
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
-        ) : (Array.isArray(chartData) && chartData.length === 0) || (!Array.isArray(chartData) && Object.keys(chartData || {}).length === 0) ? (
+        ) : (!data || data.length === 0) ? (
           <div className="bg-white p-8 rounded-lg shadow text-center">
             <p className="text-gray-600">No hay datos disponibles para el rango de fechas seleccionado.</p>
           </div>
@@ -3629,21 +3777,35 @@ export default function DashboardQualityPage() {
                 </>
               ) : selectedChecklist === 'Checklist Monoproducto' ? (
                 <>
-                  <div className="bg-white p-6 rounded-lg shadow">
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
                     <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
                     <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Checklists completados</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Productos Únicos</h3>
-                    <p className="text-2xl font-bold text-gray-900">{summaryStats.productos || 0}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Órdenes de Fabricación</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalOrders || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Órdenes únicas</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Días con Registros</h3>
-                    <p className="text-2xl font-bold text-gray-900">{chartData.length}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Pallets</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalPallets || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Promedio: {summaryStats.avgPalletsPerRecord || '0'} por registro</p>
                   </div>
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Rango de Fechas</h3>
-                    <p className="text-sm font-bold text-gray-900">{startDate} - {endDate}</p>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Marcas</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalBrands || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Marcas únicas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Productos</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalProducts || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Productos únicos</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-pink-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">SKUs</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalSkus || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">SKUs únicos</p>
                   </div>
                 </>
               ) : (
@@ -4798,7 +4960,213 @@ export default function DashboardQualityPage() {
               </>
             )}
 
-            {(selectedChecklist === 'Checklist Monoproducto' || selectedChecklist === 'Checklist Mix Producto') && (
+            {selectedChecklist === 'Checklist Monoproducto' && (
+              <>
+                {/* Daily Activity Chart */}
+                {chartData.daily && chartData.daily.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Actividad Diaria / Daily Activity</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="registros" fill="#3b82f6" name="Registros" />
+                        <Bar dataKey="ordenes" fill="#10b981" name="Órdenes Únicas" />
+                        <Bar dataKey="pallets" fill="#8b5cf6" name="Pallets" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Trend Line Chart */}
+                {chartData.daily && chartData.daily.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Tendencia de Registros / Records Trend</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={chartData.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="registros"
+                          stroke="#3b82f6"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="Registros"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="ordenes"
+                          stroke="#10b981"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="Órdenes"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="pallets"
+                          stroke="#8b5cf6"
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name="Pallets"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Top Brands Chart */}
+                {chartData.topBrands && chartData.topBrands.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Top 10 Marcas por Registros / Top 10 Brands by Records</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.topBrands} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis type="number" stroke="#6b7280" />
+                        <YAxis
+                          dataKey="brand"
+                          type="category"
+                          stroke="#6b7280"
+                          width={150}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="count" fill="#3b82f6" name="Registros" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Top Products Chart */}
+                {chartData.topProducts && chartData.topProducts.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Top 10 Productos por Registros / Top 10 Products by Records</h2>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={chartData.topProducts}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                          dataKey="product"
+                          stroke="#6b7280"
+                          angle={-45}
+                          textAnchor="end"
+                          height={120}
+                          tick={{ fontSize: 10 }}
+                        />
+                        <YAxis stroke="#6b7280" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px'
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="count" fill="#10b981" name="Registros" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Data Table */}
+                {data && data.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Registros Detallados / Detailed Records</h2>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca/Cliente</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pallets</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jefe Línea</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Control Calidad</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {data.slice(0, 50).map((record: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.date_string || record.fecha || '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.orden_fabricacion || '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.sku || '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title={record.producto || '-'}>
+                                {record.producto || '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.cliente || '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.pallets && Array.isArray(record.pallets) ? record.pallets.length : 0}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.jefe_linea || '-'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                {record.control_calidad || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {data.length > 50 && (
+                        <p className="mt-4 text-sm text-gray-500 text-center">
+                          Mostrando 50 de {data.length} registros. Use los filtros para ver más resultados específicos.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {selectedChecklist === 'Checklist Mix Producto' && (
               <>
                 {/* Registros por Fecha Chart */}
                 <div className="bg-white p-6 rounded-lg shadow">
