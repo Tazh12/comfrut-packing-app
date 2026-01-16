@@ -342,7 +342,7 @@ export default function ChecklistMetalDetectorPage() {
     setMonitorSignature('')
     setSelectedBrand('')
     setSelectedProduct('')
-    setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+    setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', beaconLight: '', observation: '', correctiveActions: '' }])
     setIsInitialSubmitted(false)
     setPdfUrl(null)
   }
@@ -380,7 +380,7 @@ export default function ChecklistMetalDetectorPage() {
       } else {
         const today = new Date().toISOString().split('T')[0]
         setDate(today)
-        setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+        setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', beaconLight: '', observation: '', correctiveActions: '' }])
       }
     }
   )
@@ -425,7 +425,7 @@ export default function ChecklistMetalDetectorPage() {
       setMetalDetectorId('CEIATHS/MS21')
     }
     if (readings.length === 0) {
-      setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', observation: '', correctiveActions: '' }])
+      setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', beaconLight: '', observation: '', correctiveActions: '' }])
     }
   }, [])
 
