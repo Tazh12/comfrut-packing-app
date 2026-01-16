@@ -347,6 +347,22 @@ export default function ChecklistMetalDetectorPage() {
     setPdfUrl(null)
   }
 
+  // Clear form data without resetting submission state
+  const clearFormData = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setDate(today)
+    setProcessLine('')
+    setMetalDetectorId('CEIATHS/MS21')
+    setMetalDetectorStartTime('')
+    setMetalDetectorFinishTime('')
+    setOrden('')
+    setMonitorName('')
+    setMonitorSignature('')
+    setSelectedBrand('')
+    setSelectedProduct('')
+    setReadings([{ id: Date.now(), hour: '', bf: ['', '', ''], bnf: ['', '', ''], bss: ['', '', ''], sensitivity: '', noiseAlarm: '', rejectingArm: '', beaconLight: '', observation: '', correctiveActions: '' }])
+  }
+
   // Persistence hook
   const { clearDraft } = useChecklistPersistence(
     'checklist-metal-detector-draft',
@@ -638,6 +654,9 @@ export default function ChecklistMetalDetectorPage() {
       setIsInitialSubmitted(true)
       clearDraft()
 
+      // Clear form data after successful submission (without resetting submission state)
+      clearFormData()
+
       showToast('Checklist submitted successfully!', 'success')
 
       // Log what happened
@@ -669,61 +688,97 @@ export default function ChecklistMetalDetectorPage() {
         />
       </div>
 
-      <h1 className="text-3xl font-bold mb-2 text-center">
-        Metal detector PCC#1 control /<br/>
-        Control PCC#1 detector de metales
-      </h1>
-      <p className="text-center text-sm text-gray-500 mb-6">Code: CF/PC-PL-HACCP-001-RG001</p>
-
-      {/* Info Buttons */}
-      <div className="mb-6 flex flex-col items-center gap-2">
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button
-            type="button"
-            onClick={() => setShowInstructionsModal(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Instructions / Instrucciones
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSimbologyModal(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm"
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Simbology / Simbología
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowProcessModal(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors text-sm"
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Process / Procedimiento
-          </button>
+      {/* Success Message */}
+      {isInitialSubmitted && pdfUrl && (
+        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>View PDF</span>
+              <span className="text-xs opacity-90">Ver PDF</span>
+            </a>
+            <a
+              href={pdfUrl}
+              download
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Download PDF</span>
+              <span className="text-xs opacity-90">Descargar PDF</span>
+            </a>
+            <Link
+              href="/area/calidad"
+              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
+            >
+              <span>Back to Quality</span>
+              <span className="text-xs opacity-90">Volver a Calidad</span>
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button
-            type="button"
-            onClick={() => setShowFrequencyModal(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm"
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Frequency / Frecuencia
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCorrectiveActionsModal(true)}
-            className="inline-flex items-center px-3 py-1.5 bg-teal-500 text-white rounded-md hover:bg-teal-600 transition-colors text-sm"
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Corrective Actions / Acciones correctivas
-          </button>
-        </div>
-      </div>
+      )}
 
-      <form onSubmit={handleInitialSubmit} className="space-y-8">
+      {!(isInitialSubmitted && pdfUrl) && (
+        <>
+          <h1 className="text-3xl font-bold mb-2 text-center">
+            Metal detector PCC#1 control /<br/>
+            Control PCC#1 detector de metales
+          </h1>
+          <p className="text-center text-sm text-gray-500 mb-6">Code: CF/PC-PL-HACCP-001-RG001</p>
+
+          {/* Info Buttons */}
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setShowInstructionsModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+              >
+                <Info className="h-3 w-3 mr-1.5" />
+                Instructions / Instrucciones
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSimbologyModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm"
+              >
+                <Info className="h-3 w-3 mr-1.5" />
+                Simbology / Simbología
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProcessModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors text-sm"
+              >
+                <Info className="h-3 w-3 mr-1.5" />
+                Process / Procedimiento
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => setShowFrequencyModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm"
+              >
+                <Info className="h-3 w-3 mr-1.5" />
+                Frequency / Frecuencia
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCorrectiveActionsModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-teal-500 text-white rounded-md hover:bg-teal-600 transition-colors text-sm"
+              >
+                <Info className="h-3 w-3 mr-1.5" />
+                Corrective Actions / Acciones correctivas
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleInitialSubmit} className="space-y-8">
         {/* Section 1: Basic Info */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">🧩 Section 1 – Basic Info</h2>
@@ -1114,39 +1169,7 @@ export default function ChecklistMetalDetectorPage() {
           </button>
         </div>
       </form>
-
-      {/* Success Message */}
-      {isInitialSubmitted && pdfUrl && (
-        <div className="mt-8 bg-green-50 border-2 border-green-200 p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-green-900">✓ Checklist Submitted Successfully!</h2>
-          <p className="text-gray-700 mb-4">Your checklist has been saved and the PDF has been generated.</p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center flex flex-col items-center"
-            >
-              <span>View PDF</span>
-              <span className="text-xs opacity-90">Ver PDF</span>
-            </a>
-            <a
-              href={pdfUrl}
-              download
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-center flex flex-col items-center"
-            >
-              <span>Download PDF</span>
-              <span className="text-xs opacity-90">Descargar PDF</span>
-            </a>
-            <Link
-              href="/area/calidad"
-              className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-center flex flex-col items-center"
-            >
-              <span>Back to Quality</span>
-              <span className="text-xs opacity-90">Volver a Calidad</span>
-            </Link>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Modals */}
