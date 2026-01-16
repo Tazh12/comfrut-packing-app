@@ -99,7 +99,11 @@ const styles = StyleSheet.create({
     fontSize: 7
   },
   cellRejectingArm: {
-    width: 90,
+    width: 85,
+    fontSize: 7
+  },
+  cellBeaconLight: {
+    width: 85,
     fontSize: 7
   },
   deviationRow: {
@@ -168,6 +172,7 @@ export interface ChecklistMetalDetectorPDFProps {
         sensitivity: string // Numeric value
         noiseAlarm: string
         rejectingArm: string
+        beaconLight: string
         observation: string
         correctiveActions: string
       }>
@@ -237,6 +242,7 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
               <Text style={[styles.tableHeaderText, styles.cellSensitivity]}>Sensitivity</Text>
               <Text style={[styles.tableHeaderText, styles.cellNoiseAlarm]}>Noise Alarm</Text>
               <Text style={[styles.tableHeaderText, styles.cellRejectingArm]}>Rejecting Arm</Text>
+              <Text style={[styles.tableHeaderText, styles.cellBeaconLight]}>Beacon Light</Text>
             </View>
             {data.section2.readings.map((reading, index) => {
               // Migrate old format to new format if needed
@@ -248,7 +254,8 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
                                    bnfArray.some(val => val === 'ND') || 
                                    bssArray.some(val => val === 'ND') || 
                                    reading.noiseAlarm === 'No comply' || 
-                                   reading.rejectingArm === 'No comply'
+                                   reading.rejectingArm === 'No comply' ||
+                                   reading.beaconLight === 'No comply'
               
               const bfDisplay = bfArray.filter(Boolean).length > 0 ? bfArray.join(', ') : '-'
               const bnfDisplay = bnfArray.filter(Boolean).length > 0 ? bnfArray.join(', ') : '-'
@@ -267,6 +274,7 @@ export const ChecklistMetalDetectorPDFDocument: React.FC<ChecklistMetalDetectorP
                     <Text style={[styles.tableCell, styles.cellSensitivity]}>{reading.sensitivity || '-'}</Text>
                     <Text style={[styles.tableCell, styles.cellNoiseAlarm]}>{reading.noiseAlarm || '-'}</Text>
                     <Text style={[styles.tableCell, styles.cellRejectingArm]}>{reading.rejectingArm || '-'}</Text>
+                    <Text style={[styles.tableCell, styles.cellBeaconLight]}>{reading.beaconLight || '-'}</Text>
                   </View>
                   {hasDeviation && (reading.observation || reading.correctiveActions) && (
                     <View style={styles.deviationRow}>

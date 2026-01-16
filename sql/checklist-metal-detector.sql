@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.checklist_metal_detector (
         "sensitivity": "Numeric value", // Numeric sensitivity value
         "noiseAlarm": "Ok" or "No comply",
         "rejectingArm": "Ok" or "No comply",
+        "beaconLight": "Ok" or "No comply",
         "observation": "Text description if deviation",
         "correctiveActions": "Text description if deviation"
       },

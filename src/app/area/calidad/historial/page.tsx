@@ -1062,6 +1062,7 @@ export default function HistorialPage() {
           'Sensitivity',
           'Noise Alarm',
           'Rejecting Arm',
+          'Beacon Light',
           'Observation',
           'Corrective Actions'
         ]
@@ -1085,6 +1086,7 @@ export default function HistorialPage() {
               reading.sensitivity || '',
               reading.noiseAlarm || '',
               reading.rejectingArm || '',
+              reading.beaconLight || '',
               reading.observation || '',
               reading.correctiveActions || ''
             ]
@@ -1098,7 +1100,7 @@ export default function HistorialPage() {
             record.brand || '',
             record.product || '',
             record.monitor_name || '',
-            '', '', '', '', '', '', '', '', '', ''
+            '', '', '', '', '', '', '', '', '', '', ''
           ])
         }
         

@@ -100,6 +100,7 @@ export interface ChecklistMetalDetectorData {
     sensitivity: string // Numeric value
     noiseAlarm: string
     rejectingArm: string
+    beaconLight: string
     observation: string
     correctiveActions: string
   }>

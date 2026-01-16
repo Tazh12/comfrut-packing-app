@@ -220,6 +220,7 @@ interface MetalDetectorReading {
   sensitivity: string // Numeric value
   noiseAlarm: string
   rejectingArm: string
+  beaconLight: string
   observation: string
   correctiveActions: string
 }
@@ -293,6 +294,7 @@ export default function ChecklistMetalDetectorPage() {
       sensitivity: '',
       noiseAlarm: '',
       rejectingArm: '',
+      beaconLight: '',
       observation: '',
       correctiveActions: ''
     }
@@ -440,6 +442,7 @@ export default function ChecklistMetalDetectorPage() {
         sensitivity: '',
         noiseAlarm: '',
         rejectingArm: '',
+        beaconLight: '',
         observation: '',
         correctiveActions: ''
       }
@@ -453,7 +456,8 @@ export default function ChecklistMetalDetectorPage() {
     const hasBSSND = reading.bss.some(val => val === 'ND')
     return hasBFND || hasBNFND || hasBSSND || 
            reading.noiseAlarm === 'No comply' || 
-           reading.rejectingArm === 'No comply'
+           reading.rejectingArm === 'No comply' ||
+           reading.beaconLight === 'No comply'
   }
 
   // Remove reading
@@ -583,6 +587,7 @@ export default function ChecklistMetalDetectorPage() {
             sensitivity: r.sensitivity,
             noiseAlarm: r.noiseAlarm,
             rejectingArm: r.rejectingArm,
+            beaconLight: r.beaconLight,
             observation: r.observation || '',
             correctiveActions: r.correctiveActions || ''
           }))
@@ -1004,8 +1009,8 @@ export default function ChecklistMetalDetectorPage() {
                     </table>
                   </div>
 
-                  {/* Noise Alarm and Rejecting Arm */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Noise Alarm, Rejecting Arm, and Beacon Light */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Noise Alarm / Alarma sonora
@@ -1028,6 +1033,21 @@ export default function ChecklistMetalDetectorPage() {
                       <select
                         value={reading.rejectingArm}
                         onChange={(e) => handleReadingChange(reading.id, 'rejectingArm', e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select</option>
+                        <option value="Ok">Ok</option>
+                        <option value="No comply">No comply</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Beacon light / Encendido de baliza
+                      </label>
+                      <select
+                        value={reading.beaconLight}
+                        onChange={(e) => handleReadingChange(reading.id, 'beaconLight', e.target.value)}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="">Select</option>
