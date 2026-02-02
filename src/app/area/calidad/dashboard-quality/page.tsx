@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
@@ -15,6 +16,7 @@ import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeigh
 import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/checklistCleanlinessControlPacking'
 import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
 import { supabase } from '@/lib/supabase'
+import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 import {
   LineChart,
   Line,
@@ -159,6 +161,7 @@ const STAFF_PRACTICES_PARAMETER_NAMES: Record<string, string> = {
 
 export default function DashboardQualityPage() {
   const { showToast } = useToast()
+  const searchParams = useSearchParams()
   const [selectedChecklist, setSelectedChecklist] = useState('Process Environmental Temperature Control')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -180,15 +183,40 @@ export default function DashboardQualityPage() {
   const [filterCaution, setFilterCaution] = useState<boolean | null>(null)
   const [filterReject, setFilterReject] = useState<boolean | null>(null)
 
-  // Set default date range to last 30 days
+  // Track if we've initialized from URL params
+  const [initializedFromUrl, setInitializedFromUrl] = useState(false)
+
+  // Read URL query parameters on mount and set defaults if not provided
   useEffect(() => {
-    const today = new Date()
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(today.getDate() - 30)
+    const checklistParam = searchParams.get('checklist')
+    const startDateParam = searchParams.get('startDate')
+    const endDateParam = searchParams.get('endDate')
     
-    setEndDate(today.toISOString().split('T')[0])
-    setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
-  }, [])
+    // Set checklist from URL or keep default
+    if (checklistParam) {
+      setSelectedChecklist(checklistParam)
+    }
+    
+    // Set dates from URL or use defaults
+    if (startDateParam && endDateParam) {
+      setStartDate(startDateParam)
+      setEndDate(endDateParam)
+    } else if (!startDate || !endDate) {
+      // Only set defaults if not already set and not in URL
+      const today = new Date()
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(today.getDate() - 30)
+      
+      if (!startDate) {
+        setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
+      }
+      if (!endDate) {
+        setEndDate(today.toISOString().split('T')[0])
+      }
+    }
+    
+    setInitializedFromUrl(true)
+  }, [searchParams])
 
   // Reset filters when checklist changes
   useEffect(() => {
@@ -1148,23 +1176,63 @@ export default function DashboardQualityPage() {
         
       } else if (selectedChecklist === 'Checklist Mix Producto') {
         // NOTE: Mix Product checklist is stored in `checklist_producto_mix`
-        // Use `date_utc` for filtering and map it to a YYYY-MM-DD `fecha` field for charts/filters.
-        let query = supabase.from('checklist_producto_mix').select('*')
-        if (startDate) {
-          const startUTC = new Date(`${startDate}T00:00:00Z`).toISOString()
-          query = query.gte('date_utc', startUTC)
-        }
-        if (endDate) {
-          const endDateObj = new Date(`${endDate}T00:00:00Z`)
-          endDateObj.setDate(endDateObj.getDate() + 1)
-          query = query.lt('date_utc', endDateObj.toISOString())
-        }
+        // Filter by `date_string` (the date the user entered in the form) instead of `date_utc`
+        // Fetch all records first, then filter in memory by date_string
+        let query = supabase.from('checklist_producto_mix').select('*').order('date_utc', { ascending: false })
 
         const { data: rawRecords, error } = await query
         if (error) throw error
 
+        // Filter by date_string (the date the user entered in the checklist)
+        let filteredRecords = rawRecords || []
+        if (startDate || endDate) {
+          const startDateString = startDate ? formatDateMMMDDYYYY(startDate) : null
+          const endDateString = endDate ? formatDateMMMDDYYYY(endDate) : null
+          
+          const MONTH_MAP: { [key: string]: number } = {
+            'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+            'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+          }
+          const parseDateString = (dateStr: string): Date | null => {
+            if (!dateStr) return null
+            try {
+              const parts = dateStr.split('-')
+              if (parts.length === 3) {
+                const month = MONTH_MAP[parts[0].toUpperCase()]
+                const day = parseInt(parts[1])
+                const year = parseInt(parts[2])
+                if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+                  return new Date(year, month, day)
+                }
+              }
+              return null
+            } catch {
+              return null
+            }
+          }
+          
+          const startDateObj = startDateString ? parseDateString(startDateString) : null
+          const endDateObj = endDateString ? parseDateString(endDateString) : null
+          
+          filteredRecords = filteredRecords.filter((record: any) => {
+            if (!record.date_string) return false
+            const recordDateObj = parseDateString(record.date_string)
+            if (!recordDateObj) return false
+            const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+            if (startDateObj) {
+              const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+              if (recordDateOnly < startDateOnly) return false
+            }
+            if (endDateObj) {
+              const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+              if (recordDateOnly > endDateOnly) return false
+            }
+            return true
+          })
+        }
+
         const records =
-          (rawRecords || []).map((r: any) => {
+          filteredRecords.map((r: any) => {
             // Parse date_string (format: "DEC-31-2025") to YYYY-MM-DD for filtering/charts
             let fecha = ''
             if (r?.date_string) {
@@ -3182,12 +3250,12 @@ export default function DashboardQualityPage() {
     setAvailableSkus([])
   }, [selectedChecklist])
 
-  // Fetch data when dates, checklist, or filters change
+  // Fetch data when dates, checklist, or filters change (only after initialization)
   useEffect(() => {
-    if (startDate && endDate) {
+    if (initializedFromUrl && startDate && endDate) {
       loadData()
     }
-  }, [startDate, endDate, selectedChecklist, selectedOrden, selectedBrand, selectedProduct, selectedSku, loadData])
+  }, [initializedFromUrl, startDate, endDate, selectedChecklist, selectedOrden, selectedBrand, selectedProduct, selectedSku, loadData])
 
   const handleFilter = () => {
     if (!startDate || !endDate) {
@@ -3246,20 +3314,22 @@ export default function DashboardQualityPage() {
                 onChange={(e) => setSelectedChecklist(e.target.value)}
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2"
               >
-                <option value="Process Environmental Temperature Control">
-                  Process Environmental Temperature Control
-                </option>
-                <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
-                <option value="Staff Good Practices Control">Staff Good Practices Control</option>
-                <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
-                <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
-                <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
-                <option value="Footbath Control">Footbath Control</option>
-                <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
-                <option value="Cleanliness Control Packing">Cleanliness Control Packing</option>
-                <option value="Process area staff glasses and auditory protector control">Process area staff glasses and auditory protector control</option>
-                <option value="Checklist Monoproducto">Checklist Monoproducto</option>
-                <option value="Checklist Mix Producto">Checklist Mix Producto</option>
+                <optgroup label="PRE-OPERATIONAL">
+                  <option value="Pre-Operational Review Processing Areas">Pre-Operational Review Processing Areas</option>
+                  <option value="Cleanliness Control Packing">Cleanliness Control Packing</option>
+                  <option value="Footbath Control">Footbath Control</option>
+                  <option value="Staff Good Practices Control">Staff Good Practices Control</option>
+                  <option value="Process area staff glasses and auditory protector control">Process area staff glasses and auditory protector control</option>
+                  <option value="Internal control of materials used in production areas">Internal control of materials used in production areas</option>
+                </optgroup>
+                <optgroup label="OPERATIONAL">
+                  <option value="Metal Detector (PCC #1)">Metal Detector (PCC #1)</option>
+                  <option value="Checklist Monoproducto">Checklist Monoproducto</option>
+                  <option value="Checklist Mix Producto">Checklist Mix Producto</option>
+                  <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
+                  <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
+                  <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
+                </optgroup>
               </select>
             </div>
             

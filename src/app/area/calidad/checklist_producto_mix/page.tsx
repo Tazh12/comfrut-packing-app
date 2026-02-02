@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
-import { ArrowLeft, Plus, Pencil, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, ChevronDown, ChevronUp, AlertCircle, Trash2 } from 'lucide-react'
 import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
 import { DeleteDraftButton } from '@/components/DeleteDraftButton'
 import { formatDateMMMDDYYYY, formatDateForFilename } from '@/lib/date-utils'
@@ -411,13 +411,21 @@ export default function ChecklistMixPage() {
       })
 
       // 6. Crear nuevo pallet
+      // Get current time in HH:MM format for hour field
+      const now = new Date()
+      const currentHour = now.getHours().toString().padStart(2, '0')
+      const currentMinute = now.getMinutes().toString().padStart(2, '0')
+      const presetHour = `${currentHour}:${currentMinute}`
+      
       const newPallet = {
         id: Date.now(),
         collapsed: false,
         fieldsByFruit,
         commonFields,
         expectedCompositions, // Guardar composiciones esperadas
-        values: {}
+        values: {
+          'Hora': presetHour
+        }
       }
       setPallets(prev => [...prev, newPallet])
     } catch (error: any) {
@@ -633,6 +641,10 @@ export default function ChecklistMixPage() {
       .filter(key => key.startsWith(`${id}-`))
       .forEach(key => inputRefs.current[key]?.classList.remove('border-red-500'))
     setPallets(prev => prev.map(p => (p.id === id ? { ...p, collapsed: false } : p)))
+  }
+
+  const deletePallet = (id: number) => {
+    setPallets(prev => prev.filter(p => p.id !== id))
   }
 
   const togglePalletCollapse = (id: number) => {
@@ -1080,20 +1092,31 @@ export default function ChecklistMixPage() {
                    {!pallet.collapsed ? (
                       <button
                         type="button"
-                        onClick={() => finalizePallet(pallet.id)}
-                        className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 shadow-sm transition-colors"
+                        onClick={() => deletePallet(pallet.id)}
+                        className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                        title="Eliminar pallet"
                       >
-                        Finalizar Pallet
+                        <Trash2 className="h-5 w-5" />
                       </button>
                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => expandPallet(pallet.id)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                        title="Editar"
-                      >
-                        <Pencil className="h-5 w-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => deletePallet(pallet.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                          title="Eliminar pallet"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => expandPallet(pallet.id)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil className="h-5 w-5" />
+                        </button>
+                      </div>
                    )}
                 </div>
               </div>
@@ -1244,6 +1267,17 @@ export default function ChecklistMixPage() {
                         </div>
                       )
                     })}
+                  </div>
+
+                  {/* Finalizar Pallet button at bottom */}
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => finalizePallet(pallet.id)}
+                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 shadow-sm transition-colors"
+                    >
+                      Finalizar Pallet
+                    </button>
                   </div>
 
                 </div>

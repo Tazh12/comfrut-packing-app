@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
+import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 
 // Initialize Supabase client with service role for server-side queries
 const supabase = createClient(
@@ -8,30 +9,71 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Map checklists to their stages
+const CHECKLIST_STAGES: Record<string, 'preoperational' | 'operational' | 'inbound-outbound'> = {
+  'checklist_pre_operational_review': 'preoperational',
+  'checklist_cleanliness_control_packing': 'preoperational',
+  'checklist_footbath_control': 'preoperational',
+  'checklist_staff_practices': 'preoperational',
+  'checklist_staff_glasses_auditory': 'preoperational',
+  'checklist_staff_glasses_auditory_setup': 'preoperational',
+  'checklist_materials_control': 'preoperational',
+  'checklist_metal_detector': 'operational',
+  'checklist_producto_mix': 'operational',
+  'checklist_weighing_sealing': 'operational',
+  'checklist_foreign_material': 'operational',
+  'checklist_envtemp': 'operational',
+  'checklist_calidad_monoproducto': 'operational',
+  'checklist_raw_material_quality': 'inbound-outbound',
+  'checklist_frozen_product_dispatch': 'inbound-outbound',
+}
+
+// Map checklists to their date field names (most use date_string, but some are different)
+const CHECKLIST_DATE_FIELDS: Record<string, string> = {
+  'checklist_calidad_monoproducto': 'fecha', // Uses fecha instead of date_string
+  'checklist_frozen_product_dispatch': 'date', // Uses date (TIMESTAMPTZ) instead of date_string
+  // All others use 'date_string'
+}
+
 // List of all checklist tables
-const CHECKLIST_TABLES = [
-  'checklist_pre_operational_review',
-  'checklist_footbath_control',
-  'checklist_metal_detector',
-  'checklist_materials_control',
-  'checklist_weighing_sealing',
-  'checklist_foreign_material',
-  'checklist_staff_practices',
-  'checklist_raw_material_quality',
-  'checklist_producto_mix',
-  'checklist_frozen_product_dispatch',
-  'checklist_cleanliness_control_packing',
-  'checklist_staff_glasses_auditory',
-  'checklist_staff_glasses_auditory_setup',
-]
+const CHECKLIST_TABLES = Object.keys(CHECKLIST_STAGES)
 
 interface ChecklistStats {
   tableName: string
   displayName: string
+  stage: 'preoperational' | 'operational' | 'inbound-outbound'
   total: number
-  comply: number
   notComply: number
-  pending: number
+}
+
+interface StageStats {
+  stage: string
+  displayName: string
+  total: number
+  notComply: number
+}
+
+// Helper function to parse date_string (MMM-DD-YYYY format)
+function parseDateString(dateStr: string): Date | null {
+  if (!dateStr) return null
+  const MONTH_MAP: { [key: string]: number } = {
+    'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+    'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+  }
+  try {
+    const parts = dateStr.split('-')
+    if (parts.length === 3) {
+      const month = MONTH_MAP[parts[0].toUpperCase()]
+      const day = parseInt(parts[1])
+      const year = parseInt(parts[2])
+      if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+        return new Date(year, month, day)
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // Helper function to check if a checklist complies
@@ -146,6 +188,8 @@ function getDisplayName(tableName: string): string {
     'checklist_cleanliness_control_packing': 'Cleanliness Control Packing',
     'checklist_staff_glasses_auditory': 'Staff Glasses Auditory',
     'checklist_staff_glasses_auditory_setup': 'Staff Glasses Auditory Setup',
+    'checklist_envtemp': 'Process Environmental Temperature Control',
+    'checklist_calidad_monoproducto': 'Monoproduct Checklist',
   }
   return names[tableName] || tableName.replace('checklist_', '').replace(/_/g, ' ')
 }
@@ -173,53 +217,32 @@ export async function POST(request: NextRequest) {
     
     // Calculate date range for the month (start of month to end of month)
     // targetMonth is 1-indexed (1-12), JavaScript months are 0-indexed (0-11)
-    const startDate = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0)
-    // Get last day of the month: new Date(year, month, 0) gives last day of previous month
-    // So for month 11 (Nov), we use new Date(year, 12, 0) = last day of November
-    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999)
+    const startDate = new Date(targetYear, targetMonth - 1, 1)
+    const endDate = new Date(targetYear, targetMonth, 0) // Last day of the month
+    
+    // Format dates as YYYY-MM-DD for formatDateMMMDDYYYY
+    const startDateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
+    const endDateStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+    
+    // Convert to MMM-DD-YYYY format for comparison
+    const startDateString = formatDateMMMDDYYYY(startDateStr)
+    const endDateString = formatDateMMMDDYYYY(endDateStr)
+    
+    const startDateObj = parseDateString(startDateString)
+    const endDateObj = parseDateString(endDateString)
     
     console.log(`Querying checklists for ${targetMonth}/${targetYear}`)
-    console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
+    console.log(`Date range: ${startDateString} to ${endDateString}`)
     
     const stats: ChecklistStats[] = []
     
     // Query each checklist table
     for (const tableName of CHECKLIST_TABLES) {
       try {
-        // Try querying with date_utc first
+        // Fetch all records from the table (we'll filter by date_string in memory)
         let { data: checklists, error } = await supabase
           .from(tableName)
           .select('*')
-          .gte('date_utc', startDate.toISOString())
-          .lte('date_utc', endDate.toISOString())
-        
-        // If error suggests date_utc doesn't exist, try created_at
-        if (error && (error.message?.includes('column') || error.code === 'PGRST116')) {
-          console.log(`${tableName}: date_utc not found, trying created_at`)
-          const { data: checklistsAlt, error: errorAlt } = await supabase
-            .from(tableName)
-            .select('*')
-            .gte('created_at', startDate.toISOString())
-            .lte('created_at', endDate.toISOString())
-          
-          if (!errorAlt) {
-            checklists = checklistsAlt
-            error = null
-          } else {
-            // If both fail, try without date filter to see if table exists
-            console.log(`${tableName}: Trying without date filter to check if table exists`)
-            const { data: allData } = await supabase
-              .from(tableName)
-              .select('*')
-              .limit(1)
-            
-            if (allData !== null) {
-              console.log(`${tableName}: Table exists but no records in date range`)
-              checklists = []
-              error = null
-            }
-          }
-        }
         
         if (error) {
           console.error(`Error querying ${tableName}:`, {
@@ -232,37 +255,73 @@ export async function POST(request: NextRequest) {
           stats.push({
             tableName,
             displayName: getDisplayName(tableName),
+            stage: CHECKLIST_STAGES[tableName],
             total: 0,
-            comply: 0,
             notComply: 0,
-            pending: 0,
           })
           continue
         }
         
-        console.log(`${tableName}: Found ${checklists?.length || 0} records`)
+        // Filter by date field (the date the user entered in the checklist)
+        const dateField = CHECKLIST_DATE_FIELDS[tableName] || 'date_string'
+        let filteredChecklists = (checklists || []).filter((checklist: any) => {
+          // Handle different date field types
+          let recordDateObj: Date | null = null
+          
+          if (dateField === 'date') {
+            // For TIMESTAMPTZ fields (like frozen_product_dispatch)
+            if (checklist.date) {
+              const dateValue = new Date(checklist.date)
+              recordDateObj = new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate())
+            }
+          } else if (dateField === 'fecha') {
+            // For fecha field (like monoproducto) - format YYYY-MM-DD
+            if (checklist.fecha) {
+              const fechaParts = checklist.fecha.split('-')
+              if (fechaParts.length === 3) {
+                const [year, month, day] = fechaParts
+                recordDateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+              }
+            }
+          } else {
+            // Default: date_string (MMM-DD-YYYY format)
+            if (checklist.date_string) {
+              recordDateObj = parseDateString(checklist.date_string)
+            }
+          }
+          
+          if (!recordDateObj) return false
+          
+          const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+          if (startDateObj) {
+            const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+            if (recordDateOnly < startDateOnly) return false
+          }
+          if (endDateObj) {
+            const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+            if (recordDateOnly > endDateOnly) return false
+          }
+          return true
+        })
         
-        const total = checklists?.length || 0
-        let comply = 0
+        console.log(`${tableName}: Found ${filteredChecklists.length} records in date range`)
+        
+        const total = filteredChecklists.length
         let notComply = 0
-        let pending = 0
         
-        if (checklists && checklists.length > 0) {
-          for (const checklist of checklists) {
+        if (filteredChecklists.length > 0) {
+          for (const checklist of filteredChecklists) {
             const compliance = checkCompliance(checklist, tableName)
-            if (compliance === 'comply') comply++
-            else if (compliance === 'not_comply') notComply++
-            else pending++
+            if (compliance === 'not_comply') notComply++
           }
         }
         
         stats.push({
           tableName,
           displayName: getDisplayName(tableName),
+          stage: CHECKLIST_STAGES[tableName],
           total,
-          comply,
           notComply,
-          pending,
         })
       } catch (err) {
         console.error(`Exception querying ${tableName}:`, err)
@@ -270,19 +329,37 @@ export async function POST(request: NextRequest) {
         stats.push({
           tableName,
           displayName: getDisplayName(tableName),
+          stage: CHECKLIST_STAGES[tableName],
           total: 0,
-          comply: 0,
           notComply: 0,
-          pending: 0,
         })
       }
     }
     
     // Calculate totals
     const totalChecklists = stats.reduce((sum, s) => sum + s.total, 0)
-    const totalComply = stats.reduce((sum, s) => sum + s.comply, 0)
-    const totalNotComply = stats.reduce((sum, s) => sum + s.notComply, 0)
-    const totalPending = stats.reduce((sum, s) => sum + s.pending, 0)
+    
+    // Group by stage
+    const stageStats: StageStats[] = [
+      {
+        stage: 'preoperational',
+        displayName: 'Preoperacional',
+        total: stats.filter(s => s.stage === 'preoperational').reduce((sum, s) => sum + s.total, 0),
+        notComply: stats.filter(s => s.stage === 'preoperational').reduce((sum, s) => sum + s.notComply, 0),
+      },
+      {
+        stage: 'operational',
+        displayName: 'Operacional',
+        total: stats.filter(s => s.stage === 'operational').reduce((sum, s) => sum + s.total, 0),
+        notComply: stats.filter(s => s.stage === 'operational').reduce((sum, s) => sum + s.notComply, 0),
+      },
+      {
+        stage: 'inbound-outbound',
+        displayName: 'Inbound/Outbound',
+        total: stats.filter(s => s.stage === 'inbound-outbound').reduce((sum, s) => sum + s.total, 0),
+        notComply: stats.filter(s => s.stage === 'inbound-outbound').reduce((sum, s) => sum + s.notComply, 0),
+      },
+    ]
     
     // Create email HTML
     const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -307,9 +384,7 @@ export async function POST(request: NextRequest) {
             .stats-table th, .stats-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
             .stats-table th { background: #1D6FE3; color: white; }
             .stats-table tr:hover { background: #f5f5f5; }
-            .comply { color: #22c55e; font-weight: bold; }
             .not-comply { color: #ef4444; font-weight: bold; }
-            .pending { color: #f59e0b; font-weight: bold; }
           </style>
         </head>
         <body>
@@ -324,39 +399,23 @@ export async function POST(request: NextRequest) {
                   <span class="summary-label">Total de Checklists:</span>
                   <span>${totalChecklists}</span>
                 </div>
-                <div class="summary-item">
-                  <span class="summary-label">Cumplen:</span>
-                  <span class="comply">${totalComply}</span>
-                </div>
-                <div class="summary-item">
-                  <span class="summary-label">No Cumplen:</span>
-                  <span class="not-comply">${totalNotComply}</span>
-                </div>
-                <div class="summary-item">
-                  <span class="summary-label">Pendientes:</span>
-                  <span class="pending">${totalPending}</span>
-                </div>
               </div>
               
-              <h2>Desglose por Checklist</h2>
+              <h2>Desglose por Etapa</h2>
               <table class="stats-table">
                 <thead>
                   <tr>
-                    <th>Checklist</th>
-                    <th>Total</th>
-                    <th>Cumplen</th>
+                    <th>Etapa</th>
+                    <th>Total de Checklists</th>
                     <th>No Cumplen</th>
-                    <th>Pendientes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${stats.map(s => `
+                  ${stageStats.map(s => `
                     <tr>
                       <td>${s.displayName}</td>
                       <td>${s.total}</td>
-                      <td class="comply">${s.comply}</td>
                       <td class="not-comply">${s.notComply}</td>
-                      <td class="pending">${s.pending}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -376,12 +435,15 @@ export async function POST(request: NextRequest) {
     }
     const resend = new Resend(resendApiKey)
     
+    // Get sender email from environment variable, fallback to test domain
+    const senderEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+    
     // Send email via Resend to all recipients
     const emailResults = []
     for (const emailTo of emailsToSend) {
       try {
         const { data, error } = await resend.emails.send({
-          from: 'onboarding@resend.dev', // Resend test domain
+          from: senderEmail,
           to: emailTo,
           subject: `Dashboard Mensual - ${monthName} ${targetYear}`,
           html: emailHtml,
@@ -419,10 +481,7 @@ export async function POST(request: NextRequest) {
       results: emailResults,
       stats: {
         total: totalChecklists,
-        comply: totalComply,
-        notComply: totalNotComply,
-        pending: totalPending,
-        byChecklist: stats,
+        byStage: stageStats,
       }
     })
     
@@ -434,4 +493,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 })
   }
 }
-

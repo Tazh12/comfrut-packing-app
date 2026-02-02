@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
-import { Plus, Pencil } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { ChecklistPDFMonoproductoDocument } from '@/components/ChecklistPDFMonoproducto'
 import { useChecklistPersistence } from '@/lib/hooks/useChecklistPersistence'
@@ -253,6 +253,10 @@ export default function MonoproductoChecklistPage() {
     setPallets(prev =>
       prev.map(p => (p.id === id ? { ...p, collapsed: false } : p))
     )
+  }
+
+  const deletePallet = (id: number) => {
+    setPallets(prev => prev.filter(p => p.id !== id))
   }
 
   // Check if pallet is complete
@@ -762,16 +766,29 @@ export default function MonoproductoChecklistPage() {
                           <span className="text-sm text-gray-500">Hora: {pallet.hour}</span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          expandPallet(pallet.id)
-                        }}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Pencil className="h-5 w-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deletePallet(pallet.id)
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                          title="Eliminar pallet"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            expandPallet(pallet.id)
+                          }}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Pencil className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="p-4 bg-white">
@@ -792,6 +809,14 @@ export default function MonoproductoChecklistPage() {
                             className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                             required
                           />
+                          <button
+                            type="button"
+                            onClick={() => deletePallet(pallet.id)}
+                            className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                            title="Eliminar pallet"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
                         </div>
                       </div>
                       <div className="space-y-4">
