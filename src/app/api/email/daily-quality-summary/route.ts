@@ -488,7 +488,7 @@ async function checkNeedsReview(checklist: any, tableName: string): Promise<bool
             if (!isNaN(weightSample) && weightSample > 0) {
               for (const [key, value] of Object.entries(sample.values || {})) {
                 if (key.includes('%')) {
-                  const grams = parseFloat(value.toString().replace(/[^\d.]/g, ''))
+                  const grams = parseFloat(String(value).replace(/[^\d.]/g, ''))
                   if (!isNaN(grams)) {
                     const percentage = (grams / weightSample) * 100
                     // Flag if percentage is high (thresholds may vary, using 10% as example)
@@ -511,7 +511,7 @@ async function checkNeedsReview(checklist: any, tableName: string): Promise<bool
       return false
 
     default:
-      return compliance === 'not_comply'
+      return false
   }
 }
 
@@ -666,7 +666,7 @@ export async function POST(request: NextRequest) {
           let productDataMap: Record<string, string> = {}
           if (tableName === 'checklist_producto_mix' || tableName === 'checklist_calidad_monoproducto') {
             // Get unique SKUs from checklists
-            const skus = [...new Set(filteredChecklists.map((c: any) => c.sku).filter(Boolean))]
+            const skus = Array.from(new Set(filteredChecklists.map((c: any) => c.sku).filter(Boolean)))
             if (skus.length > 0) {
               const { data: products } = await supabase
                 .from('productos')
