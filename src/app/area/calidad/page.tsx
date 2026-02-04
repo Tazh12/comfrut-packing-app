@@ -143,6 +143,15 @@ const inboundOutboundChecklists: CalidadCard[] = [
     storageKey: 'checklist-raw-material-quality-draft',
     colorType: 'normal',
     category: 'inbound-outbound'
+  },
+  {
+    title: 'Final Product Tasting / Degustación de producto terminado',
+    icon: ClipboardList,
+    href: '/area/calidad/checklist-final-product-tasting',
+    description: 'Degustación de producto terminado.',
+    storageKey: 'checklist-final-product-tasting-draft',
+    colorType: 'normal',
+    category: 'inbound-outbound'
   }
 ]
 
