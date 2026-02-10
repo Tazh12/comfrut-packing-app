@@ -65,6 +65,20 @@ CREATE TABLE IF NOT EXISTS public.checklist_raw_material_quality (
     Percentages are calculated automatically: (grams / weightSample) * 100
     */
     
+    -- Section 3: Organoleptico
+    section3_color VARCHAR(255) NOT NULL DEFAULT '',
+    section3_olor VARCHAR(255) NOT NULL DEFAULT '',
+    section3_sabor VARCHAR(255) NOT NULL DEFAULT '',
+    section3_textura VARCHAR(255) NOT NULL DEFAULT '',
+    section3_packing_condition VARCHAR(10) NOT NULL DEFAULT 'Good', -- 'Good' or 'Bad'
+    section3_raw_material_approved VARCHAR(10) NOT NULL DEFAULT 'No', -- 'Yes' or 'No'
+    section3_results TEXT, -- Optional
+    
+    -- Verification (filled by QA Practitioner later)
+    checker_name VARCHAR(255),
+    checker_signature TEXT,
+    checker_date DATE,
+    
     -- PDF and metadata
     pdf_url TEXT,
     date_utc TIMESTAMPTZ DEFAULT NOW(), -- UTC timestamp for querying
@@ -74,6 +88,42 @@ CREATE TABLE IF NOT EXISTS public.checklist_raw_material_quality (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 1.1. Add Section 3 and verification columns if they don't exist (for existing tables)
+-- =====================================================
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_color') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_color VARCHAR(255) NOT NULL DEFAULT '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_olor') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_olor VARCHAR(255) NOT NULL DEFAULT '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_sabor') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_sabor VARCHAR(255) NOT NULL DEFAULT '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_textura') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_textura VARCHAR(255) NOT NULL DEFAULT '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_packing_condition') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_packing_condition VARCHAR(10) NOT NULL DEFAULT 'Good';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_raw_material_approved') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_raw_material_approved VARCHAR(10) NOT NULL DEFAULT 'No';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'section3_results') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN section3_results TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'checker_name') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN checker_name VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'checker_signature') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN checker_signature TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'checklist_raw_material_quality' AND column_name = 'checker_date') THEN
+        ALTER TABLE public.checklist_raw_material_quality ADD COLUMN checker_date DATE;
+    END IF;
+END $$;
 
 -- 2. Create indexes for better query performance
 -- =====================================================
@@ -98,22 +148,28 @@ ALTER TABLE public.checklist_raw_material_quality ENABLE ROW LEVEL SECURITY;
 
 -- 4. Create RLS policies
 -- =====================================================
+-- Drop existing policies first (makes script idempotent / re-runnable)
+DROP POLICY IF EXISTS "Allow authenticated users to read checklist_raw_material_qualit" ON public.checklist_raw_material_quality;
+DROP POLICY IF EXISTS "Allow authenticated users to read checklist_raw_material_quality" ON public.checklist_raw_material_quality;
+DROP POLICY IF EXISTS "Allow authenticated users to insert checklist_raw_material_quality" ON public.checklist_raw_material_quality;
+DROP POLICY IF EXISTS "Allow authenticated users to update checklist_raw_material_quality" ON public.checklist_raw_material_quality;
+
 -- Policy: Allow authenticated users to read all records
-CREATE POLICY "Allow authenticated users to read checklist_raw_material_quality"
+CREATE POLICY "rmq_allow_select"
     ON public.checklist_raw_material_quality
     FOR SELECT
     TO authenticated
     USING (true);
 
 -- Policy: Allow authenticated users to insert records
-CREATE POLICY "Allow authenticated users to insert checklist_raw_material_quality"
+CREATE POLICY "rmq_allow_insert"
     ON public.checklist_raw_material_quality
     FOR INSERT
     TO authenticated
     WITH CHECK (true);
 
 -- Policy: Allow authenticated users to update records
-CREATE POLICY "Allow authenticated users to update checklist_raw_material_quality"
+CREATE POLICY "rmq_allow_update"
     ON public.checklist_raw_material_quality
     FOR UPDATE
     TO authenticated
@@ -132,6 +188,7 @@ $$ LANGUAGE plpgsql;
 
 -- 6. Create trigger to automatically update updated_at
 -- =====================================================
+DROP TRIGGER IF EXISTS update_checklist_raw_material_quality_updated_at ON public.checklist_raw_material_quality;
 CREATE TRIGGER update_checklist_raw_material_quality_updated_at
     BEFORE UPDATE ON public.checklist_raw_material_quality
     FOR EACH ROW
@@ -162,8 +219,14 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 8. Create storage policies for the bucket
 -- =====================================================
+-- Drop existing storage policies first (makes script idempotent / re-runnable)
+DROP POLICY IF EXISTS "Allow authenticated users to upload PDFs checklist_raw_material_quality" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to read PDFs checklist_raw_material_quality" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to update PDFs checklist_raw_material_quality" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to delete PDFs checklist_raw_material_quality" ON storage.objects;
+
 -- Policy: Allow authenticated users to upload PDFs
-CREATE POLICY "Allow authenticated users to upload PDFs checklist_raw_material_quality"
+CREATE POLICY "rmq_storage_upload"
     ON storage.objects
     FOR INSERT
     TO authenticated
@@ -172,14 +235,14 @@ CREATE POLICY "Allow authenticated users to upload PDFs checklist_raw_material_q
     );
 
 -- Policy: Allow authenticated users to read PDFs
-CREATE POLICY "Allow authenticated users to read PDFs checklist_raw_material_quality"
+CREATE POLICY "rmq_storage_read"
     ON storage.objects
     FOR SELECT
     TO authenticated
     USING (bucket_id = 'checklist-raw-material-quality');
 
 -- Policy: Allow authenticated users to update PDFs
-CREATE POLICY "Allow authenticated users to update PDFs checklist_raw_material_quality"
+CREATE POLICY "rmq_storage_update"
     ON storage.objects
     FOR UPDATE
     TO authenticated
@@ -187,7 +250,7 @@ CREATE POLICY "Allow authenticated users to update PDFs checklist_raw_material_q
     WITH CHECK (bucket_id = 'checklist-raw-material-quality');
 
 -- Policy: Allow authenticated users to delete PDFs
-CREATE POLICY "Allow authenticated users to delete PDFs checklist_raw_material_quality"
+CREATE POLICY "rmq_storage_delete"
     ON storage.objects
     FOR DELETE
     TO authenticated

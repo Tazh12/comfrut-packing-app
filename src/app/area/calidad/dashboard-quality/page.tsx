@@ -15,6 +15,8 @@ import { fetchChecklistFootbathControlData } from '@/lib/supabase/checklistFootb
 import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeighingSealing'
 import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/checklistCleanlinessControlPacking'
 import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
+import { fetchChecklistRawMaterialQualityData } from '@/lib/supabase/checklistRawMaterialQuality'
+import { fetchChecklistFinalProductTastingData } from '@/lib/supabase/checklistFinalProductTasting'
 import { supabase } from '@/lib/supabase'
 import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 import {
@@ -134,7 +136,17 @@ type CleanlinessControlPackingDailyStats = {
   complianceRate: string
 }
 
-type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats | CleanlinessControlPackingDailyStats
+type RawMaterialQualityDailyStats = {
+  date: string
+  totalRecords: number
+}
+
+type FinalProductTastingDailyStats = {
+  date: string
+  totalRecords: number
+}
+
+type DailyStats = TemperatureDailyStats | MetalDetectorDailyStats | StaffPracticesDailyStats | ForeignMaterialDailyStats | PreOperationalReviewDailyStats | FootbathControlDailyStats | CleanlinessControlPackingDailyStats | RawMaterialQualityDailyStats | FinalProductTastingDailyStats
 
 // Parameter field names mapping for Staff Good Practices Control
 const STAFF_PRACTICES_PARAMETER_FIELDS = [
@@ -3229,6 +3241,81 @@ export default function DashboardQualityPage() {
           noFindingsCount,
           monitorComparison
         })
+      } else if (selectedChecklist === 'Raw Material Quality Report') {
+        const records = await fetchChecklistRawMaterialQualityData(startDate, endDate)
+        setData(records)
+
+        const dateMap = new Map<string, number>()
+        const supplierMap = new Map<string, number>()
+        const fruitMap = new Map<string, number>()
+        let totalBoxSamples = 0
+
+        records.forEach((record: any) => {
+          const date = record.date_string || '-'
+          dateMap.set(date, (dateMap.get(date) || 0) + 1)
+          if (record.supplier) {
+            supplierMap.set(record.supplier, (supplierMap.get(record.supplier) || 0) + 1)
+          }
+          if (record.fruit) {
+            fruitMap.set(record.fruit, (fruitMap.get(record.fruit) || 0) + 1)
+          }
+          totalBoxSamples += record.box_samples?.length || 0
+        })
+
+        const chartDataArray = Array.from(dateMap.entries())
+          .map(([date, count]) => ({ date, totalRecords: count }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+        setDailyStats(chartDataArray.map(d => ({ date: d.date, totalRecords: d.totalRecords })))
+        setSummaryStats({
+          totalRecords: records.length,
+          totalBoxSamples,
+          suppliersCount: supplierMap.size,
+          fruitsCount: fruitMap.size,
+          topSuppliers: Array.from(supplierMap.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5),
+          topFruits: Array.from(fruitMap.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5)
+        })
+      } else if (selectedChecklist === 'Final Product Tasting') {
+        const records = await fetchChecklistFinalProductTastingData(startDate, endDate)
+        setData(records)
+
+        const dateMap = new Map<string, number>()
+        const resultMap = new Map<string, number>()
+        let approved = 0
+        let rejected = 0
+        let hold = 0
+
+        records.forEach((record: any) => {
+          const date = record.date_string || record.date || '-'
+          dateMap.set(date, (dateMap.get(date) || 0) + 1)
+          const result = record.result || 'unknown'
+          resultMap.set(result, (resultMap.get(result) || 0) + 1)
+          if (result === 'approved') approved++
+          else if (result === 'rejected') rejected++
+          else hold++
+        })
+
+        const chartDataArray = Array.from(dateMap.entries())
+          .map(([date, count]) => ({ date, totalRecords: count }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setChartData(chartDataArray)
+        setDailyStats(chartDataArray.map(d => ({ date: d.date, totalRecords: d.totalRecords })))
+        setSummaryStats({
+          totalRecords: records.length,
+          approved,
+          rejected,
+          hold,
+          approvalRate: records.length > 0 ? ((approved / records.length) * 100).toFixed(1) : '0.0',
+          rejectionRate: records.length > 0 ? ((rejected / records.length) * 100).toFixed(1) : '0.0'
+        })
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -3330,6 +3417,10 @@ export default function DashboardQualityPage() {
                   <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
                   <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
                 </optgroup>
+                <optgroup label="INBOUND/OUTBOUND">
+                  <option value="Raw Material Quality Report">Raw Material Quality Report / Reporte de calidad materia prima</option>
+                  <option value="Final Product Tasting">Final Product Tasting / Degustación de producto terminado</option>
+                </optgroup>
               </select>
             </div>
             
@@ -3391,7 +3482,9 @@ export default function DashboardQualityPage() {
                   selectedChecklist === 'Process Environmental Temperature Control' ||
                   (selectedChecklist === 'Metal Detector (PCC #1)' && availableOrdens.length === 0) ||
                   (selectedChecklist === 'Checklist Monoproducto' && availableOrdens.length === 0) ||
-                  (selectedChecklist === 'Checklist Mix Producto' && availableOrdens.length === 0)
+                  (selectedChecklist === 'Checklist Mix Producto' && availableOrdens.length === 0) ||
+                  selectedChecklist === 'Raw Material Quality Report' ||
+                  selectedChecklist === 'Final Product Tasting'
                 }
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -3419,7 +3512,9 @@ export default function DashboardQualityPage() {
                   (selectedChecklist === 'Checklist Mix Producto' && availableBrands.length === 0) ||
                   (selectedChecklist === 'Foreign Material Findings Record' && availableBrands.length === 0) ||
                   (selectedChecklist === 'Pre-Operational Review Processing Areas' && availableBrands.length === 0) ||
-                  (selectedChecklist === 'Internal control of materials used in production areas' && availableBrands.length === 0)
+                  (selectedChecklist === 'Internal control of materials used in production areas' && availableBrands.length === 0) ||
+                  selectedChecklist === 'Raw Material Quality Report' ||
+                  selectedChecklist === 'Final Product Tasting'
                 }
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -3449,7 +3544,9 @@ export default function DashboardQualityPage() {
                   (selectedChecklist === 'Checklist Mix Producto' && availableProducts.length === 0) ||
                   (selectedChecklist === 'Foreign Material Findings Record' && availableProducts.length === 0) ||
                   (selectedChecklist === 'Pre-Operational Review Processing Areas' && availableProducts.length === 0) ||
-                  (selectedChecklist === 'Internal control of materials used in production areas' && availableProducts.length === 0)
+                  (selectedChecklist === 'Internal control of materials used in production areas' && availableProducts.length === 0) ||
+                  selectedChecklist === 'Raw Material Quality Report' ||
+                  selectedChecklist === 'Final Product Tasting'
                 }
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -3876,6 +3973,52 @@ export default function DashboardQualityPage() {
                     <h3 className="text-sm font-medium text-gray-500 mb-1">SKUs</h3>
                     <p className="text-2xl font-bold text-gray-900">{summaryStats.totalSkus || 0}</p>
                     <p className="text-xs text-gray-600 mt-1">SKUs únicos</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Raw Material Quality Report' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Reportes de calidad materia prima</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Muestras de Caja</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalBoxSamples || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Cajas inspeccionadas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Proveedores</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.suppliersCount || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Proveedores únicos</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Tipos de Fruta</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.fruitsCount || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Frutas distintas</p>
+                  </div>
+                </>
+              ) : selectedChecklist === 'Final Product Tasting' ? (
+                <>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total de Registros</h3>
+                    <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">Degustaciones completadas</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-600">
+                    <h3 className="text-sm font-medium text-green-700 mb-1">✅ Aprobados</h3>
+                    <p className="text-2xl font-bold text-green-600">{summaryStats.approved || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.approvalRate || '0.0'}% del total</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-red-500">
+                    <h3 className="text-sm font-medium text-red-700 mb-1">⚠️ Rechazados</h3>
+                    <p className="text-2xl font-bold text-red-600">{summaryStats.rejected || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">{summaryStats.rejectionRate || '0.0'}% del total</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-orange-500">
+                    <h3 className="text-sm font-medium text-orange-700 mb-1">⏸️ Retenidos</h3>
+                    <p className="text-2xl font-bold text-orange-600">{summaryStats.hold || 0}</p>
+                    <p className="text-xs text-gray-600 mt-1">En espera de verificación</p>
                   </div>
                 </>
               ) : (

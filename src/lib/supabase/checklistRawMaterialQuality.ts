@@ -102,6 +102,18 @@ export interface ChecklistRawMaterialQualityData {
     boxNumber: string
     values: Record<string, string>
   }>
+  // Section 3: Organoleptico
+  section3_color?: string
+  section3_olor?: string
+  section3_sabor?: string
+  section3_textura?: string
+  section3_packing_condition?: string
+  section3_raw_material_approved?: string
+  section3_results?: string | null
+  // Verification (filled by QA Practitioner later)
+  checker_name?: string | null
+  checker_signature?: string | null
+  checker_date?: string | null
   pdf_url: string | null
   date_string: string
 }
@@ -154,6 +166,16 @@ export async function insertChecklistRawMaterialQuality(
       ttr: data.ttr || null,
       micro_pesticide_sample_taken: data.micro_pesticide_sample_taken,
       box_samples: data.box_samples,
+      section3_color: data.section3_color ?? '',
+      section3_olor: data.section3_olor ?? '',
+      section3_sabor: data.section3_sabor ?? '',
+      section3_textura: data.section3_textura ?? '',
+      section3_packing_condition: data.section3_packing_condition ?? 'Good',
+      section3_raw_material_approved: data.section3_raw_material_approved ?? 'No',
+      section3_results: data.section3_results ?? null,
+      checker_name: data.checker_name ?? null,
+      checker_signature: data.checker_signature ?? null,
+      checker_date: data.checker_date ?? null,
       pdf_url: data.pdf_url,
       date_string: data.date_string
     }

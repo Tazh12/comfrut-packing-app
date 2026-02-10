@@ -4,7 +4,8 @@ import {
   PDFStyles, 
   PDFHeader2Row, 
   PDFFooter, 
-  PDFSectionTitle
+  PDFSectionTitle,
+  PDFValidationBlock
 } from '@/lib/pdf-layout'
 
 const styles = StyleSheet.create({
@@ -154,6 +155,18 @@ export interface ChecklistRawMaterialQualityPDFProps {
         weightSample: string
         values: Record<string, string>
       }>
+    }
+    section3?: {
+      color: string
+      olor: string
+      sabor: string
+      textura: string
+      packingCondition: string
+      rawMaterialApproved: string
+      results: string | null
+      checkerSignature?: string | null
+      checkerName?: string | null
+      checkerDate?: string | null
     }
   }
 }
@@ -362,6 +375,48 @@ export const ChecklistRawMaterialQualityPDFDocument: React.FC<ChecklistRawMateri
             </View>
           </View>
         )}
+
+        {/* Section 3: Organoleptico */}
+        {data.section3 && (
+          <View style={styles.section}>
+            <PDFSectionTitle
+              titleEn="Section 3 – Organoleptico"
+              titleEs="Sección 3 – Organoléptico"
+            />
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Color:</Text> {data.section3.color}
+              </Text>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Olor / Odor:</Text> {data.section3.olor}
+              </Text>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Sabor / Taste:</Text> {data.section3.sabor}
+              </Text>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Textura / Texture:</Text> {data.section3.textura}
+              </Text>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Condición del empaque / Packing condition:</Text> {data.section3.packingCondition}
+              </Text>
+              <Text style={styles.infoText}>
+                <Text style={{ fontWeight: 'bold' }}>Materia prima aprobada / Raw material approved:</Text> {data.section3.rawMaterialApproved}
+              </Text>
+              {data.section3.results && (
+                <Text style={styles.infoText}>
+                  <Text style={{ fontWeight: 'bold' }}>Resultados / Results:</Text> {data.section3.results}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Verification Block */}
+        <PDFValidationBlock
+          data={{
+            signature: data.section3?.checkerSignature || ''
+          }}
+        />
 
         {/* Footer */}
         <PDFFooter />

@@ -408,6 +408,18 @@ export default function ChecklistRawMaterialQualityPage() {
   // Section 2: Box Samples
   const [boxSamples, setBoxSamples] = useState<BoxSample[]>([])
 
+  // Section 3: Organoleptico
+  const [section3Color, setSection3Color] = useState('')
+  const [section3Olor, setSection3Olor] = useState('')
+  const [section3Sabor, setSection3Sabor] = useState('')
+  const [section3Textura, setSection3Textura] = useState('')
+  const [section3PackingCondition, setSection3PackingCondition] = useState('')
+  const [section3RawMaterialApproved, setSection3RawMaterialApproved] = useState('')
+  const [section3Results, setSection3Results] = useState('')
+
+  // Ref to prevent clearing box samples when restoring from localStorage
+  const isRestoringFromStorageRef = useRef(false)
+
   // Form state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -446,6 +458,13 @@ export default function ChecklistRawMaterialQualityPage() {
     setMicroPesticideSample('')
     setBoxSamples([])
     setExpandedBoxId(null)
+    setSection3Color('')
+    setSection3Olor('')
+    setSection3Sabor('')
+    setSection3Textura('')
+    setSection3PackingCondition('')
+    setSection3RawMaterialApproved('')
+    setSection3Results('')
     setPdfUrl(null)
   }
 
@@ -469,10 +488,19 @@ export default function ChecklistRawMaterialQualityPage() {
       coldStorageTemp,
       ttr,
       microPesticideSample,
-      boxSamples
+      boxSamples,
+      section3Color,
+      section3Olor,
+      section3Sabor,
+      section3Textura,
+      section3PackingCondition,
+      section3RawMaterialApproved,
+      section3Results
     },
     !!pdfUrl,
     (data) => {
+      // Prevent fruit useEffect from clearing box samples when restoring from storage
+      isRestoringFromStorageRef.current = true
       if (data.supplier) setSupplier(data.supplier)
       if (data.fruit) setFruit(data.fruit)
       if (data.sku) setSku(data.sku)
@@ -499,13 +527,24 @@ export default function ChecklistRawMaterialQualityPage() {
         setBoxSamples(normalizedBoxSamples)
         setExpandedBoxId(normalizedBoxSamples[0]?.id || null)
       }
+      if (data.section3Color) setSection3Color(data.section3Color)
+      if (data.section3Olor) setSection3Olor(data.section3Olor)
+      if (data.section3Sabor) setSection3Sabor(data.section3Sabor)
+      if (data.section3Textura) setSection3Textura(data.section3Textura)
+      if (data.section3PackingCondition) setSection3PackingCondition(data.section3PackingCondition)
+      if (data.section3RawMaterialApproved) setSection3RawMaterialApproved(data.section3RawMaterialApproved)
+      if (data.section3Results) setSection3Results(data.section3Results)
+      // Reset ref after React has processed the state updates
+      setTimeout(() => {
+        isRestoringFromStorageRef.current = false
+      }, 0)
     }
   )
 
-  // Handle fruit change - reset box samples when fruit changes
+  // Handle fruit change - reset box samples when user manually changes fruit (not when restoring from storage)
   useEffect(() => {
+    if (isRestoringFromStorageRef.current) return
     if (fruit && boxSamples.length > 0) {
-      // Reset box samples when fruit changes
       setBoxSamples([])
       setExpandedBoxId(null)
     }
@@ -662,6 +701,30 @@ export default function ChecklistRawMaterialQualityPage() {
       alert('Please add at least one box sample / Por favor agregue al menos una muestra de caja')
       return false
     }
+    if (!section3Color.trim()) {
+      alert('Please enter Color / Por favor ingrese el color')
+      return false
+    }
+    if (!section3Olor.trim()) {
+      alert('Please enter Olor/Odor / Por favor ingrese el olor')
+      return false
+    }
+    if (!section3Sabor.trim()) {
+      alert('Please enter Sabor/Taste / Por favor ingrese el sabor')
+      return false
+    }
+    if (!section3Textura.trim()) {
+      alert('Please enter Textura/Texture / Por favor ingrese la textura')
+      return false
+    }
+    if (!section3PackingCondition) {
+      alert('Please select packing condition / Por favor seleccione la condición del empaque')
+      return false
+    }
+    if (!section3RawMaterialApproved) {
+      alert('Please select raw material approved / Por favor seleccione si la materia prima fue aprobada')
+      return false
+    }
 
     for (const box of boxSamples) {
       if (!box.boxNumber || box.boxNumber.trim() === '') {
@@ -733,6 +796,18 @@ export default function ChecklistRawMaterialQualityPage() {
             weightSample: box.weightSample,
             values: box.values
           }))
+        },
+        section3: {
+          color: section3Color,
+          olor: section3Olor,
+          sabor: section3Sabor,
+          textura: section3Textura,
+          packingCondition: section3PackingCondition,
+          rawMaterialApproved: section3RawMaterialApproved,
+          results: section3Results || null,
+          checkerSignature: '' as string | null,
+          checkerName: '' as string | null,
+          checkerDate: '' as string | null
         }
       }
 
@@ -774,6 +849,16 @@ export default function ChecklistRawMaterialQualityPage() {
         ttr: ttr || null,
         micro_pesticide_sample_taken: microPesticideSample,
         box_samples: formData.section2.boxSamples,
+        section3_color: section3Color,
+        section3_olor: section3Olor,
+        section3_sabor: section3Sabor,
+        section3_textura: section3Textura,
+        section3_packing_condition: section3PackingCondition,
+        section3_raw_material_approved: section3RawMaterialApproved,
+        section3_results: section3Results || null,
+        checker_name: null,
+        checker_signature: null,
+        checker_date: null,
         pdf_url: uploadedPdfUrl,
         date_string: dateString
       }
@@ -1267,6 +1352,120 @@ export default function ChecklistRawMaterialQualityPage() {
             <p className="text-yellow-800 text-sm mt-1">
               Por favor seleccione una fruta en la Sección 1 para habilitar la Sección 2.
             </p>
+          </div>
+        )}
+
+        {/* Section 3: Organoleptico */}
+        {fruit && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">
+              Section 3 – Organoleptico / Organoléptico
+            </h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="section3Color" className="block text-sm font-medium text-gray-700 mb-1">
+                    Color <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="section3Color"
+                    type="text"
+                    value={section3Color}
+                    onChange={(e) => setSection3Color(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="section3Olor" className="block text-sm font-medium text-gray-700 mb-1">
+                    Olor / Odor <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="section3Olor"
+                    type="text"
+                    value={section3Olor}
+                    onChange={(e) => setSection3Olor(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="section3Sabor" className="block text-sm font-medium text-gray-700 mb-1">
+                    Sabor / Taste <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="section3Sabor"
+                    type="text"
+                    value={section3Sabor}
+                    onChange={(e) => setSection3Sabor(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="section3Textura" className="block text-sm font-medium text-gray-700 mb-1">
+                    Textura / Texture <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="section3Textura"
+                    type="text"
+                    value={section3Textura}
+                    onChange={(e) => setSection3Textura(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="section3PackingCondition" className="block text-sm font-medium text-gray-700 mb-1">
+                    Condición del empaque / Packing condition <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="section3PackingCondition"
+                    value={section3PackingCondition}
+                    onChange={(e) => setSection3PackingCondition(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select / Seleccione</option>
+                    <option value="Good">Good / Bueno</option>
+                    <option value="Bad">Bad / Malo</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="section3RawMaterialApproved" className="block text-sm font-medium text-gray-700 mb-1">
+                    Materia prima aprobada / Raw material approved <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="section3RawMaterialApproved"
+                    value={section3RawMaterialApproved}
+                    onChange={(e) => setSection3RawMaterialApproved(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select / Seleccione</option>
+                    <option value="Yes">Yes / Sí</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="section3Results" className="block text-sm font-medium text-gray-700 mb-1">
+                  Resultados / Results (optional)
+                </label>
+                <textarea
+                  id="section3Results"
+                  value={section3Results}
+                  onChange={(e) => setSection3Results(e.target.value)}
+                  rows={4}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Optional results..."
+                />
+              </div>
+            </div>
           </div>
         )}
 

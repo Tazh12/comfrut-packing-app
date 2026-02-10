@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/context/ToastContext'
-import { ArrowLeft, History, BarChart3, PackageCheck, FlaskConical, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, Search, FileSpreadsheet, FileText } from 'lucide-react'
+import { ArrowLeft, History, BarChart3, PackageCheck, FlaskConical, Thermometer, Users, AlertTriangle, ClipboardCheck, Package, Eye, Droplet, Scale, Sparkles, Search, FileSpreadsheet, FileText, ClipboardList } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { fetchChecklistEnvTempData } from '@/lib/supabase/checklistEnvTemp'
@@ -18,6 +18,8 @@ import { fetchChecklistWeighingSealingData } from '@/lib/supabase/checklistWeigh
 import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/checklistCleanlinessControlPacking'
 import { fetchChecklistMetalDetectorData } from '@/lib/supabase/checklistMetalDetector'
 import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
+import { fetchChecklistRawMaterialQualityData } from '@/lib/supabase/checklistRawMaterialQuality'
+import { fetchChecklistFinalProductTastingData } from '@/lib/supabase/checklistFinalProductTasting'
 import { exportToFile, exportRecord } from '@/lib/utils/exportData'
 import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 
@@ -70,6 +72,14 @@ const checklistMetadata: Record<string, { icon: any; description: string }> = {
   'Process area staff glasses and auditory protector control': {
     icon: Eye,
     description: 'Control de lentes y/o protector auditivo del personal que ingresa a áreas de proceso.'
+  },
+  'Raw Material Quality Report': {
+    icon: ClipboardList,
+    description: 'Reporte de calidad de materia prima.'
+  },
+  'Final Product Tasting': {
+    icon: ClipboardList,
+    description: 'Degustación de producto terminado.'
   }
 }
 
@@ -98,6 +108,8 @@ const getRelevantFields = (checklistName: string) => {
     fields.orden = true
     fields.producto = true
     fields.marca = true
+  } else if (checklistName === 'Raw Material Quality Report' || checklistName === 'Final Product Tasting') {
+    fields.orden = true
   } else {
     // For others like Metal Detector, Staff Practices, Footbath, etc., only orden might be relevant
     fields.orden = true
@@ -512,6 +524,40 @@ export default function HistorialPage() {
           data = filtered
         } catch (err) {
           // If fetch fails, treat as no data
+          data = []
+        }
+      } else if (selected === 'Raw Material Quality Report') {
+        try {
+          const records = await fetchChecklistRawMaterialQualityData(fromDate || undefined, toDate || undefined)
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.supplier?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.fruit?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.monitor_name?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.processing_plant?.toLowerCase().includes(orden.toLowerCase())
+            )
+          }
+          data = filtered
+        } catch (err) {
+          data = []
+        }
+      } else if (selected === 'Final Product Tasting') {
+        try {
+          const records = await fetchChecklistFinalProductTastingData(fromDate || undefined, toDate || undefined)
+          let filtered = records || []
+          if (orden) {
+            filtered = filtered.filter((r: any) => 
+              r.date_string?.includes(orden) || 
+              r.product?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.client?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.monitor?.toLowerCase().includes(orden.toLowerCase()) ||
+              r.variety?.toLowerCase().includes(orden.toLowerCase())
+            )
+          }
+          data = filtered
+        } catch (err) {
           data = []
         }
       }
@@ -1215,6 +1261,36 @@ export default function HistorialPage() {
         const fileName = `staff_glasses_auditory_${record.date_string || 'data'}`
         exportToFile(rows, fileName, format, 'Staff Glasses Auditory')
         showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Raw Material Quality Report') {
+        const record = selectedRecord
+        const flatRecord: any = {
+          'Date': record.date_string || '',
+          'Supplier': record.supplier || '',
+          'Fruit': record.fruit || '',
+          'Origin Country': record.origin_country || '',
+          'Monitor Name': record.monitor_name || '',
+          'Processing Plant': record.processing_plant || '',
+          'Box Samples Count': record.box_samples?.length || 0,
+          'PDF URL': record.pdf_url || ''
+        }
+        const fileName = `raw_material_quality_${record.date_string || 'data'}_${(record.supplier || '').replace(/\s+/g, '-')}`
+        exportRecord(flatRecord, fileName, format)
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
+      } else if (selected === 'Final Product Tasting') {
+        const record = selectedRecord
+        const flatRecord: any = {
+          'Date': record.date_string || record.date || '',
+          'Product': record.product || '',
+          'Client': record.client || '',
+          'Variety': record.variety || '',
+          'Result': record.result || '',
+          'Monitor': record.monitor || '',
+          'Analyst Name': record.analyst_name || '',
+          'PDF URL': record.pdf_url || ''
+        }
+        const fileName = `final_product_tasting_${record.date_string || record.date || 'data'}_${(record.product || '').replace(/\s+/g, '-')}`
+        exportRecord(flatRecord, fileName, format)
+        showToast(`Archivo ${format.toUpperCase()} descargado exitosamente`, 'success')
       }
       
       setShowExportMenu(false)
@@ -1833,6 +1909,42 @@ export default function HistorialPage() {
               '', '', '', '', '', '', ''
             ])
           }
+        } else if (selected === 'Raw Material Quality Report') {
+          if (allRows.length === 0) {
+            const headers = [
+              'Date', 'Supplier', 'Fruit', 'Origin Country', 'Monitor Name',
+              'Processing Plant', 'Box Samples Count', 'PDF URL'
+            ]
+            allRows.push(headers)
+          }
+          allRows.push([
+            record.date_string || '',
+            record.supplier || '',
+            record.fruit || '',
+            record.origin_country || '',
+            record.monitor_name || '',
+            record.processing_plant || '',
+            record.box_samples?.length || 0,
+            record.pdf_url || ''
+          ])
+        } else if (selected === 'Final Product Tasting') {
+          if (allRows.length === 0) {
+            const headers = [
+              'Date', 'Product', 'Client', 'Variety', 'Result', 'Monitor',
+              'Analyst Name', 'PDF URL'
+            ]
+            allRows.push(headers)
+          }
+          allRows.push([
+            record.date_string || record.date || '',
+            record.product || '',
+            record.client || '',
+            record.variety || '',
+            record.result || '',
+            record.monitor || '',
+            record.analyst_name || '',
+            record.pdf_url || ''
+          ])
         } else {
           // Fallback for any other checklist types - export basic fields
           if (allRows.length === 0) {
@@ -2084,7 +2196,9 @@ export default function HistorialPage() {
           'Process area staff glasses and auditory protector control',
           'Foreign Material Findings Record',
           'Checklist Mix Producto',
-          'Checklist Monoproducto'
+          'Checklist Monoproducto',
+          'Raw Material Quality Report',
+          'Final Product Tasting'
         ]
 
         if (checklistsWithPdfUrl.includes(selected) && selectedRecord.pdf_url) {
@@ -2323,6 +2437,10 @@ export default function HistorialPage() {
                     <option value="Check weighing and sealing of packaged products">Check weighing and sealing of packaged products</option>
                     <option value="Process Environmental Temperature Control">Process Environmental Temperature Control</option>
                     <option value="Foreign Material Findings Record">Foreign Material Findings Record</option>
+                  </optgroup>
+                  <optgroup label="INBOUND/OUTBOUND">
+                    <option value="Raw Material Quality Report">Raw Material Quality Report / Reporte de calidad materia prima</option>
+                    <option value="Final Product Tasting">Final Product Tasting / Degustación de producto terminado</option>
                   </optgroup>
                 </select>
               </div>
@@ -2600,7 +2718,7 @@ export default function HistorialPage() {
             <thead>
               <tr style={{ backgroundColor: 'var(--page-bg)' }}>
                 <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Fecha</th>
-                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && (
+                {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && selected !== 'Raw Material Quality Report' && selected !== 'Final Product Tasting' && (
                   <>
                     <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Orden de fabricación</th>
                     <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>SKU</th>
@@ -2683,6 +2801,22 @@ export default function HistorialPage() {
                       <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Personas</th>
                     </>
                   )}
+                  {selected === 'Raw Material Quality Report' && (
+                    <>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Proveedor</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Fruta</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Monitor</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Muestras</th>
+                    </>
+                  )}
+                  {selected === 'Final Product Tasting' && (
+                    <>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Producto</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Cliente</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Resultado</th>
+                      <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Monitor</th>
+                    </>
+                  )}
                 {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
                   <th className="px-4 py-2.5 text-left text-sm font-medium" style={{ color: 'var(--title-text)' }}>Marca/Cliente</th>
                 )}
@@ -2695,7 +2829,7 @@ export default function HistorialPage() {
                   <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>
                     {record.fecha || record.date_string || '-'}
                   </td>
-                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && (
+                  {selected !== 'Process Environmental Temperature Control' && selected !== 'Staff Good Practices Control' && selected !== 'Foreign Material Findings Record' && selected !== 'Pre-Operational Review Processing Areas' && selected !== 'Internal control of materials used in production areas' && selected !== 'Footbath Control' && selected !== 'Check weighing and sealing of packaged products' && selected !== 'Cleanliness Control Packing' && selected !== 'Metal Detector (PCC #1)' && selected !== 'Process area staff glasses and auditory protector control' && selected !== 'Raw Material Quality Report' && selected !== 'Final Product Tasting' && (
                     <>
                       <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>
                         {record.orden_fabricacion || record.orden || '-'}
@@ -2830,6 +2964,32 @@ export default function HistorialPage() {
                       <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>
                         {record.persons?.length || 0} persona(s)
                       </td>
+                    </>
+                  )}
+                  {selected === 'Raw Material Quality Report' && (
+                    <>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.supplier || '-'}</td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.fruit || '-'}</td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.monitor_name || '-'}</td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>
+                        {record.box_samples?.length || 0} muestra(s)
+                      </td>
+                    </>
+                  )}
+                  {selected === 'Final Product Tasting' && (
+                    <>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.product || '-'}</td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.client || '-'}</td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>
+                        {record.result === 'approved' ? (
+                          <span className="font-semibold" style={{ color: '#10b981' }}>Aprobado</span>
+                        ) : record.result === 'rejected' ? (
+                          <span className="font-semibold" style={{ color: '#ef4444' }}>Rechazado</span>
+                        ) : (
+                          <span className="font-semibold" style={{ color: '#f97316' }}>Retenido</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-sm" style={{ color: 'var(--title-text)' }}>{record.monitor || '-'}</td>
                     </>
                   )}
                   {(selected === 'Checklist Monoproducto' || selected === 'Checklist Mix Producto') && (
