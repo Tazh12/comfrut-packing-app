@@ -209,3 +209,89 @@ export async function insertChecklistMonoproducto(
   }
 }
 
+/**
+ * Fetches checklist monoproducto records with optional date filtering.
+ * Filters by date_string (the date the user entered in the checklist).
+ */
+export async function fetchChecklistMonoproductoData(
+  startDate?: string,
+  endDate?: string
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('checklist_calidad_monoproducto')
+      .select('id, date_string, date_utc, orden_fabricacion, jefe_linea, control_calidad, cliente, producto, sku, pallets, pdf_url')
+      .order('date_utc', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching checklist_calidad_monoproducto:', {
+        message: error.message,
+        code: error.code,
+        error
+      })
+      throw new Error(`database/fetch-failed: ${error.message}`)
+    }
+
+    let processedData = (data || []).map((r: any) => ({
+      ...r,
+      // Ensure pallets is always an array
+      pallets: Array.isArray(r?.pallets) ? r.pallets : []
+    }))
+
+    if (startDate || endDate) {
+      const startDateString = startDate ? formatDateMMMDDYYYY(startDate) : null
+      const endDateString = endDate ? formatDateMMMDDYYYY(endDate) : null
+
+      const MONTH_MAP: { [key: string]: number } = {
+        'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+        'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+      }
+      const parseDateString = (dateStr: string): Date | null => {
+        if (!dateStr) return null
+        try {
+          const parts = dateStr.split('-')
+          if (parts.length === 3) {
+            const month = MONTH_MAP[parts[0].toUpperCase()]
+            const day = parseInt(parts[1])
+            const year = parseInt(parts[2])
+            if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+              return new Date(year, month, day)
+            }
+          }
+          return null
+        } catch {
+          return null
+        }
+      }
+
+      const startDateObj = startDateString ? parseDateString(startDateString) : null
+      const endDateObj = endDateString ? parseDateString(endDateString) : null
+
+      processedData = processedData.filter((record: any) => {
+        if (!record.date_string) return false
+        const recordDateObj = parseDateString(record.date_string)
+        if (!recordDateObj) return false
+        const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+        if (startDateObj) {
+          const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+          if (recordDateOnly < startDateOnly) return false
+        }
+        if (endDateObj) {
+          const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+          if (recordDateOnly > endDateOnly) return false
+        }
+        return true
+      })
+    }
+
+    return processedData
+  } catch (error) {
+    console.error('Error in fetchChecklistMonoproductoData:', error instanceof Error ? {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    } : error)
+    throw error
+  }
+}
+

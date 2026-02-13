@@ -170,17 +170,8 @@ export default function HistorialPage() {
       let data: any[] = []
       
       if (selected === 'Checklist Monoproducto') {
-        let query = supabase.from('checklist_calidad_monoproducto').select('*')
-        
-        if (fromDate) {
-          if (!toDate) {
-            query = query.eq('fecha', fromDate)
-          } else {
-            query = query.gte('fecha', fromDate).lte('fecha', toDate)
-          }
-        } else if (toDate) {
-          query = query.lte('fecha', toDate)
-        }
+        // Table has date_string (MMM-DD-YYYY) and date_utc, NOT fecha - fetch all and filter by date_string
+        let query = supabase.from('checklist_calidad_monoproducto').select('*').order('date_utc', { ascending: false })
         
         if (orden) {
           query = query.ilike('orden_fabricacion', `%${orden}%`)
@@ -204,7 +195,54 @@ export default function HistorialPage() {
             throw error
           }
         } else {
-          data = result || []
+          // Filter by date_string (the date the user entered in the checklist)
+          let filteredData = result || []
+          if (fromDate || toDate) {
+            const startDateString = fromDate ? formatDateMMMDDYYYY(fromDate) : null
+            const endDateString = toDate ? formatDateMMMDDYYYY(toDate) : null
+            
+            const MONTH_MAP: { [key: string]: number } = {
+              'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+              'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+            }
+            const parseDateString = (dateStr: string): Date | null => {
+              if (!dateStr) return null
+              try {
+                const parts = dateStr.split('-')
+                if (parts.length === 3) {
+                  const month = MONTH_MAP[parts[0].toUpperCase()]
+                  const day = parseInt(parts[1])
+                  const year = parseInt(parts[2])
+                  if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+                    return new Date(year, month, day)
+                  }
+                }
+                return null
+              } catch {
+                return null
+              }
+            }
+            
+            const startDateObj = startDateString ? parseDateString(startDateString) : null
+            const endDateObj = endDateString ? parseDateString(endDateString) : null
+            
+            filteredData = filteredData.filter((record: any) => {
+              if (!record.date_string) return false
+              const recordDateObj = parseDateString(record.date_string)
+              if (!recordDateObj) return false
+              const recordDateOnly = new Date(recordDateObj.getFullYear(), recordDateObj.getMonth(), recordDateObj.getDate())
+              if (startDateObj) {
+                const startDateOnly = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate())
+                if (recordDateOnly < startDateOnly) return false
+              }
+              if (endDateObj) {
+                const endDateOnly = new Date(endDateObj.getFullYear(), endDateObj.getMonth(), endDateObj.getDate())
+                if (recordDateOnly > endDateOnly) return false
+              }
+              return true
+            })
+          }
+          data = filteredData
         }
         
       } else if (selected === 'Checklist Mix Producto') {

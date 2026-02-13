@@ -8,8 +8,6 @@ import {
   Image,
   PDFDownloadLink
 } from '@react-pdf/renderer'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { 
   PDFStyles, 
   PDFHeader2Row, 
@@ -42,17 +40,18 @@ interface ChecklistPDFMonoproductoProps {
 }
 
 
-// Ajustar formato de fecha para evitar desfase de zona horaria
+// Format date directly from string to avoid timezone conversion (date-fns format uses local time)
+// Expected format: YYYY-MM-DD - displays exactly as user entered in checklist
 const formatDate = (date: string): string => {
   try {
-    // Parse date string directly to avoid timezone conversion issues
-    // Expected format: YYYY-MM-DD
     const parts = date.split('-')
     if (parts.length === 3) {
       const [year, month, day] = parts
-      // Create date using UTC to avoid timezone shifts
-      const dateObj = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)))
-      return format(dateObj, 'dd / MMM / yyyy', { locale: es })
+      const monthIndex = parseInt(month) - 1
+      if (monthIndex >= 0 && monthIndex < 12) {
+        const monthNames = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+        return `${parseInt(day)} / ${monthNames[monthIndex]} / ${year}`
+      }
     }
     return date
   } catch {

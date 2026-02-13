@@ -17,6 +17,7 @@ import { fetchChecklistCleanlinessControlPackingData } from '@/lib/supabase/chec
 import { fetchChecklistStaffGlassesAuditoryData } from '@/lib/supabase/checklistStaffGlassesAuditory'
 import { fetchChecklistRawMaterialQualityData } from '@/lib/supabase/checklistRawMaterialQuality'
 import { fetchChecklistFinalProductTastingData } from '@/lib/supabase/checklistFinalProductTasting'
+import { fetchChecklistMonoproductoData } from '@/lib/supabase/checklistMonoproducto'
 import { supabase } from '@/lib/supabase'
 import { formatDateMMMDDYYYY } from '@/lib/date-utils'
 import {
@@ -958,14 +959,10 @@ export default function DashboardQualityPage() {
         })
         
       } else if (selectedChecklist === 'Checklist Monoproducto') {
-        // Fetch all records first, then filter by date_string since that's what the user entered
-        // This ensures we filter by the actual date the user selected, not the insertion timestamp
-        let query = supabase.from('checklist_calidad_monoproducto').select('*')
-        
-        const { data: rawRecords, error } = await query
-        if (error) throw error
+        // Use centralized fetch - filters by date_string (the date the user entered in the checklist)
+        const rawRecords = await fetchChecklistMonoproductoData(startDate, endDate)
 
-        // Convert date_string (MMM-DD-YYYY) to YYYY-MM-DD for proper date handling and filtering
+        // Convert date_string (MMM-DD-YYYY) to YYYY-MM-DD for charts and display
         const monthMap: Record<string, string> = {
           'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
           'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
@@ -974,7 +971,6 @@ export default function DashboardQualityPage() {
         const records = (rawRecords || []).map((r: any) => {
           let fecha = ''
           if (r?.date_string) {
-            // Parse MMM-DD-YYYY format
             const parts = r.date_string.split('-')
             if (parts.length === 3) {
               const [month, day, year] = parts
@@ -984,22 +980,10 @@ export default function DashboardQualityPage() {
           if (!fecha && r?.date_utc) {
             fecha = new Date(r.date_utc).toISOString().split('T')[0]
           }
-          // Fallback to fecha if it exists
           if (!fecha && r?.fecha) {
             fecha = r.fecha
           }
-          return {
-            ...r,
-            fecha
-          }
-        }).filter((r: any) => {
-          // Filter by the converted fecha field (which represents the user's selected date)
-          if (!r.fecha) return false
-          
-          if (startDate && r.fecha < startDate) return false
-          if (endDate && r.fecha > endDate) return false
-          
-          return true
+          return { ...r, fecha }
         })
         
         // Cascading filter logic for Monoproducto
