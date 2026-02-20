@@ -8,13 +8,7 @@ import PhotoUploadSection from '@/components/PhotoUploadSection'
 import { ChecklistPDFLink } from '@/components/ChecklistPDF'
 import { uploadPDF, saveChecklistRecord, normalizeMaterial, ChecklistData, ChecklistItem as ChecklistDataItem } from '@/lib/checklist'
 import { format } from 'date-fns'
-import { formatInTimeZone } from 'date-fns-tz'
 import { useToast } from '@/context/ToastContext'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/context/AuthContext'
-import { initialChecklistItems } from '@/lib/checklist'
-import { MASTER_ITEM_LIST } from '@/lib/constants'
-import * as XLSX from 'xlsx'
 
 export default function ChecklistPhotosPage() {
   const router = useRouter()
@@ -41,9 +35,9 @@ export default function ChecklistPhotosPage() {
   } = useChecklist()
   const { showToast } = useToast()
 
-  // Recuperar datos del checklist al cargar la página
+  // Recuperar datos del checklist al cargar la página (usa la misma key que el formulario)
   useEffect(() => {
-    const saved = localStorage.getItem('checklistData')
+    const saved = localStorage.getItem('checklist-packaging-draft')
     if (saved) {
       const d = JSON.parse(saved)
       if (d.lineManager) setLineManager(d.lineManager)
@@ -78,16 +72,13 @@ export default function ChecklistPhotosPage() {
     return `${day}-${month}-${year}`
   }
 
-  // Función para mapear los ítems del formulario a la lista completa
-  const mapItemsToFullList = (formData: ChecklistItem[]): ChecklistDataItem[] => {
-    return initialChecklistItems.map((item) => {
-      const found = formData.find(i => i.id === item.id)
-      return {
-        id: item.id,
-        nombre: item.nombre,
-        estado: found?.status === 'cumple' ? 'cumple' : 'no_cumple'
-      }
-    })
+  // Mapear los ítems del formulario al formato de la base de datos (usa los datos del usuario)
+  const mapItemsToFullList = (formItems: ChecklistItem[]): ChecklistDataItem[] => {
+    return formItems.map((item) => ({
+      id: item.id,
+      nombre: item.nombre,
+      estado: item.status === 'cumple' ? 'cumple' : 'no_cumple'
+    }))
   }
 
   // Función para generar el objeto JSON del checklist
@@ -305,6 +296,7 @@ export default function ChecklistPhotosPage() {
 
       // Limpiar estado y localStorage antes de navegar
       clearContext()
+      localStorage.removeItem('checklist-packaging-draft')
       localStorage.removeItem('checklistData')
       router.push('/dashboard')
     } catch (error: any) {

@@ -103,8 +103,8 @@ const validateChecklistData = (data: any): { isValid: boolean; errors: string[] 
   if (!Array.isArray(data.items)) {
     errors.push('Los items deben ser un array')
   } else {
-    if (data.items.length !== 25) {
-      errors.push(`Se esperan 25 items, se recibieron ${data.items.length}`)
+    if (data.items.length < 21 || data.items.length > 25) {
+      errors.push(`Se esperan entre 21 y 25 items, se recibieron ${data.items.length}`)
     }
 
     data.items.forEach((item: any, index: number) => {

@@ -351,7 +351,22 @@ export default function ChecklistPackagingPage() {
   const handleNext = () => {
     if (!validateForm()) return
     
-    // Navegar a la página de fotos
+    // Guardar explícitamente antes de navegar para asegurar que fotos tenga los datos
+    try {
+      localStorage.setItem('checklist-packaging-draft', JSON.stringify({
+        lineManager,
+        machineOperator,
+        checklistDate,
+        ordenFabricacion,
+        selectedBrand,
+        selectedMaterial,
+        selectedSku: selectedProduct?.sku || '',
+        items
+      }))
+    } catch (e) {
+      console.error('Error saving checklist draft before navigation:', e)
+    }
+    
     router.push('/area/produccion/checklist-packaging/fotos');
   }
 
