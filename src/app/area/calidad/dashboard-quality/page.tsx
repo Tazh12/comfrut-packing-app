@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
@@ -29,7 +31,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
   PieChart,
@@ -199,12 +200,13 @@ export default function DashboardQualityPage() {
   // Track if we've initialized from URL params
   const [initializedFromUrl, setInitializedFromUrl] = useState(false)
 
-  // Read URL query parameters on mount and set defaults if not provided
+  // Extract URL param values (use primitive values as deps to avoid infinite loops from searchParams reference changes)
+  const checklistParam = searchParams.get('checklist') ?? ''
+  const startDateParam = searchParams.get('startDate') ?? ''
+  const endDateParam = searchParams.get('endDate') ?? ''
+
+  // Read URL query parameters on mount and when URL params change (use primitive deps to prevent update loop)
   useEffect(() => {
-    const checklistParam = searchParams.get('checklist')
-    const startDateParam = searchParams.get('startDate')
-    const endDateParam = searchParams.get('endDate')
-    
     // Set checklist from URL or keep default
     if (checklistParam) {
       setSelectedChecklist(checklistParam)
@@ -214,22 +216,19 @@ export default function DashboardQualityPage() {
     if (startDateParam && endDateParam) {
       setStartDate(startDateParam)
       setEndDate(endDateParam)
-    } else if (!startDate || !endDate) {
-      // Only set defaults if not already set and not in URL
+    } else {
       const today = new Date()
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(today.getDate() - 30)
-      
-      if (!startDate) {
-        setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
-      }
-      if (!endDate) {
-        setEndDate(today.toISOString().split('T')[0])
-      }
+      const defaultStart = thirtyDaysAgo.toISOString().split('T')[0]
+      const defaultEnd = today.toISOString().split('T')[0]
+      // Use URL param if present, else keep existing state, else use default
+      setStartDate((prev) => startDateParam || prev || defaultStart)
+      setEndDate((prev) => endDateParam || prev || defaultEnd)
     }
     
     setInitializedFromUrl(true)
-  }, [searchParams])
+  }, [checklistParam, startDateParam, endDateParam])
 
   // Reset filters when checklist changes
   useEffect(() => {
@@ -3412,12 +3411,17 @@ export default function DashboardQualityPage() {
               <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
                 Fecha desde
               </label>
-              <input
-                type="date"
+              <DatePicker
                 id="startDate"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                selected={startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? new Date(startDate + 'T12:00:00') : null}
+                onChange={(date) => setStartDate(date ? date.toISOString().split('T')[0] : '')}
+                dateFormat="MM/dd/yyyy"
+                placeholderText="Seleccionar fecha"
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2"
+                isClearable
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
               />
             </div>
             
@@ -3425,12 +3429,17 @@ export default function DashboardQualityPage() {
               <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
                 Fecha hasta
               </label>
-              <input
-                type="date"
+              <DatePicker
                 id="endDate"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                selected={endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? new Date(endDate + 'T12:00:00') : null}
+                onChange={(date) => setEndDate(date ? date.toISOString().split('T')[0] : '')}
+                dateFormat="MM/dd/yyyy"
+                placeholderText="Seleccionar fecha"
                 className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2"
+                isClearable
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
               />
             </div>
             
@@ -4052,7 +4061,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="passed" stackId="a" fill="#10b981" name="Aprobado" />
                         <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Fallido" />
                       </BarChart>
@@ -4085,7 +4093,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Line
                           type="monotone"
                           dataKey="bf"
@@ -4140,7 +4147,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: any) => [`${value}%`, 'Tasa de Fallo']}
                         />
-                        <Legend />
                         <Bar dataKey="failureRate" fill="#ef4444" name="Tasa de Fallo (%)" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4172,7 +4178,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="failures" fill="#ef4444" name="Fallos" />
                         <Bar dataKey="total" fill="#e5e7eb" name="Total Lecturas" />
                       </BarChart>
@@ -4210,7 +4215,6 @@ export default function DashboardQualityPage() {
                             return [value, name]
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="failures" fill="#ef4444" name="Fallos" />
                         <Bar dataKey="total" fill="#e5e7eb" name="Total Lecturas" />
                       </BarChart>
@@ -4250,7 +4254,6 @@ export default function DashboardQualityPage() {
                         }}
                         formatter={(value: number) => [`${value.toFixed(1)}°F`, 'Temperatura Promedio']}
                       />
-                      <Legend />
                       <ReferenceLine y={42} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Inferior (42°F)', position: 'right' }} />
                       <ReferenceLine y={50} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Límite Superior (50°F)', position: 'right' }} />
                       <Line
@@ -4279,7 +4282,6 @@ export default function DashboardQualityPage() {
                         <XAxis type="number" stroke="#6b7280" />
                         <YAxis dataKey="name" type="category" stroke="#6b7280" width={150} tick={{ fontSize: 11 }} />
                         <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
-                        <Legend />
                         <Bar dataKey="count" fill="#ef4444" name="Cantidad" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4293,7 +4295,6 @@ export default function DashboardQualityPage() {
                         <XAxis type="number" stroke="#6b7280" />
                         <YAxis dataKey="name" type="category" stroke="#6b7280" width={100} tick={{ fontSize: 11 }} />
                         <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
-                        <Legend />
                         <Bar dataKey="count" fill="#f97316" name="Cantidad" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4309,7 +4310,6 @@ export default function DashboardQualityPage() {
                       <XAxis dataKey="date" stroke="#6b7280" tick={{ fontSize: 12 }} />
                       <YAxis stroke="#10b981" label={{ value: 'Peso (gr)', angle: -90, position: 'insideLeft' }} />
                       <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
-                      <Legend />
                       {/* Dynamic weight bars per product */}
                       {(summaryStats.productList || []).map((product: string, index: number) => {
                         const colors = ['#10b981', '#059669', '#047857', '#065f46', '#064e3b', '#022c22']
@@ -4337,7 +4337,6 @@ export default function DashboardQualityPage() {
                       <YAxis yAxisId="left" stroke="#8b5cf6" label={{ value: 'Brix', angle: -90, position: 'insideLeft' }} />
                       <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" label={{ value: 'pH', angle: 90, position: 'insideRight' }} domain={[0, 14]} />
                       <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
-                      <Legend />
                       <Line yAxisId="left" type="monotone" dataKey="avgBrix" stroke="#8b5cf6" name="Brix Promedio" dot={false} />
                       <Line yAxisId="right" type="monotone" dataKey="avgPh" stroke="#f59e0b" name="pH Promedio" dot={false} />
                     </LineChart>
@@ -4379,7 +4378,6 @@ export default function DashboardQualityPage() {
                             return [value, name]
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="nonCompliant" fill="#ef4444" name="No Cumplimiento" />
                         <Bar dataKey="compliant" fill="#10b981" name="Cumplimiento" />
                       </BarChart>
@@ -4417,7 +4415,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: any) => [`${value}%`, 'Tasa de NC']}
                         />
-                        <Legend />
                         <Bar dataKey="ncRateValue" fill="#ef4444" name="Tasa de No Cumplimiento (%)" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4524,7 +4521,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos (Crítico)" />
                         <Bar dataKey="noFindings" fill="#10b981" name="Sin Hallazgos" />
                         <Bar dataKey="totalFindings" fill="#dc2626" name="Total Hallazgos" />
@@ -4566,7 +4562,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="count" fill="#ef4444" name="Cantidad de Hallazgos" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4646,7 +4641,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="withFindings" fill="#ef4444" name="Con Hallazgos" />
                         <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
                       </BarChart>
@@ -4688,7 +4682,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="count" fill="#ef4444" name="Cantidad de Hallazgos" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -4735,7 +4728,6 @@ export default function DashboardQualityPage() {
                         }}
                         formatter={(value: number) => [`${value}%`, 'Tasa de Cumplimiento']}
                       />
-                      <Legend />
                       <ReferenceLine y={100} stroke="#10b981" strokeDasharray="5 5" label={{ value: 'Objetivo (100%)', position: 'right' }} />
                       <Line
                         type="monotone"
@@ -4771,7 +4763,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="compliantItems" fill="#10b981" name="Elementos que Cumplen" />
                       <Bar dataKey="nonCompliantItems" fill="#ef4444" name="Elementos que No Cumplen" />
                     </BarChart>
@@ -4800,7 +4791,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="totalRecords" fill="#93c5fd" name="Total Registros" />
                       <Bar dataKey="recordsWithNonCompliance" fill="#ef4444" name="Registros con No Cumplimiento" />
                     </BarChart>
@@ -4839,7 +4829,6 @@ export default function DashboardQualityPage() {
                             return [`${value}`, name]
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="comply" fill="#10b981" name="Cumplen" />
                         <Bar dataKey="notComply" fill="#ef4444" name="No Cumplen" />
                       </BarChart>
@@ -4872,7 +4861,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="compliant" fill="#10b981" name="Registros que Cumplen" />
                         <Bar dataKey="nonCompliant" fill="#ef4444" name="Registros con No Cumplimiento" />
                         <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
@@ -4968,7 +4956,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="goodStatus" fill="#10b981" name="Bueno / Good" />
                       <Bar dataKey="badStatus" fill="#ef4444" name="Malo / Bad" />
                     </BarChart>
@@ -4999,7 +4986,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="totalPersonnel" fill="#93c5fd" name="Total Personal" />
                       <Bar dataKey="quantityMismatches" fill="#ef4444" name="Desajustes de Cantidad" />
                     </BarChart>
@@ -5030,7 +5016,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="good" fill="#10b981" name="Bueno / Good" />
                         <Bar dataKey="bad" fill="#ef4444" name="Malo / Bad" />
                       </BarChart>
@@ -5063,7 +5048,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="good" fill="#10b981" name="Bueno / Good" />
                         <Bar dataKey="bad" fill="#ef4444" name="Malo / Bad" />
                         <Bar dataKey="total" fill="#93c5fd" name="Total Registros" />
@@ -5182,7 +5166,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="registros" fill="#3b82f6" name="Registros" />
                         <Bar dataKey="ordenes" fill="#10b981" name="Órdenes Únicas" />
                         <Bar dataKey="pallets" fill="#8b5cf6" name="Pallets" />
@@ -5214,7 +5197,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Line
                           type="monotone"
                           dataKey="registros"
@@ -5266,7 +5248,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="count" fill="#3b82f6" name="Registros" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -5296,7 +5277,6 @@ export default function DashboardQualityPage() {
                             borderRadius: '6px'
                           }}
                         />
-                        <Legend />
                         <Bar dataKey="count" fill="#10b981" name="Registros" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -5387,7 +5367,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="registros" fill="#3b82f6" name="Registros" />
                       <Bar dataKey="ordenes" fill="#10b981" name="Órdenes Únicas" />
                     </BarChart>
@@ -5427,7 +5406,6 @@ export default function DashboardQualityPage() {
                         }}
                         formatter={(value: number) => [`${value}%`, '']}
                       />
-                      <Legend />
                       <ReferenceLine y={95} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Objetivo (95%)', position: 'right' }} />
                       <Line
                         type="monotone"
@@ -5478,7 +5456,6 @@ export default function DashboardQualityPage() {
                         }}
                         formatter={(value: number) => [`${value}%`, '']}
                       />
-                      <Legend />
                       <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
                       <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
                     </BarChart>
@@ -5512,7 +5489,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: number) => [`${value}%`, '']}
                         />
-                        <Legend />
                         <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
                         <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
                       </BarChart>
@@ -5550,7 +5526,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: number) => [`${value}%`, '']}
                         />
-                        <Legend />
                         <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
                         <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
                       </BarChart>
@@ -5588,7 +5563,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: number) => [`${value}%`, '']}
                         />
-                        <Legend />
                         <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
                         <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
                       </BarChart>
@@ -5626,7 +5600,6 @@ export default function DashboardQualityPage() {
                           }}
                           formatter={(value: number) => [`${value}%`, '']}
                         />
-                        <Legend />
                         <Bar dataKey="sealedComplianceRate" fill="#10b981" name="Sellado / Sealed" />
                         <Bar dataKey="originComplianceRate" fill="#3b82f6" name="Origen / Origin" />
                       </BarChart>
@@ -5661,7 +5634,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Line
                         type="monotone"
                         dataKey="avgWeight"
@@ -5699,7 +5671,6 @@ export default function DashboardQualityPage() {
                           <Cell fill="#ef4444" />
                         </Pie>
                         <Tooltip />
-                        <Legend />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -5727,7 +5698,6 @@ export default function DashboardQualityPage() {
                           <Cell fill="#f59e0b" />
                         </Pie>
                         <Tooltip />
-                        <Legend />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -6014,7 +5984,6 @@ export default function DashboardQualityPage() {
                             <Cell fill="#ef4444" />
                           </Pie>
                           <Tooltip />
-                          <Legend />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -6076,7 +6045,6 @@ export default function DashboardQualityPage() {
                               <Cell fill="#ef4444" />
                             </Pie>
                             <Tooltip />
-                            <Legend />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
@@ -6214,7 +6182,6 @@ export default function DashboardQualityPage() {
                           borderRadius: '6px'
                         }}
                       />
-                      <Legend />
                       <Bar dataKey="acceptTests" fill="#10b981" name="ACCEPT" />
                       <Bar dataKey="cautionTests" fill="#f59e0b" name="CAUTION" />
                       <Bar dataKey="rejectTests" fill="#ef4444" name="REJECTS" />
