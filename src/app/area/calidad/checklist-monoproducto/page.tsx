@@ -43,6 +43,9 @@ export default function MonoproductoChecklistPage() {
 
   // Refs para inputs dinámicos de pallets
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  // Track that we restored from draft - the save effect may clear localStorage before effects run,
+  // so we need this to avoid clearing pallets/material/sku when we've just restored
+  const hasRestoredFromDraftRef = useRef(false)
 
   // Reset form function
   const resetForm = () => {
@@ -75,20 +78,68 @@ export default function MonoproductoChecklistPage() {
     },
     isSubmitted,
     (data) => {
+      hasRestoredFromDraftRef.current = true
       if (data.orderNumber) setOrderNumber(data.orderNumber)
       if (data.date) setDate(data.date)
       if (data.lineManager) setLineManager(data.lineManager)
       if (data.qualityControl) setQualityControl(data.qualityControl)
-      if (data.selectedBrand) setSelectedBrand(data.selectedBrand)
-      if (data.selectedMaterial) setSelectedMaterial(data.selectedMaterial)
-      if (data.selectedSku) setSelectedSku(data.selectedSku)
+      // Restore brand first, then material and SKU after (like mix checklist)
+      if (data.selectedBrand) {
+        setSelectedBrand(data.selectedBrand)
+        const materialToRestore = data.selectedMaterial
+        if (materialToRestore && typeof materialToRestore === 'string') {
+          setTimeout(() => setSelectedMaterial(materialToRestore), 100)
+        }
+      } else if (data.selectedMaterial && typeof data.selectedMaterial === 'string') {
+        setSelectedMaterial(data.selectedMaterial)
+      }
+      if (data.selectedSku) {
+        setTimeout(() => setSelectedSku(data.selectedSku), 150)
+      }
       if (data.pallets && Array.isArray(data.pallets)) {
-        // Restore pallets - note: fields will be reloaded based on SKU
-        // Ensure hour field exists for each pallet
         setPallets(data.pallets.map((p: any) => ({ ...p, hour: p.hour || '' })))
       }
     }
   )
+
+  // Save draft on unmount (e.g. when user navigates away via "Volver") so data persists
+  useEffect(() => {
+    return () => {
+      if (
+        typeof window !== 'undefined' &&
+        !isSubmitted &&
+        (orderNumber || date || lineManager || qualityControl || selectedBrand || selectedMaterial || selectedSku || pallets.length > 0)
+      ) {
+        try {
+          localStorage.setItem(
+            'checklist-monoproducto-draft',
+            JSON.stringify({
+              orderNumber,
+              date,
+              lineManager,
+              qualityControl,
+              selectedBrand,
+              selectedMaterial,
+              selectedSku,
+              pallets: pallets.map((p) => ({ id: p.id, collapsed: p.collapsed, values: p.values, hour: p.hour })),
+            })
+          )
+        } catch {
+          // Ignore storage errors
+        }
+      }
+    }
+  }, [
+    orderNumber,
+    date,
+    lineManager,
+    qualityControl,
+    selectedBrand,
+    selectedMaterial,
+    selectedSku,
+    pallets,
+    isSubmitted,
+  ])
 
   // Cargar clientes (brands)
   useEffect(() => {
@@ -102,7 +153,7 @@ export default function MonoproductoChecklistPage() {
       })
   }, [])
 
-  // Filtrar materiales cuando cambia cliente
+  // Filtrar materiales cuando cambia cliente (like mix: restore selectedMaterial from draft when materials load)
   useEffect(() => {
     if (selectedBrand) {
       supabase
@@ -111,12 +162,29 @@ export default function MonoproductoChecklistPage() {
         .eq('brand', selectedBrand)
         .then(({ data, error }) => {
           if (!error && data) {
-            setMaterials(Array.from(new Set(data.map((p) => p.material))))
+            const materialsList = Array.from(new Set(data.map((p) => p.material)))
+            setMaterials(materialsList)
+            // Restore selectedMaterial from draft when materials load (like mix checklist)
+            const savedData = typeof window !== 'undefined' && localStorage.getItem('checklist-monoproducto-draft')
+            if (savedData) {
+              try {
+                const parsed = JSON.parse(savedData)
+                if (parsed.selectedMaterial && typeof parsed.selectedMaterial === 'string' && materialsList.includes(parsed.selectedMaterial)) {
+                  setSelectedMaterial(parsed.selectedMaterial)
+                }
+              } catch {
+                // Ignore parse errors
+              }
+            }
           }
         })
     } else {
       setMaterials([])
-      setSelectedMaterial('')
+      // Don't clear selectedMaterial when restoring from draft
+      const hasDraft = typeof window !== 'undefined' && localStorage.getItem('checklist-monoproducto-draft')
+      if (!hasDraft) {
+        setSelectedMaterial('')
+      }
     }
   }, [selectedBrand])
 
@@ -136,7 +204,11 @@ export default function MonoproductoChecklistPage() {
           }
         })
     } else {
-      setSelectedSku('')
+      // Don't clear selectedSku when restoring from draft
+      const hasDraft = typeof window !== 'undefined' && localStorage.getItem('checklist-monoproducto-draft')
+      if (!hasDraft) {
+        setSelectedSku('')
+      }
     }
   }, [selectedBrand, selectedMaterial])
 
@@ -194,7 +266,12 @@ export default function MonoproductoChecklistPage() {
       fetchFields()
     } else {
       setFields([])
-      setPallets([])
+      // Don't clear pallets when restoring from draft - the save effect may clear localStorage
+      // before we run, so we use hasRestoredFromDraftRef in addition to draft check
+      const hasDraft = typeof window !== 'undefined' && localStorage.getItem('checklist-monoproducto-draft')
+      if (!hasDraft && !hasRestoredFromDraftRef.current) {
+        setPallets([])
+      }
     }
   }, [selectedSku, showToast])
 
