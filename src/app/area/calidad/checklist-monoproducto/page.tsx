@@ -94,7 +94,8 @@ export default function MonoproductoChecklistPage() {
         setSelectedMaterial(data.selectedMaterial)
       }
       if (data.selectedSku) {
-        setTimeout(() => setSelectedSku(data.selectedSku), 150)
+        const sku = data.selectedSku
+        setTimeout(() => setSelectedSku(sku), 150)
       }
       if (data.pallets && Array.isArray(data.pallets)) {
         setPallets(data.pallets.map((p: any) => ({ ...p, hour: p.hour || '' })))
